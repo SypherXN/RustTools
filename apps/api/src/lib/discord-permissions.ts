@@ -1,0 +1,66 @@
+import { env } from "../config.js";
+
+export type DiscordCapability = "admin" | "switch" | "view";
+
+const CAPABILITY_ROLES: Record<DiscordCapability, string[]> = {
+  admin: env.discord.roleAdmin,
+  switch: [...env.discord.roleAdmin, ...env.discord.roleSwitch],
+  view: [...env.discord.roleAdmin, ...env.discord.roleSwitch, ...env.discord.roleView],
+};
+
+export async function getDiscordMemberRoles(discordUserId: string): Promise<string[]> {
+  if (!env.discord.botToken || !env.discord.guildId) {
+    return [];
+  }
+
+  const res = await fetch(
+    `https://discord.com/api/guilds/${env.discord.guildId}/members/${discordUserId}`,
+    { headers: { Authorization: `Bot ${env.discord.botToken}` } },
+  );
+
+  if (!res.ok) {
+    return [];
+  }
+
+  const member = (await res.json()) as { roles?: string[] };
+  return member.roles ?? [];
+}
+
+function rolesConfigured(): boolean {
+  return (
+    env.discord.roleAdmin.length > 0 ||
+    env.discord.roleSwitch.length > 0 ||
+    env.discord.roleView.length > 0
+  );
+}
+
+export async function hasDiscordCapability(
+  discordUserId: string,
+  capability: DiscordCapability,
+): Promise<boolean> {
+  if (!rolesConfigured()) {
+    return true;
+  }
+
+  const roles = await getDiscordMemberRoles(discordUserId);
+  const allowed = [...new Set(CAPABILITY_ROLES[capability])];
+  return roles.some((role) => allowed.includes(role));
+}
+
+export function assertInternalApiKey(authHeader?: string): boolean {
+  if (!env.internalApiKey) return false;
+  return authHeader === `Bearer ${env.internalApiKey}`;
+}
+
+export async function requireDiscordCapability(
+  discordUserId: string | undefined,
+  capability: DiscordCapability,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!discordUserId) {
+    return { ok: false, error: "discordUserId is required" };
+  }
+  if (!(await hasDiscordCapability(discordUserId, capability))) {
+    return { ok: false, error: `Missing ${capability} permission` };
+  }
+  return { ok: true };
+}

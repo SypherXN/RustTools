@@ -1,0 +1,117 @@
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
+import rateLimit from "@fastify/rate-limit";
+import websocket from "@fastify/websocket";
+import path from "node:path";
+import fs from "node:fs";
+import { createDatabase } from "@rusttools/db";
+import { users } from "@rusttools/db";
+import { eq } from "drizzle-orm";
+import { NotificationService, RustPlusManager } from "@rusttools/rustplus-client";
+import { env } from "./config.js";
+import { getSessionUser } from "./lib/auth.js";
+import { consumeWsToken } from "./lib/ws-tokens.js";
+import { registerRoutes } from "./routes/index.js";
+import { handleFcmNotification } from "./services/fcm-handler.js";
+import { startPhase2Listeners } from "./services/phase2-listeners.js";
+import { reconnectStoredServers } from "./services/rustplus-bootstrap.js";
+import { WsHub } from "./services/ws-hub.js";
+
+async function sendDiscordMessage(notification: {
+  channelId: string;
+  content?: string;
+  embed?: { title?: string; description?: string; color?: number };
+}): Promise<void> {
+  if (!notification.channelId || !env.discord.botToken) return;
+
+  await fetch(`https://discord.com/api/channels/${notification.channelId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${env.discord.botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      content: notification.content,
+      embeds: notification.embed ? [notification.embed] : undefined,
+    }),
+  });
+}
+
+async function main() {
+  const dbPath = env.databaseUrl.replace(/^file:/, "");
+  const dbDir = path.dirname(path.isAbsolute(dbPath) ? dbPath : path.resolve(process.cwd(), dbPath));
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  const db = createDatabase(env.databaseUrl);
+  const wsHub = new WsHub();
+
+  const notifications = new NotificationService({
+    discord: sendDiscordMessage,
+    webSocket: (msg) => wsHub.broadcast(msg.event, msg.payload),
+  });
+
+  const rustPlus = new RustPlusManager({
+    fcmConfigPath: env.rustplus.fcmConfigPath,
+    notificationService: notifications,
+  });
+
+  const app = Fastify({
+    logger: { level: env.isDev ? "info" : "warn" },
+  });
+
+  await app.register(cors, { origin: env.corsOrigins, credentials: true });
+  await app.register(cookie, { secret: env.sessionSecret });
+  await app.register(rateLimit, {
+    max: 120,
+    timeWindow: "1 minute",
+  });
+  await app.register(websocket);
+
+  app.get("/ws", { websocket: true }, async (socket, request) => {
+    const query = request.query as { token?: string };
+    let user = await getSessionUser(db, request);
+
+    if (!user && query.token) {
+      const userId = consumeWsToken(query.token);
+      if (userId) {
+        const [row] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        user = row ?? null;
+      }
+    }
+
+    if (!user) {
+      socket.close(4401, "Unauthorized");
+      return;
+    }
+    wsHub.add(socket);
+    socket.send(JSON.stringify({ event: "connected", payload: { ok: true } }));
+  });
+
+  await registerRoutes(app, { db, rustPlus });
+
+  startPhase2Listeners(db, rustPlus, notifications);
+
+  await reconnectStoredServers(db, rustPlus);
+
+  const fcmPath = path.resolve(env.rustplus.fcmConfigPath);
+  if (fs.existsSync(fcmPath)) {
+    rustPlus.startFcmListener((notification) => {
+      void handleFcmNotification(db, rustPlus, notification, notifications).catch((err) => {
+        app.log.error(err, "FCM notification handler failed");
+      });
+    });
+  } else {
+    app.log.warn("FCM config not found — pairing listener disabled until fcm-register completes");
+  }
+
+  await app.listen({ port: env.apiPort, host: env.apiHost });
+  app.log.info(`API listening on ${env.apiPublicUrl}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

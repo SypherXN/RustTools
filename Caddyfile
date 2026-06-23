@@ -1,0 +1,17 @@
+{$DOMAIN} {
+	email {$ACME_EMAIL}
+	encode gzip
+
+	@api path /auth/* /health /servers/* /devices/* /storage/* /vending/* /audit /ws
+	handle @api {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		respond "RustTools API — use the GitHub Pages frontend." 200
+	}
+}
+
+:80 {
+	respond "RustTools — set DOMAIN in .env for HTTPS." 200
+}

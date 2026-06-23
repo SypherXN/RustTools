@@ -1,0 +1,83 @@
+export type EntityType = "smart_switch" | "smart_alarm" | "storage_monitor";
+
+export interface User {
+  id: string;
+  discordId: string;
+  discordUsername: string;
+  discordAvatar: string | null;
+  steamId: string | null;
+  pendingRustLink?: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface AuthUserResponse {
+  user: Pick<User, "id" | "discordId" | "discordUsername" | "discordAvatar" | "steamId">;
+  linkedRust: boolean;
+  pendingRustLink?: boolean;
+}
+
+export interface Session {
+  id: string;
+  userId: string;
+  refreshTokenHash: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface RustServer {
+  id: string;
+  name: string;
+  ip: string;
+  port: number;
+  playerId: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RustEntity {
+  id: string;
+  serverId: string;
+  entityId: number;
+  entityType: EntityType;
+  name: string;
+  displayName: string | null;
+  icon: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ApiHealth {
+  status: "ok" | "degraded";
+  version: string;
+  uptime: number;
+  rustplus: {
+    connected: boolean;
+    activeServerId: string | null;
+  };
+  fcm: {
+    listening: boolean;
+  };
+}
+
+// Event bus types for extensibility
+export type RustPlusEvent =
+  | { type: "entityChanged"; serverId: string; entityId: number; payload: unknown }
+  | { type: "connectionLost"; serverId: string; reason: string }
+  | { type: "connectionRestored"; serverId: string }
+  | { type: "teamChat"; serverId: string; message: string; steamId: string }
+  | { type: "serverPaired"; serverId: string; name: string }
+  | { type: "entityPaired"; serverId: string; entityId: number; entityType: EntityType; name: string }
+  | { type: "mapMarkers"; serverId: string; markers: unknown }
+  | { type: "fcmAlarm"; title?: string; message?: string; body: Record<string, unknown> };
+
+export type RustPlusEventType = RustPlusEvent["type"];
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  type: "night_lights" | "team_offline_sam";
+  switchEntityIds: number[];
+}

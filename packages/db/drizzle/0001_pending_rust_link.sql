@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `pending_rust_link` integer DEFAULT false NOT NULL;
