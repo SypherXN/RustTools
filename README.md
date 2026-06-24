@@ -17,6 +17,8 @@ GitHub Pages (UI)  ──HTTPS──►  Oracle VM (Caddy → API + Discord bot)
 
 ## Quick Start (local dev)
 
+See **[docs/SETUP.md](docs/SETUP.md)** for the full production deployment guide (Oracle VM, Discord, GitHub Pages, Rust+ pairing).
+
 ### Prerequisites
 
 - Node.js 20+
@@ -43,7 +45,7 @@ npm run register-commands --workspace=@rusttools/discord-bot
 
 ### Discord app setup
 
-1. Create application → OAuth2 redirect: `http://localhost:3000/auth/discord/callback`
+1. Create application → OAuth2 redirect: `http://localhost:5173/api/auth/discord/callback` (via Vite proxy — **not** port 3000)
 2. Copy Client ID + Secret to `.env`
 3. Create bot → copy token to `DISCORD_BOT_TOKEN`
 4. Invite bot with `bot` + `applications.commands` scopes
@@ -62,18 +64,14 @@ Web: Settings → **Link Rust+ Account**, then pair in-game.
 
 ## Production (Oracle VM)
 
+See **[docs/SETUP.md](docs/SETUP.md)** for step-by-step deploy instructions.
+
 ```bash
 cp .env.example .env
 # Set DOMAIN, API_PUBLIC_URL, CORS_ORIGINS, all secrets
 
 docker compose up -d --build
 ```
-
-Set GitHub repo variable `VITE_API_URL` to your public API URL for Pages deploys.
-
-Set `FRONTEND_URL` in `.env` to your GitHub Pages URL (e.g. `https://user.github.io/RustTools`) so OAuth redirects correctly. When the frontend and API are on different domains, session cookies use `SameSite=None` automatically.
-
-Enable GitHub Pages from Actions in repo settings.
 
 ## Features
 
@@ -93,11 +91,12 @@ Enable GitHub Pages from Actions in repo settings.
 ### Discord Bot
 - `/status`, `/devices`, `/switch`, `/alarm`, `/storage`
 - `/team`, `/time`, `/chat`, `/map`, `/pair`, `/link`
-- Role-based permissions via `DISCORD_ROLE_*` env vars
+- Role-based permissions via `DISCORD_ROLE_*` env vars (web UI + Discord bot)
 
 ### Notifications & Automations
 - Raid/smart alarm → Discord channel (`DISCORD_NOTIFICATION_CHANNEL_ID`)
-- Map events: Chinook, cargo ship polling
+- Map events: Chinook, cargo ship, patrol heli — Discord + optional in-game team chat with grid location
+- Deep Sea open/close tracking with timers — Dashboard, `/deepsea`, `!deepsea` in team chat
 - Optional night lights + SAM-when-offline automations
 
 ## Project structure

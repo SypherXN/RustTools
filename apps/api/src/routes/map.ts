@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import { requireAuth } from "../lib/auth.js";
-import { parseTeamRoster } from "../lib/rust-data.js";
+import { buildMapTransform } from "@rusttools/shared";
+import { requireCapability } from "../lib/auth.js";
+import { parseTeamRoster, getWorldSize } from "../lib/rust-data.js";
+import { applyTeamTracking } from "../lib/team-tracker.js";
+import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
 import { searchVending } from "../lib/vending.js";
 import { registerServerRoutes as registerServerCoreRoutes } from "./servers.js";
 
@@ -13,21 +16,54 @@ export async function registerServerRoutes(
   await registerServerCoreRoutes(app, deps);
 
   app.get("/servers/active/map", async (request, reply) => {
-    const user = await requireAuth(deps.db, request, reply);
+    const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
     try {
-      const map = await deps.rustPlus.getMap();
-      const team = await deps.rustPlus.getTeamInfo();
-      const markers = await deps.rustPlus.getMapMarkers();
+      const [map, team, markersRaw, info] = await Promise.all([
+        deps.rustPlus.getMap(),
+        deps.rustPlus.getTeamInfo(),
+        deps.rustPlus.getMapMarkers(),
+        deps.rustPlus.getServerInfo(),
+      ]);
+      const worldSize = getWorldSize(info);
+      const transform = buildMapTransform(map, info as { mapSize?: number });
+      const parsed = parseTeamRoster(team, worldSize);
+      const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
       return {
         map: {
           width: map.width,
           height: map.height,
           imageBase64: map.jpgImage?.toString("base64") ?? null,
         },
-        team: parseTeamRoster(team),
-        markers,
+        transform,
+        team: tracked.team.members,
+        monuments: parseMonuments(map),
+        markers: parseMapMarkers(markersRaw),
+      };
+    } catch (err) {
+      return reply.status(503).send({
+        error: err instanceof Error ? err.message : "Rust+ not connected",
+      });
+    }
+  });
+
+  app.get("/servers/active/map/live", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    try {
+      const [team, markersRaw, info] = await Promise.all([
+        deps.rustPlus.getTeamInfo(),
+        deps.rustPlus.getMapMarkers(),
+        deps.rustPlus.getServerInfo(),
+      ]);
+      const worldSize = getWorldSize(info);
+      const parsed = parseTeamRoster(team, worldSize);
+      const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
+      return {
+        team: tracked.team.members,
+        markers: parseMapMarkers(markersRaw),
       };
     } catch (err) {
       return reply.status(503).send({
@@ -37,12 +73,12 @@ export async function registerServerRoutes(
   });
 
   app.get("/servers/active/markers", async (request, reply) => {
-    const user = await requireAuth(deps.db, request, reply);
+    const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
     try {
-      const markers = await deps.rustPlus.getMapMarkers();
-      return { markers };
+      const markersRaw = await deps.rustPlus.getMapMarkers();
+      return { markers: parseMapMarkers(markersRaw) };
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",
@@ -51,7 +87,7 @@ export async function registerServerRoutes(
   });
 
   app.get("/vending/search", async (request, reply) => {
-    const user = await requireAuth(deps.db, request, reply);
+    const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
     const { q } = request.query as { q?: string };
@@ -70,7 +106,7 @@ export async function registerServerRoutes(
   });
 
   app.post("/servers/active/chat", async (request, reply) => {
-    const user = await requireAuth(deps.db, request, reply);
+    const user = await requireCapability(deps.db, request, reply, "switch");
     if (!user) return;
 
     const { message } = request.body as { message?: string };

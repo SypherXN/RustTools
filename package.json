@@ -9,15 +9,18 @@
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace=@rusttools/api",
     "dev:web": "npm run dev --workspace=@rusttools/web",
+    "dev:web:demo": "npm run dev:demo --workspace=@rusttools/web",
     "dev:bot": "npm run dev --workspace=@rusttools/discord-bot",
     "dev:all": "concurrently -n api,web,bot -c blue,green,magenta \"npm run dev --workspace=@rusttools/api\" \"npm run dev --workspace=@rusttools/web\" \"npm run dev --workspace=@rusttools/discord-bot\"",
     "db:generate": "npm run generate --workspace=@rusttools/db",
     "db:migrate": "npm run migrate --workspace=@rusttools/db",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
+    "patch-package": "^8.0.1",
     "typescript": "^5.8.3"
   },
   "engines": {

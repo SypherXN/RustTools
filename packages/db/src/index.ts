@@ -13,3 +13,4 @@ export function createDatabase(databaseUrl: string) {
 export type Database = ReturnType<typeof createDatabase>;
 
 export * from "./schema.js";
+export { resolveDatabaseUrl, resolveDatabasePath } from "./paths.js";

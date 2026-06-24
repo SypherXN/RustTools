@@ -3,7 +3,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-config({ path: path.resolve(__dirname, "../../../.env") });
+const repoRoot = path.resolve(__dirname, "../../..");
+config({ path: path.resolve(repoRoot, ".env") });
+
+function resolveRepoPath(relativePath: string): string {
+  const raw = relativePath.replace(/^file:/, "");
+  if (path.isAbsolute(raw)) return raw;
+  return path.resolve(repoRoot, raw);
+}
 
 function required(name: string): string {
   const value = process.env[name];
@@ -45,6 +52,9 @@ export const env = {
   internalApiKey: optional("INTERNAL_API_KEY"),
   rustplus: {
     fcmConfigPath: optional("RUSTPLUS_FCM_CONFIG_PATH", "./data/fcm-config.json"),
+    get resolvedFcmConfigPath(): string {
+      return resolveRepoPath(optional("RUSTPLUS_FCM_CONFIG_PATH", "./data/fcm-config.json"));
+    },
   },
   get discordOAuthConfigured(): boolean {
     return Boolean(this.discord.clientId && this.discord.clientSecret);

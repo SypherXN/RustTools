@@ -1,5 +1,7 @@
 import { Routes, Route, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { isDemoMode } from "./lib/demo";
+import { RequirePermission, permissionLabel } from "./components/RequirePermission";
 import { AuditPage } from "./pages/AuditPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DevicesPage } from "./pages/DevicesPage";
@@ -24,6 +26,23 @@ function Shell() {
     return <LoginPage />;
   }
 
+  if (!user.permissions.view) {
+    return (
+      <div className="center access-denied">
+        <section className="card">
+          <h1>Access denied</h1>
+          <p className="muted">
+            Your Discord account does not have permission to use RustTools. Ask a server admin to
+            assign the <strong>View</strong> role (<code>DISCORD_ROLE_VIEW</code>).
+          </p>
+          <button type="button" onClick={() => void logout()}>
+            Log out
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -37,24 +56,30 @@ function Shell() {
           <NavLink to="/storage">Storage</NavLink>
           <NavLink to="/map">Map</NavLink>
           <NavLink to="/team">Team</NavLink>
-          <NavLink to="/audit">Audit</NavLink>
+          {user.permissions.admin && <NavLink to="/audit">Audit</NavLink>}
           <NavLink to="/settings">Settings</NavLink>
         </nav>
         <div className="sidebar-footer">
           <p className="user-name">{user.user.discordUsername}</p>
+          <p className="muted permission-badge">{permissionLabel(user.permissions)}</p>
           <button type="button" onClick={() => void logout()}>
             Log out
           </button>
         </div>
       </aside>
       <main className="content">
+        {isDemoMode() && (
+          <div className="demo-banner">
+            Demo mode — mock data only. Run <code>npm run dev:web</code> for live API.
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/devices" element={<DevicesPage />} />
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/team" element={<TeamPage />} />
-          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/audit" element={<RequirePermission capability="admin"><AuditPage /></RequirePermission>} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>

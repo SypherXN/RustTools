@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AuthUserResponse } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { demoUser, isDemoMode } from "../lib/demo";
 
 interface AuthContextValue {
   user: AuthUserResponse | null;
@@ -12,24 +13,46 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUserResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<AuthUserResponse | null>(isDemoMode() ? demoUser : null);
+  const [loading, setLoading] = useState(!isDemoMode());
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   const refresh = async () => {
-    try {
-      const data = await apiFetch<AuthUserResponse>("/auth/me");
-      setUser(data);
-    } catch {
-      setUser(null);
+    if (isDemoMode()) {
+      setUser(demoUser);
+      return;
     }
+    if (refreshPromiseRef.current) {
+      return refreshPromiseRef.current;
+    }
+    refreshPromiseRef.current = (async () => {
+      try {
+        const data = await apiFetch<AuthUserResponse>("/auth/me");
+        setUser(data);
+      } catch {
+        setUser(null);
+      } finally {
+        refreshPromiseRef.current = null;
+      }
+    })();
+    return refreshPromiseRef.current;
   };
 
   const logout = async () => {
+    if (isDemoMode()) {
+      setUser(demoUser);
+      return;
+    }
     await apiFetch("/auth/logout", { method: "POST" });
     setUser(null);
   };
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setUser(demoUser);
+      setLoading(false);
+      return;
+    }
     refresh().finally(() => setLoading(false));
   }, []);
 

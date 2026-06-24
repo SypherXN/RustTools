@@ -60,7 +60,9 @@ export async function registerDiscordOAuth(
     });
 
     if (!tokenRes.ok) {
-      return reply.status(502).send({ error: "Discord token exchange failed" });
+      const detail = await tokenRes.text();
+      request.log.error({ detail }, "Discord token exchange failed");
+      return reply.redirect(`${env.frontendRedirectUrl}/?error=discord_token_failed`);
     }
 
     const tokens = (await tokenRes.json()) as DiscordTokenResponse;
@@ -119,6 +121,13 @@ export async function registerDiscordOAuth(
     setAuthCookies(reply, sessionId, refreshToken, expiresAt);
 
     const frontendUrl = env.frontendRedirectUrl;
-    return reply.redirect(`${frontendUrl}/`);
+    // 200 + JS redirect so Set-Cookie is stored before leaving the callback URL
+    // (302 through the Vite dev proxy can drop cookies in some browsers).
+    return reply.type("text/html").send(`<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Signing in…</title></head>
+<body><p>Signing in…</p>
+<script>window.location.replace(${JSON.stringify(`${frontendUrl}/`)});</script>
+</body></html>`);
   });
 }

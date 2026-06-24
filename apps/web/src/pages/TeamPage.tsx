@@ -1,46 +1,132 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import type { ParsedTeamInfo, TeamApiResponse, TeamChatMessage, TeamDeathEvent, TeamRosterMember } from "@rusttools/shared";
+import {
+  appendTeamChatMessage,
+  formatTeamAfkDuration,
+  formatTeamDeathAgo,
+  formatTeamSession,
+  sortTeamRoster,
+  teamMemberStatus,
+} from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { formatTeamGridLocation } from "../lib/team-location";
 import { useWebSocket } from "../hooks/useWebSocket";
-
-interface TeamMember {
-  name: string;
-  steamId: string;
-  isOnline: boolean;
-  x?: number;
-  y?: number;
-}
+import { useCan } from "../hooks/usePermissions";
 
 export function TeamPage() {
-  const [team, setTeam] = useState<TeamMember[]>([]);
-  const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
-  const [messages, setMessages] = useState<string[]>([]);
+  const [teamInfo, setTeamInfo] = useState<ParsedTeamInfo | null>(null);
+  const [deaths, setDeaths] = useState<TeamDeathEvent[]>([]);
+  const [canPromote, setCanPromote] = useState(false);
+  const [pairedPlayerId, setPairedPlayerId] = useState<string | null>(null);
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [worldSize, setWorldSize] = useState<number | null>(null);
+  const [messages, setMessages] = useState<TeamChatMessage[]>([]);
   const [chatMessage, setChatMessage] = useState("");
+  const chatFeedRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+  const canSwitch = useCan("switch");
+  const canAdmin = useCan("admin");
 
-  const load = () => {
-    Promise.all([
-      apiFetch<{ team: TeamMember[] }>("/servers/active/team"),
-      apiFetch<{ time: { isDay?: boolean; time?: string } }>("/servers/active/time"),
-    ])
-      .then(([teamRes, timeRes]) => {
-        setTeam(teamRes.team);
-        setTime(timeRes.time);
-      })
-      .catch((err: Error) => setError(err.message));
-  };
+  const applyTeamPayload = useCallback((data: TeamApiResponse) => {
+    setTeamInfo(data.team);
+    setDeaths(data.deaths);
+    setCanPromote(data.canPromote);
+    setPairedPlayerId(data.pairedPlayerId);
+    setError(null);
+  }, []);
+
+  const loadChat = useCallback(() => {
+    void apiFetch<{ messages: TeamChatMessage[] }>("/servers/active/team/chat")
+      .then((data) => setMessages(data.messages))
+      .catch(() => {
+        /* chat history optional when Rust+ is disconnected */
+      });
+  }, []);
+
+  const loadTeam = useCallback(() => {
+    void apiFetch<TeamApiResponse>("/servers/active/team")
+      .then(applyTeamPayload)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
+    loadChat();
+  }, [applyTeamPayload, loadChat]);
 
   useEffect(() => {
-    load();
+    setLoading(true);
+    loadTeam();
+    void apiFetch<{ info: { mapSize?: number } }>("/servers/active/info")
+      .then((res) => {
+        if (res.info.mapSize && res.info.mapSize > 0) {
+          setWorldSize(res.info.mapSize);
+        }
+      })
+      .catch(() => {
+        /* map size optional for grid labels */
+      });
+    const interval = setInterval(loadTeam, 30_000);
+    return () => clearInterval(interval);
+  }, [loadTeam]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
+    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    chatFeedRef.current?.scrollTo({ top: chatFeedRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
 
   useWebSocket((event, payload) => {
     if (event === "teamChat") {
-      const p = payload as { message?: string };
-      if (p.message) {
-        setMessages((prev) => [...prev.slice(-49), p.message!]);
+      const p = payload as Partial<TeamChatMessage>;
+      const text = p.message?.trim();
+      if (!text) return;
+      setMessages((prev) =>
+        appendTeamChatMessage(prev, {
+          steamId: p.steamId ?? "",
+          name: p.name?.trim() || "Unknown",
+          message: text,
+          sentAt: p.sentAt ?? Math.floor(Date.now() / 1000),
+        }),
+      );
+      return;
+    }
+    if (event === "teamChanged") {
+      const p = payload as TeamApiResponse | null;
+      if (p?.team?.members) {
+        applyTeamPayload(p);
+        setLoading(false);
+      } else {
+        loadTeam();
       }
     }
   });
+
+  const promoteLeader = async (member: TeamRosterMember) => {
+    if (
+      !window.confirm(
+        `Make ${member.name} team leader? You will lose leader privileges on the paired Rust+ account.`,
+      )
+    ) {
+      return;
+    }
+    setPromotingId(member.steamId);
+    setError(null);
+    try {
+      const data = await apiFetch<TeamApiResponse>("/servers/active/team/promote", {
+        method: "POST",
+        body: JSON.stringify({ steamId: member.steamId }),
+      });
+      applyTeamPayload(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to promote team leader");
+    } finally {
+      setPromotingId(null);
+    }
+  };
 
   const sendChat = async () => {
     if (!chatMessage.trim()) return;
@@ -49,71 +135,195 @@ export function TeamPage() {
         method: "POST",
         body: JSON.stringify({ message: chatMessage }),
       });
-      setMessages((prev) => [...prev, `You: ${chatMessage}`]);
       setChatMessage("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
     }
   };
 
+  const members = teamInfo ? sortTeamRoster(teamInfo.members) : [];
+  const onlineCount = members.filter((m) => m.isOnline).length;
+
   return (
     <div>
       <header className="page-header">
         <h1>Team</h1>
-        <p>Online roster, in-game time, and team chat.</p>
+        <p>Live roster and team chat.</p>
+        {pairedPlayerId && (
+          <p className="muted team-paired-hint">
+            Rust+ paired as <code>{pairedPlayerId}</code>.
+            {canPromote
+              ? " You can promote teammates because this account is team leader."
+              : " Promote is only available when the paired account is team leader."}
+          </p>
+        )}
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="grid">
-        <section className="card">
-          <h2>In-Game Time</h2>
-          <p className="stat-big">
-            {time?.time ?? "—"}
-            {time?.isDay != null && (
-              <span className="badge">{time.isDay ? "Day" : "Night"}</span>
-            )}
-          </p>
+      <div className="team-main-layout">
+        <section className="card team-roster-panel">
+          <h2>Roster ({onlineCount} online)</h2>
+          {loading && members.length === 0 ? (
+            <p className="muted">Loading team...</p>
+          ) : members.length === 0 ? (
+            <p className="muted">No team members returned. Make sure you are on a team in-game.</p>
+          ) : (
+            <ul className="team-roster">
+              {members.map((m) => (
+                <TeamRosterRow
+                  key={m.steamId}
+                  member={m}
+                  worldSize={worldSize}
+                  now={now}
+                  canPromote={canPromote && canAdmin}
+                  promoting={promotingId === m.steamId}
+                  onPromote={() => void promoteLeader(m)}
+                />
+              ))}
+            </ul>
+          )}
         </section>
-        <section className="card">
-          <h2>Roster ({team.filter((m) => m.isOnline).length} online)</h2>
-          <ul className="team-list">
-            {team.map((m) => (
-              <li key={m.steamId}>
-                <span className={m.isOnline ? "dot online" : "dot offline"} />
-                <strong>{m.name}</strong>
-                {m.x != null && m.y != null && (
-                  <span className="muted"> @ {m.x}, {m.y}</span>
-                )}
-              </li>
+
+        <section className="card team-chat-panel">
+          <h2>Team Chat</h2>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Type <code>!deepsea</code> or <code>!ds</code> for Deep Sea timer status.
+          </p>
+          <div className="chat-feed team-chat-feed" ref={chatFeedRef}>
+            {messages.length === 0 && <p className="muted">No messages yet.</p>}
+            {messages.map((msg) => (
+              <p key={`${msg.steamId}-${msg.sentAt}-${msg.message}`} className="chat-line">
+                <strong>{msg.name}</strong>: {msg.message}
+              </p>
             ))}
-          </ul>
+          </div>
+          {canSwitch ? (
+            <div className="chat-row">
+              <input
+                type="text"
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                placeholder="Message to team..."
+                onKeyDown={(e) => e.key === "Enter" && void sendChat()}
+              />
+              <button type="button" onClick={() => void sendChat()}>
+                Send
+              </button>
+            </div>
+          ) : (
+            <p className="muted">You need Switch permission to send team chat messages.</p>
+          )}
         </section>
       </div>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Team Chat</h2>
-        <div className="chat-feed">
-          {messages.length === 0 && <p className="muted">No messages yet.</p>}
-          {messages.map((msg, i) => (
-            <p key={i} className="chat-line">
-              {msg}
-            </p>
-          ))}
-        </div>
-        <div className="chat-row">
-          <input
-            type="text"
-            value={chatMessage}
-            onChange={(e) => setChatMessage(e.target.value)}
-            placeholder="Message to team..."
-            onKeyDown={(e) => e.key === "Enter" && void sendChat()}
-          />
-          <button type="button" onClick={() => void sendChat()}>
-            Send
-          </button>
-        </div>
+        <h2>Recent deaths</h2>
+        {deaths.length === 0 ? (
+          <p className="muted">No deaths recorded yet this session.</p>
+        ) : (
+          <ul className="team-death-list">
+            {deaths.map((death) => (
+              <TeamDeathRow key={`${death.steamId}-${death.deathTime}`} death={death} now={now} />
+            ))}
+          </ul>
+        )}
       </section>
     </div>
+  );
+}
+
+function TeamDeathRow({ death, now }: { death: TeamDeathEvent; now: number }) {
+  const ago = formatTeamDeathAgo(death.deathTime, now);
+  const location =
+    death.grid ??
+    (death.x != null && death.y != null ? `${Math.round(death.x)}, ${Math.round(death.y)}` : null);
+
+  return (
+    <li className="team-death-row">
+      <div className="team-death-main">
+        <strong>{death.name}</strong>
+        {ago && <span className="muted">{ago}</span>}
+      </div>
+      {location && <span className="team-death-location muted">{location}</span>}
+    </li>
+  );
+}
+
+function TeamRosterRow({
+  member,
+  worldSize,
+  now,
+  canPromote,
+  promoting,
+  onPromote,
+}: {
+  member: TeamRosterMember;
+  worldSize: number | null;
+  now: number;
+  canPromote: boolean;
+  promoting: boolean;
+  onPromote: () => void;
+}) {
+  const status = teamMemberStatus(member);
+  const location =
+    worldSize != null ? formatTeamGridLocation(member, worldSize) : null;
+  const session = formatTeamSession(member.spawnTime, member.isOnline, now);
+  const deathAgo = status === "dead" ? formatTeamDeathAgo(member.deathTime, now) : null;
+  const afkDuration = status === "afk" ? formatTeamAfkDuration(member.afkSince, now) : null;
+  const canMap = member.locationKnown !== false && member.x != null && member.y != null;
+
+  const statusParts: string[] = [];
+  if (status === "offline") {
+    statusParts.push("Offline");
+  } else if (status === "dead") {
+    statusParts.push("Dead");
+    if (deathAgo) statusParts.push(deathAgo);
+  } else if (status === "afk") {
+    statusParts.push("AFK");
+    if (afkDuration) statusParts.push(afkDuration);
+  } else {
+    statusParts.push("Active");
+    if (session) statusParts.push(`online ${session}`);
+  }
+
+  const dotClass =
+    status === "offline" ? "offline" : status === "dead" ? "dead" : status === "afk" ? "afk" : "online";
+
+  return (
+    <li className={`team-roster-row${status === "offline" ? " offline" : ""}`}>
+      <div className="team-roster-main">
+        <span className={`dot ${dotClass}`} />
+        <div className="team-roster-ident">
+          <div className="team-roster-name">
+            <strong>{member.name}</strong>
+            {member.isLeader && <span className="badge team-leader-badge">Leader</span>}
+            {status === "dead" && <span className="badge team-dead-badge">Dead</span>}
+            {status === "afk" && <span className="badge team-afk-badge">AFK</span>}
+          </div>
+          <div className="team-roster-meta muted">
+            {statusParts.join(" · ")}
+            {location ? ` · ${location}` : status !== "offline" ? " · Location unknown" : ""}
+          </div>
+        </div>
+      </div>
+      <div className="team-roster-actions">
+        {canPromote && !member.isLeader && (
+          <button
+            type="button"
+            className="btn-secondary team-promote-btn"
+            disabled={promoting}
+            onClick={onPromote}
+          >
+            {promoting ? "Promoting…" : "Make leader"}
+          </button>
+        )}
+        {canMap && (
+          <Link className="btn-secondary team-map-link" to={`/map?member=${member.steamId}`}>
+            View on map
+          </Link>
+        )}
+      </div>
+    </li>
   );
 }

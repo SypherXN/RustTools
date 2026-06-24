@@ -1,3 +1,4 @@
+import type { UserPermissions } from "@rusttools/shared";
 import { env } from "../config.js";
 
 export type DiscordCapability = "admin" | "switch" | "view";
@@ -7,6 +8,14 @@ const CAPABILITY_ROLES: Record<DiscordCapability, string[]> = {
   switch: [...env.discord.roleAdmin, ...env.discord.roleSwitch],
   view: [...env.discord.roleAdmin, ...env.discord.roleSwitch, ...env.discord.roleView],
 };
+
+export function rolesConfigured(): boolean {
+  return (
+    env.discord.roleAdmin.length > 0 ||
+    env.discord.roleSwitch.length > 0 ||
+    env.discord.roleView.length > 0
+  );
+}
 
 export async function getDiscordMemberRoles(discordUserId: string): Promise<string[]> {
   if (!env.discord.botToken || !env.discord.guildId) {
@@ -26,12 +35,9 @@ export async function getDiscordMemberRoles(discordUserId: string): Promise<stri
   return member.roles ?? [];
 }
 
-function rolesConfigured(): boolean {
-  return (
-    env.discord.roleAdmin.length > 0 ||
-    env.discord.roleSwitch.length > 0 ||
-    env.discord.roleView.length > 0
-  );
+function memberHasCapability(roles: string[], capability: DiscordCapability): boolean {
+  const allowed = [...new Set(CAPABILITY_ROLES[capability])];
+  return roles.some((role) => allowed.includes(role));
 }
 
 export async function hasDiscordCapability(
@@ -43,8 +49,27 @@ export async function hasDiscordCapability(
   }
 
   const roles = await getDiscordMemberRoles(discordUserId);
-  const allowed = [...new Set(CAPABILITY_ROLES[capability])];
-  return roles.some((role) => allowed.includes(role));
+  return memberHasCapability(roles, capability);
+}
+
+export async function resolveUserPermissions(discordUserId: string): Promise<UserPermissions> {
+  const configured = rolesConfigured();
+  if (!configured) {
+    return {
+      view: true,
+      switch: true,
+      admin: true,
+      rolesConfigured: false,
+    };
+  }
+
+  const roles = await getDiscordMemberRoles(discordUserId);
+  return {
+    view: memberHasCapability(roles, "view"),
+    switch: memberHasCapability(roles, "switch"),
+    admin: memberHasCapability(roles, "admin"),
+    rolesConfigured: true,
+  };
 }
 
 export function assertInternalApiKey(authHeader?: string): boolean {

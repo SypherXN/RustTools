@@ -8,8 +8,16 @@ import {
   assertInternalApiKey,
   requireDiscordCapability,
 } from "../lib/discord-permissions.js";
+import {
+  assertGuildAllowed,
+  bindDiscordChannel,
+  clearDiscordChannelBinding,
+  listDiscordChannelBindings,
+} from "../lib/discord-channels.js";
+import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { getActiveServerId } from "../lib/rust-data.js";
 import { getSwitchState } from "../lib/vending.js";
+import { isDiscordChannelPurpose } from "@rusttools/shared";
 
 function discordIdFrom(request: FastifyRequest): string | undefined {
   const query = request.query as Record<string, string>;
@@ -60,6 +68,20 @@ export async function registerInternalRoutes(
 
     const time = await deps.rustPlus.getTime();
     return { time };
+  });
+
+  app.get("/internal/deepsea", async (request, reply) => {
+    const discordUserId = discordIdFrom(request);
+    const perm = await requireDiscordCapability(discordUserId, "view");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(503).send({ error: "No active server" });
+    }
+
+    const status = await fetchDeepSeaStatus(deps.db, deps.rustPlus, serverId);
+    return { status };
   });
 
   app.get("/internal/devices", async (request, reply) => {
@@ -178,5 +200,89 @@ export async function registerInternalRoutes(
       width: map.width,
       height: map.height,
     };
+  });
+
+  app.get("/internal/channels", async (request, reply) => {
+    const discordUserId = discordIdFrom(request);
+    const perm = await requireDiscordCapability(discordUserId, "view");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    const { guildId } = request.query as { guildId?: string };
+    if (!guildId?.trim()) {
+      return reply.status(400).send({ error: "guildId is required" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    const bindings = await listDiscordChannelBindings(deps.db, guildId.trim());
+    return { bindings };
+  });
+
+  app.post("/internal/channels/bind", async (request, reply) => {
+    const { discordUserId, guildId, purpose, channelId } = request.body as {
+      discordUserId: string;
+      guildId: string;
+      purpose: string;
+      channelId: string;
+    };
+
+    const perm = await requireDiscordCapability(discordUserId, "admin");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    if (!guildId?.trim() || !channelId?.trim()) {
+      return reply.status(400).send({ error: "guildId and channelId are required" });
+    }
+    if (!isDiscordChannelPurpose(purpose)) {
+      return reply.status(400).send({ error: "Invalid channel purpose" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    await bindDiscordChannel(deps.db, guildId.trim(), purpose, channelId.trim());
+
+    await logAudit(deps.db, {
+      action: "discord_channel_bind",
+      targetType: "discord_channel",
+      targetId: channelId.trim(),
+      metadata: { discordUserId, guildId: guildId.trim(), purpose },
+    });
+
+    const bindings = await listDiscordChannelBindings(deps.db, guildId.trim());
+    return { ok: true, bindings };
+  });
+
+  app.post("/internal/channels/clear", async (request, reply) => {
+    const { discordUserId, guildId, purpose } = request.body as {
+      discordUserId: string;
+      guildId: string;
+      purpose: string;
+    };
+
+    const perm = await requireDiscordCapability(discordUserId, "admin");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    if (!guildId?.trim()) {
+      return reply.status(400).send({ error: "guildId is required" });
+    }
+    if (!isDiscordChannelPurpose(purpose)) {
+      return reply.status(400).send({ error: "Invalid channel purpose" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    const cleared = await clearDiscordChannelBinding(deps.db, guildId.trim(), purpose);
+
+    await logAudit(deps.db, {
+      action: "discord_channel_clear",
+      targetType: "discord_channel_purpose",
+      targetId: purpose,
+      metadata: { discordUserId, guildId: guildId.trim(), cleared },
+    });
+
+    const bindings = await listDiscordChannelBindings(deps.db, guildId.trim());
+    return { ok: true, cleared, bindings };
   });
 }

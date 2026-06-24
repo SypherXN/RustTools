@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { DeepSeaStatus, TeamApiResponse } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 
 interface HealthResponse {
@@ -16,6 +17,8 @@ export function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [server, setServer] = useState<ServerInfoResponse | null>(null);
   const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
+  const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
+  const [deepSea, setDeepSea] = useState<DeepSeaStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +34,18 @@ export function DashboardPage() {
     apiFetch<{ time: { isDay?: boolean; time?: string } }>("/servers/active/time")
       .then((d) => setTime(d.time))
       .catch(() => setTime(null));
+    apiFetch<TeamApiResponse>("/servers/active/team")
+      .then((data) => {
+        const members = data.team.members;
+        setTeamCounts({
+          online: members.filter((m) => m.isOnline).length,
+          total: members.length,
+        });
+      })
+      .catch(() => setTeamCounts(null));
+    apiFetch<{ status: DeepSeaStatus }>("/servers/active/deepsea")
+      .then((d) => setDeepSea(d.status))
+      .catch(() => setDeepSea(null));
   }, []);
 
   const info = server?.info;
@@ -79,6 +94,14 @@ export function DashboardPage() {
                 </dd>
               </div>
               <div>
+                <dt>Team</dt>
+                <dd>
+                  {teamCounts != null
+                    ? `${teamCounts.online} / ${teamCounts.total} online`
+                    : "—"}
+                </dd>
+              </div>
+              <div>
                 <dt>Wipe in</dt>
                 <dd>{server?.wipe.label ?? "—"}</dd>
               </div>
@@ -93,6 +116,33 @@ export function DashboardPage() {
           ) : (
             <p className="muted">No active Rust+ server. Pair a server in Settings.</p>
           )}
+        </section>
+
+        <section className="card">
+          <h2>Deep Sea</h2>
+          {deepSea ? (
+            <dl className="stat-list">
+              <div>
+                <dt>Status</dt>
+                <dd>{deepSea.isOpen ? "Open" : deepSea.phase === "closed" ? "Closed" : "Unknown"}</dd>
+              </div>
+              <div>
+                <dt>Timer</dt>
+                <dd>{deepSea.label}</dd>
+              </div>
+              {deepSea.offshoreVendingCount > 0 && (
+                <div>
+                  <dt>Offshore shops</dt>
+                  <dd>{deepSea.offshoreVendingCount}</dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="muted">Deep Sea status unavailable — connect Rust+ to track open/close timers.</p>
+          )}
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            In-game: <code>!deepsea</code> or <code>!ds</code> · Discord: <code>/deepsea</code>
+          </p>
         </section>
       </div>
     </div>

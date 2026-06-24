@@ -1,3 +1,5 @@
+import type { UserCapabilities } from "./permissions.js";
+
 export type EntityType = "smart_switch" | "smart_alarm" | "storage_monitor";
 
 export interface User {
@@ -15,6 +17,8 @@ export interface AuthUserResponse {
   user: Pick<User, "id" | "discordId" | "discordUsername" | "discordAvatar" | "steamId">;
   linkedRust: boolean;
   pendingRustLink?: boolean;
+  permissions: UserCapabilities;
+  rolesConfigured: boolean;
 }
 
 export interface Session {
@@ -66,7 +70,15 @@ export type RustPlusEvent =
   | { type: "entityChanged"; serverId: string; entityId: number; payload: unknown }
   | { type: "connectionLost"; serverId: string; reason: string }
   | { type: "connectionRestored"; serverId: string }
-  | { type: "teamChat"; serverId: string; message: string; steamId: string }
+  | {
+      type: "teamChat";
+      serverId: string;
+      message: string;
+      steamId: string;
+      name: string;
+      sentAt: number;
+    }
+  | { type: "teamChanged"; serverId: string; teamInfo: unknown }
   | { type: "serverPaired"; serverId: string; name: string }
   | { type: "entityPaired"; serverId: string; entityId: number; entityType: EntityType; name: string }
   | { type: "mapMarkers"; serverId: string; markers: unknown }

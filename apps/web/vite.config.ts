@@ -21,7 +21,21 @@ export default defineConfig({
       "/api": {
         target: "http://localhost:3000",
         changeOrigin: true,
+        timeout: 120_000,
+        proxyTimeout: 120_000,
         rewrite: (path) => path.replace(/^\/api/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyRes", (proxyRes) => {
+            const cookies = proxyRes.headers["set-cookie"];
+            if (!cookies) return;
+            proxyRes.headers["set-cookie"] = cookies.map((cookie) =>
+              cookie
+                .replace(/;\s*Secure/gi, "")
+                .replace(/;\s*Domain=[^;]*/gi, "")
+                .replace(/;\s*SameSite=None/gi, "; SameSite=Lax"),
+            );
+          });
+        },
       },
     },
   },

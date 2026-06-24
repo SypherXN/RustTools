@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/data dist/data",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },

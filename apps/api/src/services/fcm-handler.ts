@@ -57,7 +57,7 @@ export async function handleFcmNotification(
     const [server] = await db
       .select()
       .from(rustServers)
-      .where(eq(rustServers.ip, data.ip))
+      .where(and(eq(rustServers.ip, data.ip), eq(rustServers.port, port)))
       .limit(1);
 
     if (!server) {
@@ -110,38 +110,62 @@ export async function handleFcmNotification(
   }
 
   if (data.type === "server" || !data.entityId) {
-    const serverId = generateId();
-    await db.update(rustServers).set({ isActive: false });
-    await db.insert(rustServers).values({
-      id: serverId,
-      name: data.name ?? data.ip,
-      ip: data.ip,
-      port,
-      playerId: String(data.playerId),
-      playerTokenEncrypted: encrypt(String(data.playerToken)),
-      isActive: true,
-      createdAt: now,
-      updatedAt: now,
-    });
+    const [existing] = await db
+      .select()
+      .from(rustServers)
+      .where(and(eq(rustServers.ip, data.ip), eq(rustServers.port, port)))
+      .limit(1);
 
-    await rustPlus.connectServer({
-      id: serverId,
+    const credentials = {
       ip: data.ip,
       port,
       playerId: String(data.playerId),
       playerToken: String(data.playerToken),
       name: data.name ?? data.ip,
-    });
+    };
+
+    let serverId: string;
+
+    if (existing) {
+      serverId = existing.id;
+      await db
+        .update(rustServers)
+        .set({ isActive: false })
+        .where(eq(rustServers.id, existing.id));
+      await db
+        .update(rustServers)
+        .set({
+          name: credentials.name,
+          playerId: credentials.playerId,
+          playerTokenEncrypted: encrypt(credentials.playerToken),
+          isActive: true,
+          updatedAt: now,
+        })
+        .where(eq(rustServers.id, existing.id));
+      console.log(`[FCM] Updated existing server: ${credentials.name}`);
+    } else {
+      serverId = generateId();
+      await db.update(rustServers).set({ isActive: false });
+      await db.insert(rustServers).values({
+        id: serverId,
+        name: credentials.name,
+        ip: credentials.ip,
+        port: credentials.port,
+        playerId: credentials.playerId,
+        playerTokenEncrypted: encrypt(credentials.playerToken),
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      console.log(`[FCM] Paired new server: ${credentials.name}`);
+    }
+
+    await rustPlus.connectServer({ id: serverId, ...credentials });
+    rustPlus.setActiveServer(serverId);
 
     rustPlus.handleServerPaired({
       id: serverId,
-      ip: data.ip,
-      port,
-      playerId: String(data.playerId),
-      playerToken: String(data.playerToken),
-      name: data.name ?? data.ip,
+      ...credentials,
     });
-
-    console.log(`[FCM] Paired server: ${data.name ?? data.ip}`);
   }
 }

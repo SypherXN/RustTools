@@ -1,21 +1,72 @@
-import { calculateRecycle, type ContainerItem } from "@rusttools/shared";
+import {
+  calculateRecycle,
+  extractContainerItems,
+  resolveRustItem,
+} from "@rusttools/shared";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 
-export interface VendingListing {
+export interface SellOrderListing {
+  item: string;
+  itemName: string;
+  itemShortname: string;
+  quantity: number;
+  costItem: string;
+  costItemName: string;
+  costItemShortname: string;
+  costQuantity: number;
+}
+
+export interface VendingListing extends SellOrderListing {
+  markerId: string;
   name: string;
   x: number;
   y: number;
-  item: string;
-  quantity: number;
-  costItem: string;
-  costQuantity: number;
 }
 
 const MARKER_VENDING = 3;
 
+type RawSellOrder = {
+  itemId?: number;
+  quantity?: number;
+  currencyId?: number;
+  costPerItem?: number;
+  amountInStock?: number;
+};
+
+export function parseSellOrders(orders: RawSellOrder[] | undefined): SellOrderListing[] {
+  return (orders ?? []).map((order) => {
+    const item = resolveRustItem(order.itemId ?? "unknown");
+    const costItem = resolveRustItem(order.currencyId ?? "unknown");
+    return {
+      item: item.id,
+      itemName: item.name,
+      itemShortname: item.shortname,
+      quantity: order.amountInStock ?? order.quantity ?? 0,
+      costItem: costItem.id,
+      costItemName: costItem.name,
+      costItemShortname: costItem.shortname,
+      costQuantity: order.costPerItem ?? 0,
+    };
+  });
+}
+
+function listingMatchesQuery(listing: VendingListing, query: string): boolean {
+  const q = query.toLowerCase();
+  return (
+    listing.name.toLowerCase().includes(q) ||
+    listing.item.includes(q) ||
+    listing.itemName.toLowerCase().includes(q) ||
+    listing.itemShortname.toLowerCase().includes(q) ||
+    listing.costItem.includes(q) ||
+    listing.costItemName.toLowerCase().includes(q) ||
+    listing.costItemShortname.toLowerCase().includes(q)
+  );
+}
+
 export function parseVendingMarkers(markers: unknown): VendingListing[] {
   const data = markers as {
     markers?: Array<{
+      id?: number;
       type?: number;
       name?: string;
       x?: number;
@@ -33,15 +84,17 @@ export function parseVendingMarkers(markers: unknown): VendingListing[] {
   const results: VendingListing[] = [];
   for (const marker of data.markers ?? []) {
     if (marker.type !== MARKER_VENDING) continue;
-    for (const order of marker.sellOrders ?? []) {
+    const markerId =
+      marker.id != null
+        ? `marker-${marker.id}`
+        : `marker-${marker.type}-${marker.x}-${marker.y}`;
+    for (const order of parseSellOrders(marker.sellOrders)) {
       results.push({
+        markerId,
         name: marker.name ?? "Vending",
         x: marker.x ?? 0,
         y: marker.y ?? 0,
-        item: String(order.itemId ?? "unknown"),
-        quantity: order.amountInStock ?? order.quantity ?? 0,
-        costItem: String(order.currencyId ?? "unknown"),
-        costQuantity: order.costPerItem ?? 0,
+        ...order,
       });
     }
   }
@@ -49,13 +102,9 @@ export function parseVendingMarkers(markers: unknown): VendingListing[] {
 }
 
 export function searchVending(markers: unknown, query: string): VendingListing[] {
-  const q = query.toLowerCase();
-  return parseVendingMarkers(markers).filter(
-    (v) =>
-      v.name.toLowerCase().includes(q) ||
-      v.item.toLowerCase().includes(q) ||
-      v.costItem.toLowerCase().includes(q),
-  );
+  const q = query.trim();
+  if (!q) return [];
+  return parseVendingMarkers(markers).filter((listing) => listingMatchesQuery(listing, q));
 }
 
 export async function getSwitchState(
@@ -71,14 +120,6 @@ export async function getSwitchState(
   } catch {
     return null;
   }
-}
-
-export function extractContainerItems(info: unknown): ContainerItem[] {
-  const data = info as {
-    payload?: { items?: ContainerItem[] };
-    items?: ContainerItem[];
-  };
-  return data.payload?.items ?? data.items ?? [];
 }
 
 export function recycleFromEntityInfo(info: unknown) {

@@ -21,7 +21,13 @@ export class EventBus {
     const handlers = this.handlers.get(event.type);
     if (!handlers) return;
     for (const handler of handlers) {
-      handler(event);
+      try {
+        void Promise.resolve(handler(event)).catch((err) => {
+          console.error(`[EventBus] Handler for "${event.type}" failed:`, err);
+        });
+      } catch (err) {
+        console.error(`[EventBus] Handler for "${event.type}" failed:`, err);
+      }
     }
   }
 }

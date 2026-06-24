@@ -10,10 +10,17 @@
       "breakpoints": true
     },
     {
-      "idx": 1,
+      "idx": 2,
       "version": "6",
-      "when": 1740000001000,
-      "tag": "0001_pending_rust_link",
+      "when": 1740000002000,
+      "tag": "0002_server_notification_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1740000003000,
+      "tag": "0003_discord_guild_channels",
       "breakpoints": true
     }
   ]

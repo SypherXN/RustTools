@@ -5,6 +5,10 @@ import { sessions, users } from "@rusttools/db";
 import { env } from "../config.js";
 import { hashToken } from "./crypto.js";
 import { generateId, generateRefreshToken } from "./ids.js";
+import {
+  hasDiscordCapability,
+  type DiscordCapability,
+} from "./discord-permissions.js";
 
 const REFRESH_COOKIE = "rusttools_refresh";
 const ACCESS_COOKIE = "rusttools_access";
@@ -12,10 +16,13 @@ const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 function cookieOptions() {
   const crossOrigin = env.crossOriginFrontend;
+  const apiHttps = env.apiPublicUrl.startsWith("https://");
+  // SameSite=None + Secure only when frontend and API are on different HTTPS origins.
+  const crossSite = crossOrigin && apiHttps;
   return {
     httpOnly: true,
-    secure: env.nodeEnv === "production" || crossOrigin,
-    sameSite: crossOrigin ? ("none" as const) : ("lax" as const),
+    secure: crossSite,
+    sameSite: crossSite ? ("none" as const) : ("lax" as const),
     path: "/",
   };
 }
@@ -110,11 +117,28 @@ export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<typeof users.$inferSelect | null> {
-  const user = await getSessionUser(db, request, reply);
+  const user = await getSessionUser(db, request);
   if (!user) {
     reply.status(401).send({ error: "Unauthorized" });
     return null;
   }
+  return user;
+}
+
+export async function requireCapability(
+  db: Database,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  capability: DiscordCapability,
+): Promise<typeof users.$inferSelect | null> {
+  const user = await requireAuth(db, request, reply);
+  if (!user) return null;
+
+  if (!(await hasDiscordCapability(user.discordId, capability))) {
+    reply.status(403).send({ error: `Missing ${capability} permission` });
+    return null;
+  }
+
   return user;
 }
 

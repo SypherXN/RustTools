@@ -6,7 +6,9 @@ import {
   clearAuthCookies,
   getSessionUser,
   requireAuth,
+  requireCapability,
 } from "../lib/auth.js";
+import { resolveUserPermissions } from "../lib/discord-permissions.js";
 import { issueWsToken } from "../lib/ws-tokens.js";
 import { registerDiscordOAuth } from "./auth-discord.js";
 
@@ -17,10 +19,12 @@ export async function registerAuthRoutes(
   await registerDiscordOAuth(app, db);
 
   app.get("/auth/me", async (request, reply) => {
-    const user = await getSessionUser(db, request, reply);
+    const user = await getSessionUser(db, request);
     if (!user) {
       return reply.status(401).send({ error: "Unauthorized" });
     }
+
+    const permissions = await resolveUserPermissions(user.discordId);
 
     return {
       user: {
@@ -32,11 +36,17 @@ export async function registerAuthRoutes(
       },
       linkedRust: Boolean(user.steamId),
       pendingRustLink: user.pendingRustLink,
+      permissions: {
+        view: permissions.view,
+        switch: permissions.switch,
+        admin: permissions.admin,
+      },
+      rolesConfigured: permissions.rolesConfigured,
     };
   });
 
   app.post("/auth/link-rust", async (request, reply) => {
-    const user = await requireAuth(db, request, reply);
+    const user = await requireCapability(db, request, reply, "admin");
     if (!user) return;
 
     await db
@@ -52,7 +62,7 @@ export async function registerAuthRoutes(
   });
 
   app.get("/auth/ws-token", async (request, reply) => {
-    const user = await requireAuth(db, request, reply);
+    const user = await requireCapability(db, request, reply, "view");
     if (!user) return;
 
     return { token: issueWsToken(user.id) };

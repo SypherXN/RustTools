@@ -1,13 +1,23 @@
+import { demoHandleApi, isDemoMode } from "./demo";
+
 const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  if (isDemoMode()) {
+    await new Promise((r) => setTimeout(r, 120));
+    return demoHandleApi<T>(path, init);
+  }
+
+  const hasBody = init?.body != null && init.body !== "";
+  const headers = new Headers(init?.headers);
+  if (hasBody && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
 
   if (!res.ok) {

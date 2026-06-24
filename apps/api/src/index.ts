@@ -5,12 +5,13 @@ import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import path from "node:path";
 import fs from "node:fs";
-import { createDatabase } from "@rusttools/db";
+import { createDatabase, resolveDatabasePath } from "@rusttools/db";
 import { users } from "@rusttools/db";
 import { eq } from "drizzle-orm";
 import { NotificationService, RustPlusManager } from "@rusttools/rustplus-client";
 import { env } from "./config.js";
 import { getSessionUser } from "./lib/auth.js";
+import { hasDiscordCapability } from "./lib/discord-permissions.js";
 import { consumeWsToken } from "./lib/ws-tokens.js";
 import { registerRoutes } from "./routes/index.js";
 import { handleFcmNotification } from "./services/fcm-handler.js";
@@ -39,13 +40,13 @@ async function sendDiscordMessage(notification: {
 }
 
 async function main() {
-  const dbPath = env.databaseUrl.replace(/^file:/, "");
-  const dbDir = path.dirname(path.isAbsolute(dbPath) ? dbPath : path.resolve(process.cwd(), dbPath));
+  const dbPath = resolveDatabasePath(env.databaseUrl);
+  const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
-  const db = createDatabase(env.databaseUrl);
+  const db = createDatabase(`file:${dbPath}`);
   const wsHub = new WsHub();
 
   const notifications = new NotificationService({
@@ -54,7 +55,7 @@ async function main() {
   });
 
   const rustPlus = new RustPlusManager({
-    fcmConfigPath: env.rustplus.fcmConfigPath,
+    fcmConfigPath: env.rustplus.resolvedFcmConfigPath,
     notificationService: notifications,
   });
 
@@ -86,6 +87,12 @@ async function main() {
       socket.close(4401, "Unauthorized");
       return;
     }
+
+    if (!(await hasDiscordCapability(user.discordId, "view"))) {
+      socket.close(4403, "Forbidden");
+      return;
+    }
+
     wsHub.add(socket);
     socket.send(JSON.stringify({ event: "connected", payload: { ok: true } }));
   });
@@ -96,7 +103,7 @@ async function main() {
 
   await reconnectStoredServers(db, rustPlus);
 
-  const fcmPath = path.resolve(env.rustplus.fcmConfigPath);
+  const fcmPath = env.rustplus.resolvedFcmConfigPath;
   if (fs.existsSync(fcmPath)) {
     rustPlus.startFcmListener((notification) => {
       void handleFcmNotification(db, rustPlus, notification, notifications).catch((err) => {
@@ -109,9 +116,34 @@ async function main() {
 
   await app.listen({ port: env.apiPort, host: env.apiHost });
   app.log.info(`API listening on ${env.apiPublicUrl}`);
+
+  let shuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    app.log.info(`Shutting down (${signal})...`);
+    try {
+      await rustPlus.disconnectAll();
+      await app.close();
+    } catch (err) {
+      app.log.error(err, "Shutdown error");
+    }
+    process.exit(0);
+  };
+
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
 main().catch((err) => {
   console.error(err);
   process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("[API] Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("[API] Uncaught exception:", err);
 });

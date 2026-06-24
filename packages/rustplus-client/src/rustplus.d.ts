@@ -28,6 +28,7 @@ declare module "@liamcottle/rustplus.js" {
     getEntityInfo(entityId: number, callback: RustPlusCallback): void;
     setEntityValue(entityId: number, value: boolean, callback: RustPlusCallback): void;
     sendTeamMessage(message: string, callback: RustPlusCallback): void;
+    promoteToLeader(steamId: string, callback: RustPlusCallback): void;
   }
 }
 

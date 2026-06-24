@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
+import { useCan } from "../hooks/usePermissions";
 
 interface Server {
   id: string;
@@ -12,6 +13,7 @@ interface Server {
 export function ServerSwitcher() {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(false);
+  const canAdmin = useCan("admin");
 
   const load = () => {
     apiFetch<{ servers: Server[] }>("/servers")
@@ -45,11 +47,12 @@ export function ServerSwitcher() {
               <strong>{s.name}</strong>
               <span className="muted">{s.ip}:{s.port}</span>
             </div>
-            {!s.isActive && (
+            {!s.isActive && canAdmin && (
               <button type="button" disabled={loading} onClick={() => void activate(s.id)}>
                 Activate
               </button>
             )}
+            {!s.isActive && !canAdmin && <span className="muted">Inactive</span>}
             {s.isActive && <span className="badge badge-ok">Active</span>}
           </li>
         ))}

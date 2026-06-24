@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -29,6 +29,7 @@ export const rustServers = sqliteTable("rust_servers", {
   playerId: text("player_id").notNull(),
   playerTokenEncrypted: text("player_token_encrypted").notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  notificationSettingsJson: text("notification_settings_json"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -65,3 +66,16 @@ export const storageSnapshots = sqliteTable("storage_snapshots", {
   contentsJson: text("contents_json").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
+
+export const discordGuildChannels = sqliteTable(
+  "discord_guild_channels",
+  {
+    guildId: text("guild_id").notNull(),
+    purpose: text("purpose").notNull(),
+    channelId: text("channel_id").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.guildId, table.purpose] }),
+  }),
+);

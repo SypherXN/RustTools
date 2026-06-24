@@ -6,6 +6,8 @@ import {
 } from "discord.js";
 import { internalFetch, internalPost, mapAttachment } from "./api.js";
 import { env } from "./config.js";
+import type { DiscordChannelBinding } from "@rusttools/shared";
+import { DISCORD_CHANNEL_PURPOSE_LABELS } from "@rusttools/shared";
 
 async function handleStatus(interaction: ChatInputCommandInteraction) {
   const health = await internalFetch<{
@@ -95,6 +97,24 @@ async function handleTime(interaction: ChatInputCommandInteraction) {
   });
 }
 
+async function handleDeepSea(interaction: ChatInputCommandInteraction) {
+  const data = await internalFetch<{ status: { label: string; isOpen: boolean; secondsRemaining: number | null } }>(
+    "/internal/deepsea",
+    interaction.user.id,
+  );
+
+  await interaction.reply({
+    embeds: [
+      {
+        title: data.status.isOpen ? "Deep Sea — Open" : "Deep Sea — Closed",
+        description: data.status.label,
+        color: data.status.isOpen ? 0x3dd68c : 0x5865f2,
+      },
+    ],
+    ephemeral: true,
+  });
+}
+
 async function handleChat(interaction: ChatInputCommandInteraction) {
   const message = interaction.options.getString("message", true);
   await internalPost("/internal/chat", interaction.user.id, { message });
@@ -149,6 +169,101 @@ async function handleLink(interaction: ChatInputCommandInteraction) {
   });
 }
 
+function formatChannelBinding(binding: DiscordChannelBinding): string {
+  if (!binding.channelId) {
+    return `**${binding.label}** — not configured`;
+  }
+  const mention = `<#${binding.channelId}>`;
+  const source =
+    binding.source === "database" ? "linked via `/channel`" : binding.source === "env" ? ".env fallback" : "";
+  return `**${binding.label}** — ${mention}${source ? ` _(${source})_` : ""}`;
+}
+
+async function handleChannel(interaction: ChatInputCommandInteraction) {
+  if (!interaction.guildId) {
+    await interaction.reply({
+      content: "This command can only be used in a Discord server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === "show") {
+    const data = await internalFetch<{ bindings: DiscordChannelBinding[] }>(
+      `/internal/channels?guildId=${encodeURIComponent(interaction.guildId)}`,
+      interaction.user.id,
+    );
+
+    await interaction.reply({
+      embeds: [
+        {
+          title: "Notification channels",
+          description: data.bindings.map(formatChannelBinding).join("\n"),
+          footer: {
+            text: "Use /channel set in a channel to link it. .env values are used when no link is set.",
+          },
+          color: 0x5865f2,
+        },
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (sub === "set") {
+    if (!interaction.channelId || !interaction.channel?.isTextBased()) {
+      await interaction.reply({
+        content: "Run this command in the text channel you want to link.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const purpose = interaction.options.getString("purpose", true);
+    const result = await internalPost<{ ok: boolean; bindings: DiscordChannelBinding[] }>(
+      "/internal/channels/bind",
+      interaction.user.id,
+      {
+        guildId: interaction.guildId,
+        purpose,
+        channelId: interaction.channelId,
+      },
+    );
+
+    const label = DISCORD_CHANNEL_PURPOSE_LABELS[purpose as keyof typeof DISCORD_CHANNEL_PURPOSE_LABELS] ?? purpose;
+
+    await interaction.reply({
+      content: `Linked <#${interaction.channelId}> for **${label}**.`,
+      ephemeral: true,
+    });
+    void result;
+    return;
+  }
+
+  if (sub === "clear") {
+    const purpose = interaction.options.getString("purpose", true);
+    const result = await internalPost<{ ok: boolean; cleared: boolean; bindings: DiscordChannelBinding[] }>(
+      "/internal/channels/clear",
+      interaction.user.id,
+      {
+        guildId: interaction.guildId,
+        purpose,
+      },
+    );
+
+    const label = DISCORD_CHANNEL_PURPOSE_LABELS[purpose as keyof typeof DISCORD_CHANNEL_PURPOSE_LABELS] ?? purpose;
+
+    await interaction.reply({
+      content: result.cleared
+        ? `Cleared **${label}** channel binding. Notifications will use .env fallbacks if configured.`
+        : `No **${label}** binding was set via \`/channel\` (may still use .env).`,
+      ephemeral: true,
+    });
+  }
+}
+
 async function main() {
   if (!env.botToken) throw new Error("DISCORD_BOT_TOKEN is required");
   if (!env.internalApiKey) throw new Error("INTERNAL_API_KEY is required");
@@ -185,6 +300,9 @@ async function main() {
         case "time":
           await handleTime(interaction);
           break;
+        case "deepsea":
+          await handleDeepSea(interaction);
+          break;
         case "chat":
           await handleChat(interaction);
           break;
@@ -196,6 +314,9 @@ async function main() {
           break;
         case "link":
           await handleLink(interaction);
+          break;
+        case "channel":
+          await handleChannel(interaction);
           break;
         default:
           await interaction.reply({ content: "Unknown command", ephemeral: true });

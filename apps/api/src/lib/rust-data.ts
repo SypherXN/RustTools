@@ -1,14 +1,24 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
+import { isHiddenTeamPosition, type ParsedTeamInfo, type TeamRosterMember } from "@rusttools/shared";
+
+export type { TeamRosterMember, ParsedTeamInfo };
 
 export async function getActiveServerId(db: Database): Promise<string | null> {
+  const server = await getActiveServer(db);
+  return server?.id ?? null;
+}
+
+export async function getActiveServer(
+  db: Database,
+): Promise<{ id: string; playerId: string } | null> {
   const [server] = await db
-    .select({ id: rustServers.id })
+    .select({ id: rustServers.id, playerId: rustServers.playerId })
     .from(rustServers)
     .where(eq(rustServers.isActive, true))
     .limit(1);
-  return server?.id ?? null;
+  return server ?? null;
 }
 
 export function parseWipeCountdown(info: unknown): {
@@ -31,32 +41,111 @@ export function parseWipeCountdown(info: unknown): {
   };
 }
 
-export function parseTeamRoster(team: unknown): Array<{
-  name: string;
-  steamId: string;
-  isOnline: boolean;
-  x?: number;
-  y?: number;
-}> {
+export function getWorldSize(info: unknown): number | undefined {
+  const mapSize = (info as { mapSize?: number })?.mapSize;
+  return mapSize && mapSize > 0 ? mapSize : undefined;
+}
+
+export function parseTeamRoster(team: unknown, worldSize?: number): ParsedTeamInfo {
   const data = team as {
+    leaderSteamId?: string | number | { toString(): string };
     members?: Array<{
       name?: string;
-      steamId?: string | number;
+      steamId?: string | number | { toString(): string };
       isOnline?: boolean;
+      isAlive?: boolean;
+      spawnTime?: number;
+      deathTime?: number;
       x?: number;
       y?: number;
     }>;
   };
-  return (data.members ?? []).map((m) => ({
-    name: m.name ?? "Unknown",
-    steamId: String(m.steamId ?? ""),
-    isOnline: Boolean(m.isOnline),
-    x: m.x,
-    y: m.y,
-  }));
+
+  const leaderSteamId = formatId(data.leaderSteamId) || null;
+
+  const members = (data.members ?? []).map((m) => {
+    const steamId = formatId(m.steamId);
+    const isOnline = inferOnline(m, worldSize);
+    const x = m.x;
+    const y = m.y;
+    let locationKnown = x != null && y != null;
+    if (
+      locationKnown &&
+      worldSize != null &&
+      isHiddenTeamPosition(x!, y!, worldSize) &&
+      !isOnline
+    ) {
+      locationKnown = false;
+    }
+
+    return {
+      name: m.name ?? "Unknown",
+      steamId,
+      isOnline,
+      isLeader: Boolean(leaderSteamId && steamId === leaderSteamId),
+      isAlive: m.isAlive ?? true,
+      locationKnown,
+      x,
+      y,
+      spawnTime: normalizeUnixTime(m.spawnTime),
+      deathTime: normalizeUnixTime(m.deathTime),
+    };
+  });
+
+  return { leaderSteamId, members };
+}
+
+function normalizeUnixTime(value: number | undefined): number | null {
+  if (value == null || value <= 0) return null;
+  return value;
+}
+
+function inferOnline(
+  member: {
+    isOnline?: boolean;
+    x?: number;
+    y?: number;
+  },
+  worldSize?: number,
+): boolean {
+  if (member.isOnline != null) return Boolean(member.isOnline);
+  if (member.x == null || member.y == null) return false;
+  if (worldSize != null && isHiddenTeamPosition(member.x, member.y, worldSize)) {
+    return false;
+  }
+  return !(member.x === 2500 && member.y === 2500);
+}
+
+function formatId(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "object" && "toString" in value) {
+    return (value as { toString(): string }).toString();
+  }
+  return String(value);
 }
 
 export function parseInGameTime(time: unknown): { isDay?: boolean; time?: string } {
-  const data = time as { isDay?: boolean; time?: string; dayLengthMinutes?: number };
-  return { isDay: data.isDay, time: data.time };
+  const data = time as {
+    isDay?: boolean;
+    time?: number | string;
+    sunrise?: number;
+    sunset?: number;
+  };
+
+  const hour = typeof data.time === "number" ? data.time : undefined;
+  let isDay = data.isDay;
+  if (isDay == null && hour != null && data.sunrise != null && data.sunset != null) {
+    isDay = hour >= data.sunrise && hour < data.sunset;
+  }
+
+  let label: string | undefined;
+  if (hour != null) {
+    const h = Math.floor(hour);
+    const m = Math.floor((hour - h) * 60);
+    label = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  } else if (typeof data.time === "string") {
+    label = data.time;
+  }
+
+  return { isDay, time: label };
 }

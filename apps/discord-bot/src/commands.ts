@@ -1,4 +1,10 @@
 import { SlashCommandBuilder } from "discord.js";
+import { DISCORD_CHANNEL_PURPOSES, DISCORD_CHANNEL_PURPOSE_LABELS } from "@rusttools/shared";
+
+const channelPurposeChoices = DISCORD_CHANNEL_PURPOSES.map((purpose) => ({
+  name: DISCORD_CHANNEL_PURPOSE_LABELS[purpose],
+  value: purpose,
+}));
 
 export const commands = [
   new SlashCommandBuilder()
@@ -39,6 +45,9 @@ export const commands = [
     .setName("time")
     .setDescription("Show in-game time"),
   new SlashCommandBuilder()
+    .setName("deepsea")
+    .setDescription("Show Deep Sea status and time until open/close"),
+  new SlashCommandBuilder()
     .setName("chat")
     .setDescription("Send a team chat message in-game")
     .addStringOption((opt) =>
@@ -53,4 +62,34 @@ export const commands = [
   new SlashCommandBuilder()
     .setName("link")
     .setDescription("Start Rust+ account linking"),
+  new SlashCommandBuilder()
+    .setName("channel")
+    .setDescription("Link Discord channels to notification purposes")
+    .addSubcommand((sub) =>
+      sub.setName("show").setDescription("Show current channel bindings for this server"),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("set")
+        .setDescription("Link this channel to a notification purpose (admin)")
+        .addStringOption((opt) =>
+          opt
+            .setName("purpose")
+            .setDescription("What this channel is used for")
+            .setRequired(true)
+            .addChoices(...channelPurposeChoices),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("clear")
+        .setDescription("Remove a channel binding (admin; falls back to .env)")
+        .addStringOption((opt) =>
+          opt
+            .setName("purpose")
+            .setDescription("Which binding to remove")
+            .setRequired(true)
+            .addChoices(...channelPurposeChoices),
+        ),
+    ),
 ].map((cmd) => cmd.toJSON());
