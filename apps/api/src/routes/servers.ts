@@ -8,6 +8,7 @@ import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
 import { parseInGameTime, parseTeamRoster, parseWipeCountdown, getWorldSize, getActiveServer } from "../lib/rust-data.js";
+import { buildActiveServerConnectInfo } from "./map-overlays.js";
 import { applyTeamTracking, enrichTeamApiResponse } from "../lib/team-tracker.js";
 import { persistTeamRosterEvents, listTeamConnectionHistory, listTeamDeathHistory } from "../lib/team-event-store.js";
 import { mergeTeamChatHistory } from "../lib/team-chat-buffer.js";
@@ -49,7 +50,8 @@ export async function registerServerRoutes(
 
     try {
       const info = await deps.rustPlus.getServerInfo();
-      return { info, wipe: parseWipeCountdown(info) };
+      const { mapMeta, connectString } = await buildActiveServerConnectInfo(deps.db, info);
+      return { info, wipe: parseWipeCountdown(info), mapMeta, connectString };
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",

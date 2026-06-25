@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
-import { formatMonumentRecyclers, getMonumentInfo, rustItemIconUrl, worldToGridLabel } from "@rusttools/shared";
+import { formatMonumentRecyclers, getCctvForMonument, getMonumentInfo, rustItemIconUrl, worldToGridLabel } from "@rusttools/shared";
+import type { MapPin, MapOverlaysResponse } from "@rusttools/shared";
+import { apiFetch, apiUpload } from "../lib/api";
 import type { MapSelection } from "../lib/map-clusters";
 import type { MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
 
@@ -20,9 +22,14 @@ interface MapDetailPanelProps {
   markers: MapMarkerPoint[];
   monuments: MapMonument[];
   team: MapTeamMember[];
+  pins: MapPin[];
   worldSize: number;
   onClose: () => void;
   onSelect?: (selection: MapSelection) => void;
+  onFollowTeam?: (steamId: string) => void;
+  followingSteamId?: string | null;
+  canEditPins?: boolean;
+  onPinUpdated?: (pin: MapPin) => void;
 }
 
 function formatCoords(x: number, y: number, worldSize: number): string {
@@ -108,6 +115,8 @@ function MonumentDetails({
   if (info.workbench) facts.push({ label: "Workbench", value: info.workbench });
   if (info.scientists) facts.push({ label: "Scientists", value: info.scientists });
 
+  const cctv = getCctvForMonument(monument.token) ?? getCctvForMonument(monument.name);
+
   return (
     <>
       <p className="map-detail-category">{info.category}</p>
@@ -121,6 +130,21 @@ function MonumentDetails({
           </div>
         ))}
       </dl>
+      {cctv && (
+        <>
+          <h4>CCTV codes</h4>
+          {cctv.dynamic && (
+            <p className="muted">Dynamic codes — suffix varies per wipe; check in-game terminal.</p>
+          )}
+          <ul className="map-detail-cctv">
+            {cctv.codes.map((code) => (
+              <li key={code}>
+                <code>{code}</code>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {info.notes.length > 0 && (
         <>
           <h4>Notes</h4>
@@ -161,9 +185,13 @@ function EventDetails({
 function TeamDetails({
   member,
   worldSize,
+  onFollow,
+  following,
 }: {
   member: MapTeamMember;
   worldSize: number;
+  onFollow?: (steamId: string) => void;
+  following?: boolean;
 }) {
   const hasLocation = member.locationKnown !== false && member.x != null && member.y != null;
   return (
@@ -177,7 +205,66 @@ function TeamDetails({
       ) : (
         <p className="muted">Location unknown</p>
       )}
+      {hasLocation && onFollow && (
+        <button type="button" className="btn-secondary" onClick={() => onFollow(member.steamId)}>
+          {following ? "Following" : "Follow on map"}
+        </button>
+      )}
       <p className="muted map-detail-steam">Steam ID: {member.steamId}</p>
+    </>
+  );
+}
+
+function PinDetails({
+  pin,
+  worldSize,
+  canEdit,
+  onUpdated,
+}: {
+  pin: MapPin;
+  worldSize: number;
+  canEdit?: boolean;
+  onUpdated?: (pin: MapPin) => void;
+}) {
+  const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+  return (
+    <>
+      <p className="map-detail-meta">{formatCoords(pin.x, pin.y, worldSize)}</p>
+      {pin.notes && <p>{pin.notes}</p>}
+      {pin.screenshotUrl && (
+        <img
+          className="map-pin-screenshot"
+          src={`${API_BASE}${pin.screenshotUrl}`}
+          alt={`Screenshot for ${pin.label}`}
+          loading="lazy"
+        />
+      )}
+      {canEdit && (
+        <label className="map-pin-upload">
+          {pin.screenshotUrl ? "Replace screenshot" : "Add screenshot"}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const form = new FormData();
+              form.append("file", file);
+              void apiUpload<{ ok: boolean; screenshotUrl: string }>(
+                `/servers/active/map/pins/${pin.id}/screenshot`,
+                form,
+              ).then(() =>
+                apiFetch<MapOverlaysResponse>(`/servers/active/map/overlays`).then((o) => {
+                  const updated = o.pins.find((p) => p.id === pin.id);
+                  if (updated) onUpdated?.(updated);
+                }),
+              );
+              e.target.value = "";
+            }}
+          />
+        </label>
+      )}
+      <p className="muted">Added by {pin.createdBy}</p>
     </>
   );
 }
@@ -218,9 +305,14 @@ export function MapDetailPanel({
   markers,
   monuments,
   team,
+  pins,
   worldSize,
   onClose,
   onSelect,
+  onFollowTeam,
+  followingSteamId,
+  canEditPins,
+  onPinUpdated,
 }: MapDetailPanelProps) {
   if (!selection) {
     return (
@@ -264,7 +356,22 @@ export function MapDetailPanel({
       body = <p className="muted">Teammate not found.</p>;
     } else {
       title = member.name;
-      body = <TeamDetails member={member} worldSize={worldSize} />;
+      body = (
+        <TeamDetails
+          member={member}
+          worldSize={worldSize}
+          onFollow={onFollowTeam}
+          following={followingSteamId === member.steamId}
+        />
+      );
+    }
+  } else if (selection.kind === "pin") {
+    const pin = pins.find((p) => p.id === selection.pinId);
+    if (!pin) {
+      body = <p className="muted">Pin not found.</p>;
+    } else {
+      title = pin.label;
+      body = <PinDetails pin={pin} worldSize={worldSize} canEdit={canEditPins} onUpdated={onPinUpdated} />;
     }
   } else if (selection.kind === "cluster") {
     title = `${selection.items.length} markers`;

@@ -1,12 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { MapCoordinateTransform, WorldEventsStatus } from "@rusttools/shared";
+import type {
+  MapCoordinateTransform,
+  MapDrawingStroke,
+  MapOverlaysResponse,
+  MapPin,
+  VendingSearchResult,
+  WorldEventsStatus,
+} from "@rusttools/shared";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
 import { MapOverlay, type MapLayers, type MapMarkerPoint, type MapMonument, type MapTeamMember } from "../components/MapOverlay";
 import { MapViewport, type MapFocusTarget } from "../components/MapViewport";
+import { MapDrawingLayer } from "../components/MapDrawingLayer";
+import { MapEventDock, type MapTrackableEvent } from "../components/MapEventDock";
 import { useMapImageSrc } from "../hooks/useMapImageSrc";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useCan } from "../hooks/usePermissions";
 import { apiFetch } from "../lib/api";
 import { demoMapMarkers, demoMapSize, demoMonuments, demoTeam, demoMapTransform, isDemoMode } from "../lib/demo";
 
@@ -17,8 +27,6 @@ interface MapData {
   monuments: MapMonument[];
   markers: MapMarkerPoint[];
 }
-
-import type { VendingSearchResult } from "@rusttools/shared";
 
 function resolveVendingMarker(
   markers: MapMarkerPoint[],
@@ -52,6 +60,7 @@ const DEFAULT_LAYERS: MapLayers = {
 };
 
 export function MapPage() {
+  const canSwitch = useCan("switch");
   const [searchParams] = useSearchParams();
   const memberParam = searchParams.get("member");
   const [mapImage, setMapImage] = useState<MapData["map"] | null>(null);
@@ -62,6 +71,7 @@ export function MapPage() {
     isDemoMode() ? demoMapTransform : null,
   );
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
+  const [showTeamOverlays, setShowTeamOverlays] = useState(true);
   const [vendingQ, setVendingQ] = useState("");
   const [vendingCurrency, setVendingCurrency] = useState("");
   const [vendingMinPrice, setVendingMinPrice] = useState("");
@@ -75,6 +85,10 @@ export function MapPage() {
   const mapLayoutRef = useRef<HTMLDivElement>(null);
   const lastMemberFocusRef = useRef<string | null>(null);
   const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
+  const [drawings, setDrawings] = useState<MapDrawingStroke[]>([]);
+  const [pins, setPins] = useState<MapPin[]>([]);
+  const [followSteamId, setFollowSteamId] = useState<string | null>(null);
+  const [trackEventId, setTrackEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -102,13 +116,21 @@ export function MapPage() {
 
   useEffect(() => {
     setLoading(true);
-    apiFetch<MapData>("/servers/active/map")
-      .then((data) => {
+    Promise.all([
+      apiFetch<MapData>("/servers/active/map"),
+      apiFetch<MapOverlaysResponse>("/servers/active/map/overlays").catch(() => ({
+        drawings: [],
+        pins: [],
+      })),
+    ])
+      .then(([data, overlays]) => {
         setMapImage(data.map);
         setTransform(data.transform);
         setTeam(data.team);
         setMonuments(data.monuments);
         setMarkers(data.markers);
+        setDrawings(overlays.drawings);
+        setPins(overlays.pins);
         setLastUpdated(new Date());
       })
       .catch((err: Error) => setError(err.message))
@@ -206,6 +228,40 @@ export function MapPage() {
   const worldSize = mapTransform.worldSize;
   const mapReady = Boolean(mapImage?.imageBase64 || showDemoMap);
 
+  const followMember = followSteamId
+    ? teamOnMap.find((m) => m.steamId === followSteamId)
+    : undefined;
+
+  const trackTarget = useMemo(() => {
+    if (trackEventId && worldEvents) {
+      const snap =
+        trackEventId === "cargo"
+          ? worldEvents.cargo
+          : trackEventId === "heli"
+            ? worldEvents.heli
+            : trackEventId === "chinook"
+              ? worldEvents.chinook
+              : trackEventId === "vendor"
+                ? worldEvents.vendor
+                : null;
+      if (snap?.x != null && snap?.y != null) {
+        return { worldX: snap.x, worldY: snap.y };
+      }
+    }
+    if (followMember?.x != null && followMember?.y != null) {
+      return { worldX: followMember.x, worldY: followMember.y };
+    }
+    return null;
+  }, [trackEventId, worldEvents, followMember]);
+
+  const handleTrackEvent = (ev: MapTrackableEvent) => {
+    if (ev.x == null || ev.y == null) return;
+    setTrackEventId(ev.id);
+    setFollowSteamId(null);
+    setFocusTarget({ worldX: ev.x, worldY: ev.y, nonce: Date.now() });
+    mapLayoutRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
   useEffect(() => {
     if (!memberParam) {
       lastMemberFocusRef.current = null;
@@ -239,6 +295,11 @@ export function MapPage() {
             demo={Boolean(showDemoMap)}
             transform={mapTransform}
             focusTarget={focusTarget}
+            trackTarget={trackTarget}
+            onUserPan={() => {
+              setFollowSteamId(null);
+              setTrackEventId(null);
+            }}
           >
             {layers.grid && (
               <MapGridOverlay width={mapW} height={mapH} transform={mapTransform} />
@@ -256,6 +317,20 @@ export function MapPage() {
               selection={selection}
               onSelect={setSelection}
             />
+            {showTeamOverlays && (
+              <MapDrawingLayer
+                width={mapW}
+                height={mapH}
+                transform={mapTransform}
+                drawings={drawings}
+                pins={pins}
+                enabled={showTeamOverlays}
+                canEdit={canSwitch}
+                onDrawingsChange={setDrawings}
+                onPinsChange={setPins}
+                onSelectPin={(pin) => setSelection({ kind: "pin", pinId: pin.id })}
+              />
+            )}
           </MapViewport>
         </div>
         <MapDetailPanel
@@ -263,9 +338,18 @@ export function MapPage() {
           markers={markerList}
           monuments={monumentList}
           team={teamOnMap}
+          pins={pins}
           worldSize={worldSize}
           onClose={() => setSelection(null)}
           onSelect={setSelection}
+          onFollowTeam={(steamId) => {
+            setFollowSteamId(steamId);
+            setTrackEventId(null);
+            setSelection({ kind: "team", steamId });
+          }}
+          followingSteamId={followSteamId}
+          canEditPins={canSwitch}
+          onPinUpdated={(pin) => setPins((prev) => prev.map((p) => (p.id === pin.id ? pin : p)))}
         />
       </div>
     ) : loading ? (
@@ -287,6 +371,8 @@ export function MapPage() {
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {mapContent}
 
       <section className="card map-controls" style={{ marginBottom: "1rem" }}>
         <h2>Layers</h2>
@@ -315,6 +401,14 @@ export function MapPage() {
             <input type="checkbox" checked={layers.grid} onChange={() => toggleLayer("grid")} />
             Grid
           </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showTeamOverlays}
+              onChange={() => setShowTeamOverlays((v) => !v)}
+            />
+            Team overlays ({drawings.length} drawings, {pins.length} pins)
+          </label>
           <button type="button" className="btn-secondary" onClick={() => void refreshLive()}>
             Refresh now
           </button>
@@ -329,6 +423,12 @@ export function MapPage() {
           <li><span className="legend-swatch grid" /> Grid (150m cells)</li>
         </ul>
       </section>
+
+      <MapEventDock
+        worldEvents={worldEvents}
+        onTrack={handleTrackEvent}
+        trackingId={trackEventId}
+      />
 
       <section className="card" style={{ marginBottom: "1rem" }}>
         <h2>Vending Search</h2>
@@ -428,8 +528,6 @@ export function MapPage() {
           </ul>
         )}
       </section>
-
-      {mapContent}
     </div>
   );
 }

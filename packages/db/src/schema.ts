@@ -35,6 +35,34 @@ export const rustServers = sqliteTable("rust_servers", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+export const mapDrawings = sqliteTable("map_drawings", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  tool: text("tool").notNull(),
+  color: text("color").notNull(),
+  width: integer("width").notNull(),
+  pointsJson: text("points_json").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const mapPins = sqliteTable("map_pins", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  x: integer("x", { mode: "number" }).notNull(),
+  y: integer("y", { mode: "number" }).notNull(),
+  notes: text("notes").notNull().default(""),
+  screenshotPath: text("screenshot_path"),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 export const rustEntities = sqliteTable("rust_entities", {
   id: text("id").primaryKey(),
   serverId: text("server_id")

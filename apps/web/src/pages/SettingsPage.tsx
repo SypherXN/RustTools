@@ -16,6 +16,19 @@ export function SettingsPage() {
   const [notificationsSaving, setNotificationsSaving] = useState(false);
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   const [notificationsSaved, setNotificationsSaved] = useState(false);
+  const [serverInfo, setServerInfo] = useState<{
+    mapMeta?: { seed: number | null; salt: number | null; mapName: string | null; mapSize: number | null };
+    connectString?: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    void apiFetch<{
+      mapMeta?: { seed: number | null; salt: number | null; mapName: string | null; mapSize: number | null };
+      connectString?: string | null;
+    }>("/servers/active/info")
+      .then((d) => setServerInfo(d))
+      .catch(() => setServerInfo(null));
+  }, []);
 
   useEffect(() => {
     setNotificationsLoading(true);
@@ -134,6 +147,46 @@ export function SettingsPage() {
       </header>
 
       <ServerSwitcher />
+
+      <section className="card">
+        <h2>Server & Map</h2>
+        {serverInfo?.mapMeta ? (
+          <dl className="stat-list">
+            <div>
+              <dt>Map name</dt>
+              <dd>{serverInfo.mapMeta.mapName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Seed</dt>
+              <dd>{serverInfo.mapMeta.seed ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Salt</dt>
+              <dd>{serverInfo.mapMeta.salt ?? "—"}</dd>
+            </div>
+            {serverInfo.mapMeta.mapSize != null && (
+              <div>
+                <dt>World size</dt>
+                <dd>{serverInfo.mapMeta.mapSize}m</dd>
+              </div>
+            )}
+          </dl>
+        ) : (
+          <p className="muted">Connect Rust+ to see map seed and salt.</p>
+        )}
+        {serverInfo?.connectString && (
+          <p style={{ marginTop: "0.75rem" }}>
+            F1 connect: <code>{serverInfo.connectString}</code>{" "}
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void navigator.clipboard.writeText(serverInfo.connectString!)}
+            >
+              Copy
+            </button>
+          </p>
+        )}
+      </section>
 
       <section className="card">
         <h2>Permissions</h2>

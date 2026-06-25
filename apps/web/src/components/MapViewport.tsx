@@ -9,6 +9,11 @@ export interface MapFocusTarget {
   nonce: number;
 }
 
+export interface MapTrackTarget {
+  worldX: number;
+  worldY: number;
+}
+
 interface MapViewportProps {
   width: number;
   height: number;
@@ -16,6 +21,9 @@ interface MapViewportProps {
   demo?: boolean;
   transform: MapCoordinateTransform;
   focusTarget?: MapFocusTarget | null;
+  /** Continuous camera lock — recenters when coordinates change. */
+  trackTarget?: MapTrackTarget | null;
+  onUserPan?: () => void;
   children: ReactNode;
 }
 
@@ -75,6 +83,8 @@ export function MapViewport({
   demo,
   transform,
   focusTarget,
+  trackTarget,
+  onUserPan,
   children,
 }: MapViewportProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -271,11 +281,33 @@ export function MapViewport({
     setView(next);
   }, [focusTarget, readViewport, transform, width, height]);
 
+  useEffect(() => {
+    if (!trackTarget || focusTarget) return;
+    const dims = readViewport();
+    if (!dims) return;
+
+    const { x: px, y: py } = worldToMapPixel(trackTarget.worldX, trackTarget.worldY, transform);
+    const prev = viewRef.current;
+    const scale = totalScale(prev);
+    const pan = constrainPan(
+      { x: dims.vw / 2 - px * scale, y: dims.vh / 2 - py * scale },
+      scale,
+      width,
+      height,
+      dims.vw,
+      dims.vh,
+    );
+    const next: ViewState = { ...prev, pan };
+    viewRef.current = next;
+    setView(next);
+  }, [trackTarget, focusTarget, readViewport, transform, width, height]);
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest(".map-marker-hit, .map-marker")) return;
 
+    onUserPan?.();
     e.currentTarget.setPointerCapture(e.pointerId);
     setDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY, pan: { ...viewRef.current.pan } };

@@ -3,6 +3,7 @@ dist/
 build/
 .env
 .env.local
+.local/
 *.log
 .DS_Store
 /data/

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
+import multipart from "@fastify/multipart";
 import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
@@ -9,12 +10,18 @@ import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
 import { searchVending } from "../lib/vending.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { registerServerRoutes as registerServerCoreRoutes } from "./servers.js";
+import { registerMapOverlayRoutes } from "./map-overlays.js";
 
 export async function registerServerRoutes(
   app: FastifyInstance,
   deps: { db: Database; rustPlus: RustPlusManager },
 ): Promise<void> {
+  await app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
+
   await registerServerCoreRoutes(app, deps);
+  await registerMapOverlayRoutes(app, deps);
 
   app.get("/servers/active/map", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");

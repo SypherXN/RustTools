@@ -13,6 +13,13 @@ interface HealthResponse {
 interface ServerInfoResponse {
   info: { name?: string; players?: number; queuedPlayers?: number; maxPlayers?: number };
   wipe: { label: string; secondsRemaining: number | null };
+  mapMeta?: {
+    seed: number | null;
+    salt: number | null;
+    mapName: string | null;
+    mapSize: number | null;
+  };
+  connectString?: string | null;
 }
 
 export function DashboardPage() {
@@ -118,6 +125,41 @@ export function DashboardPage() {
                 <dt>Wipe in</dt>
                 <dd>{server?.wipe.label ?? "—"}</dd>
               </div>
+              {server?.mapMeta && (
+                <>
+                  <div>
+                    <dt>Map</dt>
+                    <dd>{server.mapMeta.mapName ?? "—"}</dd>
+                  </div>
+                  <div>
+                    <dt>Seed / Salt</dt>
+                    <dd>
+                      {server.mapMeta.seed ?? "—"} / {server.mapMeta.salt ?? "—"}
+                    </dd>
+                  </div>
+                  {server.mapMeta.mapSize != null && (
+                    <div>
+                      <dt>World size</dt>
+                      <dd>{server.mapMeta.mapSize}m</dd>
+                    </div>
+                  )}
+                </>
+              )}
+              {server?.connectString && (
+                <div>
+                  <dt>F1 connect</dt>
+                  <dd>
+                    <code className="connect-string">{server.connectString}</code>{" "}
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => void navigator.clipboard.writeText(server.connectString!)}
+                    >
+                      Copy
+                    </button>
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Time</dt>
                 <dd>

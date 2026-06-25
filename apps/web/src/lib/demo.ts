@@ -555,6 +555,13 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return {
       info: { name: "US West — Demo Server", players: 87, maxPlayers: 200, queuedPlayers: 3 },
       wipe: { label: "4d 12h", secondsRemaining: 388_800 },
+      mapMeta: {
+        seed: 123456789,
+        salt: 987654321,
+        mapName: "Procedural Map",
+        mapSize: 4500,
+      },
+      connectString: "client.connect demo.rusttools.local:28015",
     } as T;
   }
 
@@ -664,6 +671,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/map/live") {
     return { team: demoTeam, markers: demoMapMarkers, worldEvents: demoWorldEventsStatus } as T;
+  }
+
+  if (path === "/servers/active/map/overlays") {
+    return { drawings: [], pins: [] } as T;
   }
 
   if (path.startsWith("/vending/search")) {
