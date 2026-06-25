@@ -30,6 +30,7 @@ export const rustServers = sqliteTable("rust_servers", {
   playerTokenEncrypted: text("player_token_encrypted").notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
   notificationSettingsJson: text("notification_settings_json"),
+  worldEventStateJson: text("world_event_state_json"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

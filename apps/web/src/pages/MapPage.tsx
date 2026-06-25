@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import type { MapCoordinateTransform } from "@rusttools/shared";
+import type { MapCoordinateTransform, WorldEventsStatus } from "@rusttools/shared";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
 import { MapOverlay, type MapLayers, type MapMarkerPoint, type MapMonument, type MapTeamMember } from "../components/MapOverlay";
@@ -74,6 +74,7 @@ export function MapPage() {
   const [activeVendingKey, setActiveVendingKey] = useState<string | null>(null);
   const mapLayoutRef = useRef<HTMLDivElement>(null);
   const lastMemberFocusRef = useRef<string | null>(null);
+  const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -86,11 +87,14 @@ export function MapPage() {
       return;
     }
 
-    const live = await apiFetch<{ team: MapTeamMember[]; markers: MapMarkerPoint[] }>(
-      "/servers/active/map/live",
-    );
+    const live = await apiFetch<{
+      team: MapTeamMember[];
+      markers: MapMarkerPoint[];
+      worldEvents: WorldEventsStatus | null;
+    }>("/servers/active/map/live");
     setTeam(live.team);
     setMarkers(live.markers);
+    setWorldEvents(live.worldEvents);
     setLastUpdated(new Date());
   }, []);
 
@@ -122,10 +126,16 @@ export function MapPage() {
   }, [loading, refreshLive]);
 
   useWebSocket((event, payload) => {
-    if (event !== "teamChanged") return;
-    const p = payload as { team?: { members?: MapTeamMember[] } } | null;
-    if (p?.team?.members) {
-      setTeam(p.team.members);
+    if (event === "teamChanged") {
+      const p = payload as { team?: { members?: MapTeamMember[] } } | null;
+      if (p?.team?.members) {
+        setTeam(p.team.members);
+        setLastUpdated(new Date());
+      }
+      return;
+    }
+    if (event === "worldEventsChanged") {
+      setWorldEvents(payload as WorldEventsStatus);
       setLastUpdated(new Date());
     }
   });
@@ -181,6 +191,12 @@ export function MapPage() {
   const markerList = markers.length > 0 ? markers : isDemoMode() ? demoMapMarkers : [];
   const showDemoMap = isDemoMode() && mapImage && !mapImage.imageBase64;
   const vendingHighlights = vending.map((v) => ({ x: v.x, y: v.y }));
+  const eventTrails = worldEvents
+    ? {
+        cargo: worldEvents.cargo.trail,
+        heli: worldEvents.heli.trail,
+      }
+    : undefined;
 
   const eventCount = markerList.filter((m) => [2, 4, 5, 6, 7, 8].includes(m.type)).length;
   const vendingCount = markerList.filter((m) => m.type === 3).length;
@@ -236,6 +252,7 @@ export function MapPage() {
               monuments={monumentList}
               layers={layers}
               highlighted={vendingHighlights}
+              eventTrails={eventTrails}
               selection={selection}
               onSelect={setSelection}
             />

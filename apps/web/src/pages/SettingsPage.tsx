@@ -31,6 +31,7 @@ export function SettingsPage() {
     smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
     deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
     teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
+    eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
   }) => {
     if (!notifications) return;
     setNotificationsSaving(true);
@@ -90,6 +91,22 @@ export function SettingsPage() {
     };
     setNotifications(next);
     void saveNotifications({ teamChatBot: { [key]: value } });
+  };
+
+  const updateEventTimers = (
+    key: keyof NotificationSettingsResponse["settings"]["eventTimers"],
+    value: number | number[],
+  ) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        eventTimers: { ...notifications.settings.eventTimers, [key]: value },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ eventTimers: { [key]: value } });
   };
 
   const linkRust = async () => {
@@ -305,6 +322,84 @@ export function SettingsPage() {
       </section>
 
       <section className="card">
+        <h2>Event Timers</h2>
+        <p className="muted">
+          Adjust countdowns for cargo egress, oil rig locked crate unlock, and team chat reminders before
+          unlock.
+        </p>
+        {notifications && (
+          <div className="form-stack">
+            <label>
+              Cargo egress (seconds)
+              <input
+                type="number"
+                min={60}
+                max={7200}
+                step={60}
+                value={notifications.settings.eventTimers.cargoEgressSeconds}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateEventTimers(
+                    "cargoEgressSeconds",
+                    Math.max(60, Number(e.target.value) || 2700),
+                  )
+                }
+              />
+            </label>
+            <label>
+              Oil crate unlock (seconds)
+              <input
+                type="number"
+                min={60}
+                max={3600}
+                step={60}
+                value={notifications.settings.eventTimers.oilCrateUnlockSeconds}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateEventTimers(
+                    "oilCrateUnlockSeconds",
+                    Math.max(60, Number(e.target.value) || 900),
+                  )
+                }
+              />
+            </label>
+            <label>
+              Oil rig proximity (world units)
+              <input
+                type="number"
+                min={50}
+                max={1000}
+                step={10}
+                value={notifications.settings.eventTimers.oilRigProximityUnits}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateEventTimers(
+                    "oilRigProximityUnits",
+                    Math.max(50, Number(e.target.value) || 250),
+                  )
+                }
+              />
+            </label>
+            <label>
+              Oil unlock reminders (minutes, comma-separated)
+              <input
+                type="text"
+                value={notifications.settings.eventTimers.oilCrateReminderMinutes.join(", ")}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => {
+                  const values = e.target.value
+                    .split(",")
+                    .map((part) => Number(part.trim()))
+                    .filter((n) => Number.isFinite(n) && n > 0);
+                  updateEventTimers("oilCrateReminderMinutes", values.length ? values : [10, 5, 1]);
+                }}
+              />
+            </label>
+          </div>
+        )}
+      </section>
+
+      <section className="card">
         <h2>Map Event Automations</h2>
         <p className="muted">
           Configure on the server via <code>.env</code>:{" "}
@@ -325,7 +420,8 @@ export function SettingsPage() {
             <code>DISCORD_NOTIFICATION_CHANNEL_ID</code>
           </li>
           <li>
-            <code>AUTOMATION_EVENT_TYPES</code> — optional filter, e.g. <code>cargo,heli</code>
+            <code>AUTOMATION_EVENT_TYPES</code> — optional filter, e.g.{" "}
+            <code>cargo,heli,chinook,vendor,oil</code>
           </li>
           <li>
             <code>AUTOMATION_EVENT_TEAM_CHAT_PREFIX</code> — in-game message prefix (default{" "}

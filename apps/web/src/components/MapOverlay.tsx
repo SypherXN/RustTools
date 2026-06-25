@@ -157,8 +157,23 @@ interface MapOverlayProps {
   monuments: MapMonument[];
   layers: MapLayers;
   highlighted?: Array<{ x: number; y: number }>;
+  eventTrails?: {
+    cargo: Array<{ x: number; y: number }>;
+    heli: Array<{ x: number; y: number }>;
+  };
   selection?: MapSelection | null;
   onSelect?: (selection: MapSelection) => void;
+}
+
+function renderTrail(
+  points: Array<{ x: number; y: number }>,
+  transform: MapCoordinateTransform,
+  className: string,
+) {
+  if (points.length < 2) return null;
+  const pixelPoints = points.map((point) => toPixel(point.x, point.y, transform));
+  const d = pixelPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  return <path d={d} className={className} fill="none" pointerEvents="none" />;
 }
 
 export function MapOverlay({
@@ -170,6 +185,7 @@ export function MapOverlay({
   monuments,
   layers,
   highlighted = [],
+  eventTrails,
   selection = null,
   onSelect,
 }: MapOverlayProps) {
@@ -198,6 +214,13 @@ export function MapOverlay({
       height={height}
       preserveAspectRatio="none"
     >
+      {layers.events && eventTrails?.cargo?.length
+        ? renderTrail(eventTrails.cargo, transform, "map-event-trail map-event-trail-cargo")
+        : null}
+      {layers.events && eventTrails?.heli?.length
+        ? renderTrail(eventTrails.heli, transform, "map-event-trail map-event-trail-heli")
+        : null}
+
       {layers.monuments &&
         monuments.map((m) => {
           const { x, y } = toPixel(m.x, m.y, transform);

@@ -3,6 +3,8 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   formatDeepSeaTeamChatMessage,
   formatRosterCommandResponse,
+  formatEventChatCommandResponse,
+  parseEventTeamChatCommand,
   parseDeepSeaTeamChatCommand,
   parseLeaderTeamChatCommand,
   parseMuteTeamChatCommand,
@@ -22,6 +24,7 @@ import {
 import { hasSteamAdminCapability } from "./steam-admin.js";
 import { processTeamRoster } from "./team-tracker.js";
 import { buildUpkeepDetailTeamChatReplies } from "./tc-upkeep-report.js";
+import { fetchWorldEventsStatus } from "./world-events-status.js";
 
 export interface TeamChatCommandContext {
   serverId: string;
@@ -124,6 +127,16 @@ export async function executeTeamChatCommand(
   if (parseUpkeepDetailTeamChatCommand(message)) {
     const replies = await buildUpkeepDetailTeamChatReplies(db, rustPlus, ctx.serverId);
     return { replies };
+  }
+
+  const eventCommand = parseEventTeamChatCommand(message);
+  if (eventCommand) {
+    const status = await fetchWorldEventsStatus(db, rustPlus, ctx.serverId);
+    const response = formatEventChatCommandResponse(eventCommand, status);
+    if (eventCommand === "events") {
+      return { replies: response.split("\n") };
+    }
+    return { reply: response };
   }
 
   const rosterCommand = parseRosterTeamChatCommand(message);

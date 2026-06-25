@@ -60,6 +60,7 @@ let demoNotificationSettings: NotificationSettingsResponse = {
     smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
     deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
     teamChatBot: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.teamChatBot },
+    eventTimers: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.eventTimers },
   },
   capabilities: {
     discordConfigured: true,
@@ -78,6 +79,81 @@ const demoDeepSeaStatus = {
   secondsRemaining: 3600,
   label: "Closed — opens in ~1h 0m",
   source: "estimated" as const,
+};
+
+const demoWorldEventsStatus = {
+  updatedAt: Math.floor(Date.now() / 1000),
+  cargo: {
+    active: true,
+    x: 1200,
+    y: 900,
+    grid: "H12",
+    sinceSec: Math.floor(Date.now() / 1000) - 600,
+    egressInSec: 2100,
+    trail: [
+      { x: 1100, y: 850, t: Math.floor(Date.now() / 1000) - 300 },
+      { x: 1150, y: 875, t: Math.floor(Date.now() / 1000) - 150 },
+      { x: 1200, y: 900, t: Math.floor(Date.now() / 1000) },
+    ],
+  },
+  heli: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: Math.floor(Date.now() / 1000) - 3600,
+    egressInSec: null,
+    trail: [],
+  },
+  chinook: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: Math.floor(Date.now() / 1000) - 7200,
+    egressInSec: null,
+    trail: [],
+  },
+  vendor: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: null,
+    egressInSec: null,
+    trail: [],
+  },
+  oilRigs: {
+    small: {
+      triggered: false,
+      triggeredAt: null,
+      crateUnlockAt: null,
+      crateUnlockInSec: null,
+      crateUnlockLabel: null,
+      lastTriggeredAt: null,
+    },
+    large: {
+      triggered: true,
+      triggeredAt: Math.floor(Date.now() / 1000) - 300,
+      crateUnlockAt: Math.floor(Date.now() / 1000) + 600,
+      crateUnlockInSec: 600,
+      crateUnlockLabel: "10m",
+      lastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
+    },
+  },
+  stats: {
+    cargoLastSpawnAt: Math.floor(Date.now() / 1000) - 600,
+    cargoLastDespawnAt: null,
+    heliLastSpawnAt: Math.floor(Date.now() / 1000) - 7200,
+    heliLastDespawnAt: Math.floor(Date.now() / 1000) - 3600,
+    heliLastDownAt: Math.floor(Date.now() / 1000) - 3600,
+    chinookLastSpawnAt: Math.floor(Date.now() / 1000) - 7200,
+    chinookLastDespawnAt: Math.floor(Date.now() / 1000) - 7000,
+    vendorLastSpawnAt: null,
+    vendorLastDespawnAt: null,
+    oilSmallLastTriggeredAt: null,
+    oilLargeLastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
+  },
 };
 
 export const demoDevices = [
@@ -490,12 +566,17 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { status: demoDeepSeaStatus } as T;
   }
 
+  if (path === "/servers/active/world-events") {
+    return { status: demoWorldEventsStatus } as T;
+  }
+
   if (path === "/servers/active/notifications") {
     if (method === "PATCH") {
       const patch = body as {
         smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
         deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
         teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
+        eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
       };
       demoNotificationSettings = {
         ...demoNotificationSettings,
@@ -511,6 +592,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
           teamChatBot: {
             ...demoNotificationSettings.settings.teamChatBot,
             ...patch.teamChatBot,
+          },
+          eventTimers: {
+            ...demoNotificationSettings.settings.eventTimers,
+            ...patch.eventTimers,
           },
         },
       };
@@ -578,7 +663,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path === "/servers/active/map/live") {
-    return { team: demoTeam, markers: demoMapMarkers } as T;
+    return { team: demoTeam, markers: demoMapMarkers, worldEvents: demoWorldEventsStatus } as T;
   }
 
   if (path.startsWith("/vending/search")) {

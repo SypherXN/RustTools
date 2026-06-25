@@ -18,4 +18,7 @@ export * from "./notification-settings.js";
 export * from "./discord-channels.js";
 export * from "./deep-sea.js";
 export * from "./upkeep-detail.js";
+export * from "./map-marker-types.js";
+export * from "./world-events.js";
+export * from "./event-chat-commands.js";
 export * from "./vending.js";

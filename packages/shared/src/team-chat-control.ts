@@ -50,6 +50,16 @@ export function isTeamChatBotCommand(message: string): boolean {
     /^!offline\b/i.test(text) ||
     /^!afk\b/i.test(text) ||
     /^!alive\b/i.test(text) ||
-    /^!upkeepdetail\b/i.test(text)
+    /^!upkeepdetail\b/i.test(text) ||
+    /^!cargo\b/i.test(text) ||
+    /^!heli\b/i.test(text) ||
+    /^!helicopter\b/i.test(text) ||
+    /^!patrol\b/i.test(text) ||
+    /^!chinook\b/i.test(text) ||
+    /^!ch47\b/i.test(text) ||
+    /^!large\b/i.test(text) ||
+    /^!small\b/i.test(text) ||
+    /^!vendor\b/i.test(text) ||
+    /^!events\b/i.test(text)
   );
 }

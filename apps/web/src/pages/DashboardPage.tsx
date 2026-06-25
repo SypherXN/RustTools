@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import type { DeepSeaStatus, TeamApiResponse } from "@rusttools/shared";
+import type { DeepSeaStatus, TeamApiResponse, WorldEventsStatus } from "@rusttools/shared";
+import { formatDurationSince } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 interface HealthResponse {
   status: string;
@@ -19,6 +21,7 @@ export function DashboardPage() {
   const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
   const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
   const [deepSea, setDeepSea] = useState<DeepSeaStatus | null>(null);
+  const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,7 +49,17 @@ export function DashboardPage() {
     apiFetch<{ status: DeepSeaStatus }>("/servers/active/deepsea")
       .then((d) => setDeepSea(d.status))
       .catch(() => setDeepSea(null));
+    apiFetch<{ status: WorldEventsStatus }>("/servers/active/world-events")
+      .then((d) => setWorldEvents(d.status))
+      .catch(() => setWorldEvents(null));
   }, []);
+
+  useWebSocket((event, payload) => {
+    if (event === "deepSeaChanged") setDeepSea(payload as DeepSeaStatus);
+    if (event === "worldEventsChanged") setWorldEvents(payload as WorldEventsStatus);
+  });
+
+  const nowSec = Math.floor(Date.now() / 1000);
 
   const info = server?.info;
 
@@ -142,6 +155,74 @@ export function DashboardPage() {
           )}
           <p className="muted" style={{ marginTop: "0.75rem" }}>
             In-game: <code>!deepsea</code> or <code>!ds</code> · Discord: <code>/deepsea</code>
+          </p>
+        </section>
+
+        <section className="card">
+          <h2>World Events</h2>
+          {worldEvents ? (
+            <dl className="stat-list">
+              <div>
+                <dt>Cargo</dt>
+                <dd>
+                  {worldEvents.cargo.active
+                    ? `Active @ ${worldEvents.cargo.grid ?? "?"}`
+                    : `Off map (last ${formatDurationSince(worldEvents.cargo.sinceSec, nowSec)})`}
+                </dd>
+              </div>
+              <div>
+                <dt>Patrol Heli</dt>
+                <dd>
+                  {worldEvents.heli.active
+                    ? `Active @ ${worldEvents.heli.grid ?? "?"}`
+                    : worldEvents.stats.heliLastDownAt
+                      ? `Down ${formatDurationSince(worldEvents.stats.heliLastDownAt, nowSec)}`
+                      : `Off map (last ${formatDurationSince(worldEvents.heli.sinceSec, nowSec)})`}
+                </dd>
+              </div>
+              <div>
+                <dt>Chinook</dt>
+                <dd>
+                  {worldEvents.chinook.active
+                    ? `Active @ ${worldEvents.chinook.grid ?? "?"}`
+                    : `Off map (last ${formatDurationSince(worldEvents.chinook.sinceSec, nowSec)})`}
+                </dd>
+              </div>
+              <div>
+                <dt>Traveling Vendor</dt>
+                <dd>
+                  {worldEvents.vendor.active
+                    ? `Active @ ${worldEvents.vendor.grid ?? "?"}`
+                    : `Off map (last ${formatDurationSince(worldEvents.vendor.sinceSec, nowSec)})`}
+                </dd>
+              </div>
+              <div>
+                <dt>Small Oil Rig</dt>
+                <dd>
+                  {worldEvents.oilRigs.small.triggered
+                    ? `Crate unlocks in ${worldEvents.oilRigs.small.crateUnlockLabel ?? "?"}`
+                    : worldEvents.oilRigs.small.lastTriggeredAt
+                      ? `Idle (last ${formatDurationSince(worldEvents.oilRigs.small.lastTriggeredAt, nowSec)})`
+                      : "Idle"}
+                </dd>
+              </div>
+              <div>
+                <dt>Large Oil Rig</dt>
+                <dd>
+                  {worldEvents.oilRigs.large.triggered
+                    ? `Crate unlocks in ${worldEvents.oilRigs.large.crateUnlockLabel ?? "?"}`
+                    : worldEvents.oilRigs.large.lastTriggeredAt
+                      ? `Idle (last ${formatDurationSince(worldEvents.oilRigs.large.lastTriggeredAt, nowSec)})`
+                      : "Idle"}
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="muted">World event stats unavailable — connect Rust+ and enable map polling.</p>
+          )}
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            In-game: <code>!cargo</code>, <code>!heli</code>, <code>!chinook</code>, <code>!vendor</code>,{" "}
+            <code>!large</code>, <code>!small</code>, <code>!events</code>
           </p>
         </section>
       </div>

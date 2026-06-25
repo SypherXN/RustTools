@@ -14,14 +14,17 @@ import {
   parseUnmuteTeamChatCommand,
 } from "@rusttools/shared";
 import {
-  configuredMapEventTypes,
-  eventDiscordDescription,
+  configuredWorldEventEntities,
   eventDiscordEnabled,
   eventTeamChatEnabled,
-  formatEventTeamChatMessage,
   mapEventAlertsEnabled,
-  MapEventAnnouncer,
+  worldEventAnnouncementEnabled,
 } from "../lib/map-events.js";
+import {
+  formatAnnouncementsForChat,
+  worldEventTracker,
+} from "../lib/world-event-tracker.js";
+import { parseMonuments } from "../lib/map-markers.js";
 import {
   getServerNotificationSettings,
   resolveDiscordAlarmChannelId,
@@ -32,6 +35,7 @@ import {
   formatDeepSeaDiscordDescription,
   formatDeepSeaTeamChatMessage,
   formatSmartAlarmTeamChatMessage,
+  formatWorldEventAnnouncement,
 } from "@rusttools/shared";
 
 export function startPhase2Listeners(
@@ -39,7 +43,6 @@ export function startPhase2Listeners(
   rustPlus: RustPlusManager,
   notifications: NotificationService,
 ): void {
-  const mapEventAnnouncer = new MapEventAnnouncer();
   const lastStorageJson = new Map<string, string>();
 
   rustPlus.eventBus.on("entityChanged", async (event) => {
@@ -174,36 +177,60 @@ export function startPhase2Listeners(
           }
         }
 
-        if (!mapEventAlertsEnabled()) return;
+        const notificationSettings = await getServerNotificationSettings(db, activeServer.id);
+        const { status: worldEvents, announcements } = await worldEventTracker.process(
+          db,
+          activeServer.id,
+          {
+            markersRaw: event.markers,
+            monuments: parseMonuments(map).map((monument) => ({
+              token: monument.token,
+              x: monument.x,
+              y: monument.y,
+            })),
+            worldSize,
+            timers: notificationSettings.eventTimers,
+          },
+        );
 
-        const enabledTypes = configuredMapEventTypes();
-        const discordChannel = await resolveDefaultGuildChannelId(db, "events");
-        const sendDiscord = eventDiscordEnabled() && Boolean(discordChannel);
-        const sendTeamChat = eventTeamChatEnabled();
+        notifications.webSocket({ event: "worldEventsChanged", payload: worldEvents });
 
-        mapEventAnnouncer.processMarkers(event.markers, enabledTypes, (marker) => {
-          if (sendDiscord) {
-            void notifications.discord({
-              channelId: discordChannel,
-              embed: {
-                title: `${marker.label} spotted`,
-                description: eventDiscordDescription(marker, worldSize),
-                color: 0x3dd68c,
-              },
-            });
+        if (mapEventAlertsEnabled()) {
+          const enabledEntities = configuredWorldEventEntities();
+          const discordChannel = await resolveDefaultGuildChannelId(db, "events");
+          const sendDiscord = eventDiscordEnabled() && Boolean(discordChannel);
+          const sendTeamChat = eventTeamChatEnabled();
+          const filtered = announcements.filter((item) =>
+            worldEventAnnouncementEnabled(item, enabledEntities),
+          );
+          const chatMessages = formatAnnouncementsForChat(filtered, worldSize);
+          const chatPrefix = process.env.AUTOMATION_EVENT_TEAM_CHAT_PREFIX?.trim() || "RustTools";
+
+          for (const announcement of filtered) {
+            if (sendDiscord) {
+              void notifications.discord({
+                channelId: discordChannel,
+                embed: {
+                  title: "World event",
+                  description: formatWorldEventAnnouncement(
+                    announcement,
+                    worldSize,
+                    chatPrefix,
+                  ),
+                  color: announcement.kind === "heli_down" ? 0xe85d2a : 0x3dd68c,
+                },
+              });
+            }
           }
 
           if (sendTeamChat) {
-            void sendTeamChatIfUnmuted(
-              db,
-              rustPlus,
-              activeServer.id,
-              formatEventTeamChatMessage(marker, worldSize),
-            ).catch((err) => {
-              console.error("[MapEvents] Failed to send team chat:", err);
-            });
+            for (const message of chatMessages) {
+              void sendTeamChatIfUnmuted(db, rustPlus, activeServer.id, message).catch((err) => {
+                console.error("[WorldEvents] Failed to send team chat:", err);
+              });
+            }
           }
-        });
+        }
       } catch (err) {
         console.error("[MapEvents] Failed to process map markers:", err);
       }

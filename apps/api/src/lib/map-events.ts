@@ -10,6 +10,8 @@ const EVENT_TYPE_ALIASES: Record<string, number> = {
   patrol: MARKER_TYPE.HELI,
 };
 
+const DEFAULT_WORLD_EVENT_ENTITIES = ["cargo", "heli", "chinook", "vendor", "oil"];
+
 const DEFAULT_EVENT_TYPES = [MARKER_TYPE.CARGO, MARKER_TYPE.CH47, MARKER_TYPE.HELI];
 
 export function eventTeamChatEnabled(): boolean {
@@ -26,6 +28,29 @@ export function eventDiscordEnabled(): boolean {
 
 export function mapEventAlertsEnabled(): boolean {
   return eventTeamChatEnabled() || eventDiscordEnabled();
+}
+
+export function configuredWorldEventEntities(): Set<string> {
+  const raw =
+    process.env.AUTOMATION_EVENT_TYPES?.trim() ||
+    process.env.AUTOMATION_EVENT_TEAM_CHAT_TYPES?.trim();
+  if (!raw) return new Set(DEFAULT_WORLD_EVENT_ENTITIES);
+  const entities = raw
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  return entities.length > 0 ? new Set(entities) : new Set(DEFAULT_WORLD_EVENT_ENTITIES);
+}
+
+export function worldEventAnnouncementEnabled(
+  announcement: { kind: string; entity?: string; oilRig?: string },
+  enabled: Set<string>,
+): boolean {
+  if (announcement.kind.startsWith("oil")) {
+    return enabled.has("oil") || enabled.has("large") || enabled.has("small") || enabled.has("chinook");
+  }
+  if (announcement.entity) return enabled.has(announcement.entity);
+  return true;
 }
 
 export function configuredMapEventTypes(): number[] {

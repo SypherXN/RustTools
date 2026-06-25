@@ -3,10 +3,11 @@ import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
-import { parseTeamRoster, getWorldSize } from "../lib/rust-data.js";
+import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { applyTeamTracking } from "../lib/team-tracker.js";
 import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
 import { searchVending } from "../lib/vending.js";
+import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { registerServerRoutes as registerServerCoreRoutes } from "./servers.js";
 
 export async function registerServerRoutes(
@@ -61,9 +62,14 @@ export async function registerServerRoutes(
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
       const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
+      const activeServer = await getActiveServer(deps.db);
+      const worldEvents = activeServer
+        ? await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id).catch(() => null)
+        : null;
       return {
         team: tracked.team.members,
         markers: parseMapMarkers(markersRaw),
+        worldEvents,
       };
     } catch (err) {
       return reply.status(503).send({

@@ -64,6 +64,7 @@ export async function updateActiveNotificationSettings(
     smartAlarm?: Partial<ServerNotificationSettings["smartAlarm"]>;
     deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
     teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
+    eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
   },
 ): Promise<ServerNotificationSettings | null> {
   const [server] = await db

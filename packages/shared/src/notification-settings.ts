@@ -12,11 +12,15 @@ export interface ServerNotificationSettings {
   smartAlarm: SmartAlarmNotificationSettings;
   deepSea: DeepSeaNotificationSettings;
   teamChatBot: TeamChatBotSettings;
+  eventTimers: EventTimerSettings;
 }
 
 export type { TeamChatBotSettings } from "./team-chat-control.js";
+export type { EventTimerSettings } from "./world-events.js";
 import type { TeamChatBotSettings } from "./team-chat-control.js";
 import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
+import type { EventTimerSettings } from "./world-events.js";
+import { DEFAULT_EVENT_TIMER_SETTINGS } from "./world-events.js";
 
 export interface NotificationSettingsCapabilities {
   discordConfigured: boolean;
@@ -38,6 +42,7 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
     teamChat: false,
   },
   teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+  eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
 };
 
 export function mergeNotificationSettings(
@@ -46,6 +51,7 @@ export function mergeNotificationSettings(
     smartAlarm?: Partial<SmartAlarmNotificationSettings>;
     deepSea?: Partial<DeepSeaNotificationSettings>;
     teamChatBot?: Partial<TeamChatBotSettings>;
+    eventTimers?: Partial<EventTimerSettings>;
   },
 ): ServerNotificationSettings {
   return {
@@ -61,6 +67,10 @@ export function mergeNotificationSettings(
       ...current.teamChatBot,
       ...patch.teamChatBot,
     },
+    eventTimers: {
+      ...current.eventTimers,
+      ...patch.eventTimers,
+    },
   };
 }
 
@@ -72,6 +82,7 @@ export function parseServerNotificationSettings(
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+      eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
     };
   }
   try {
@@ -80,12 +91,14 @@ export function parseServerNotificationSettings(
       smartAlarm: parsed.smartAlarm,
       deepSea: parsed.deepSea,
       teamChatBot: parsed.teamChatBot,
+      eventTimers: parsed.eventTimers,
     });
   } catch {
     return {
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+      eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
     };
   }
 }

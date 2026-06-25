@@ -857,6 +857,21 @@ button:hover,
   stroke-width: 3;
 }
 
+.map-event-trail {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+}
+
+.map-event-trail-cargo {
+  stroke: #4fc3f7;
+}
+
+.map-event-trail-heli {
+  stroke: #ef5350;
+}
+
 .map-marker-highlight-ring {
   fill: none;
   stroke: rgba(255, 255, 255, 0.9);

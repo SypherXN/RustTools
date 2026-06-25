@@ -17,6 +17,7 @@ import {
   updateActiveNotificationSettings,
 } from "../lib/server-notification-settings.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
+import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
 export async function registerServerRoutes(
@@ -237,6 +238,25 @@ export async function registerServerRoutes(
     }
   });
 
+  app.get("/servers/active/world-events", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const activeServer = await getActiveServer(deps.db);
+    if (!activeServer) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    try {
+      const status = await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id);
+      return { status };
+    } catch (err) {
+      return reply.status(503).send({
+        error: err instanceof Error ? err.message : "Rust+ not connected",
+      });
+    }
+  });
+
   app.get("/servers/active/notifications", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
@@ -256,6 +276,7 @@ export async function registerServerRoutes(
       smartAlarm?: Partial<ServerNotificationSettings["smartAlarm"]>;
       deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
       teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
+      eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
     };
 
     const settings = await updateActiveNotificationSettings(deps.db, body);
