@@ -1,5 +1,6 @@
 import type { WorldEventsStatus } from "@rusttools/shared";
 import { formatDurationSince } from "@rusttools/shared";
+import type { MapEventTypeKey } from "./MapOverlay";
 
 export interface TrackableEvent {
   id: string;
@@ -82,6 +83,27 @@ function buildEvents(status: WorldEventsStatus, nowSec: number): TrackableEvent[
   );
 
   return items;
+}
+
+/** World events that can be tracked on the map (matches layer event type keys). */
+export function buildTrackableEvents(
+  status: WorldEventsStatus,
+  nowSec = Math.floor(Date.now() / 1000),
+): TrackableEvent[] {
+  return buildEvents(status, nowSec);
+}
+
+const TRACKABLE_LAYER_KEYS = new Set([
+  "cargo",
+  "heli",
+  "chinook",
+  "vendor",
+  "bradley",
+  "convoy",
+]);
+
+export function isTrackableLayerKey(key: string): key is MapEventTypeKey {
+  return TRACKABLE_LAYER_KEYS.has(key);
 }
 
 interface MapEventDockProps {

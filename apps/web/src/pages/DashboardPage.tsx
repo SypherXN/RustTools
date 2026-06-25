@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { DeepSeaStatus, TeamApiResponse, WorldEventsStatus } from "@rusttools/shared";
-import { formatDurationSince } from "@rusttools/shared";
+import { formatDurationSince, formatDiscordHelpSections, formatWebHelpCategories } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useActiveServer } from "../hooks/useActiveServer";
@@ -87,15 +87,21 @@ export function DashboardPage() {
           <dl className="stat-list">
             <div>
               <dt>API</dt>
-              <dd>{health?.status ?? "—"}</dd>
+              <dd className={health?.status === "ok" ? "status-ok" : undefined}>
+                {health?.status ?? "—"}
+              </dd>
             </div>
             <div>
               <dt>Rust+</dt>
-              <dd>{health?.rustplus.connected ? "Connected" : "Disconnected"}</dd>
+              <dd className={health?.rustplus.connected ? "status-ok" : "status-warn"}>
+                {health?.rustplus.connected ? "Connected" : "Disconnected"}
+              </dd>
             </div>
             <div>
               <dt>FCM Pairing</dt>
-              <dd>{health?.fcm.listening ? "Listening" : "Not listening"}</dd>
+              <dd className={health?.fcm.listening ? "status-ok" : "status-warn"}>
+                {health?.fcm.listening ? "Listening" : "Not listening"}
+              </dd>
             </div>
           </dl>
         </section>
@@ -197,9 +203,6 @@ export function DashboardPage() {
           ) : (
             <p className="muted">Deep Sea status unavailable — connect Rust+ to track open/close timers.</p>
           )}
-          <p className="muted" style={{ marginTop: "0.75rem" }}>
-            In-game: <code>!deepsea</code> or <code>!ds</code> · Discord: <code>/deepsea</code>
-          </p>
         </section>
 
         <section className="card">
@@ -264,12 +267,45 @@ export function DashboardPage() {
           ) : (
             <p className="muted">World event stats unavailable — connect Rust+ and enable map polling.</p>
           )}
-          <p className="muted" style={{ marginTop: "0.75rem" }}>
-            In-game: <code>!cargo</code>, <code>!heli</code>, <code>!chinook</code>, <code>!vendor</code>,{" "}
-            <code>!large</code>, <code>!small</code>, <code>!events</code>
-          </p>
         </section>
       </div>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Commands</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          In-game team chat and Discord command reference. Type <code>!help</code> in team chat for a
+          condensed list.
+        </p>
+        <h3 style={{ marginTop: "1.25rem", marginBottom: "0.75rem" }}>In-game team chat</h3>
+        <div className="help-section-grid">
+          {formatWebHelpCategories().map((category) => (
+            <div key={category.name} className="help-category">
+              <h3>{category.name}</h3>
+              <ul>
+                {category.commands.map((cmd) => (
+                  <li key={cmd}>
+                    <code>{cmd}</code>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <h3 style={{ marginTop: "1.5rem", marginBottom: "0.75rem" }}>Discord</h3>
+        <div className="help-section-grid">
+          {formatDiscordHelpSections().map((section) => (
+            <div key={section.name} className="help-category">
+              <h3>{section.name}</h3>
+              <div
+                className="muted"
+                style={{ fontSize: "0.88rem", lineHeight: 1.5, whiteSpace: "pre-line" }}
+              >
+                {section.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

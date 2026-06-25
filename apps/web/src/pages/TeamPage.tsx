@@ -225,14 +225,7 @@ export function TeamPage() {
         <section className="card team-chat-panel">
           <h2>Team Chat</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Type <code>!deepsea</code> or <code>!ds</code> for Deep Sea timer status. Roster commands:{" "}
-            <code>!online</code>, <code>!offline</code>, <code>!afk</code>, <code>!alive</code>. Team members can
-            type <code>!leader</code> when RustTools is paired with the current leader. Events:{" "}
-            <code>!cargo</code>, <code>!heli</code>, <code>!chinook</code>, <code>!vendor</code>,{" "}
-            <code>!large</code>, <code>!small</code>, <code>!events</code>. TC upkeep:{" "}
-            <code>!upkeepdetail</code>. Admins:{" "}
-            <code>!mute</code> / <code>!unmute</code>. Send a Discord DM with{" "}
-            <code>!send username message</code>.
+            Type <code>!help</code> in team chat for the full command list.
           </p>
           <div className="chat-feed team-chat-feed" ref={chatFeedRef}>
             {messages.length === 0 && <p className="muted">No messages yet.</p>}

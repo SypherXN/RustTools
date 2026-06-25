@@ -12,11 +12,23 @@ import type {
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
-import { MapOverlay, type MapLayers, type MapMarkerPoint, type MapMonument, type MapTeamMember } from "../components/MapOverlay";
+import type {
+  MapEventTypeKey,
+  MapLayers,
+  MapMarkerPoint,
+  MapMonument,
+  MapTeamMember,
+} from "../components/MapOverlay";
+import {
+  classifyMapEventMarker,
+  DEFAULT_EVENT_TYPE_LAYERS,
+  MapOverlay,
+} from "../components/MapOverlay";
+import { MapLayersPanel } from "../components/MapLayersPanel";
 import { MapViewport, type MapFocusTarget } from "../components/MapViewport";
 import { MapDrawingLayer, type MapAnnotateTool } from "../components/MapDrawingLayer";
 import { VendingTradeRow } from "../components/VendingTradeRow";
-import { MapEventDock, type MapTrackableEvent } from "../components/MapEventDock";
+import type { MapTrackableEvent } from "../components/MapEventDock";
 import { useMapImageSrc } from "../hooks/useMapImageSrc";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
@@ -61,6 +73,7 @@ const DEFAULT_LAYERS: MapLayers = {
   monuments: true,
   events: true,
   grid: true,
+  eventTypes: { ...DEFAULT_EVENT_TYPE_LAYERS },
 };
 
 export function MapPage() {
@@ -218,8 +231,29 @@ export function MapPage() {
     mapLayoutRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
-  const toggleLayer = (key: keyof MapLayers) => {
+  const toggleLayer = (key: keyof Omit<MapLayers, "eventTypes">) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleEventType = (key: MapEventTypeKey) => {
+    setLayers((prev) => ({
+      ...prev,
+      events: true,
+      eventTypes: { ...prev.eventTypes, [key]: !prev.eventTypes[key] },
+    }));
+  };
+
+  const toggleAllEventTypes = (enabled: boolean) => {
+    setLayers((prev) => ({
+      ...prev,
+      eventTypes: (Object.keys(prev.eventTypes) as MapEventTypeKey[]).reduce(
+        (acc, k) => {
+          acc[k] = enabled;
+          return acc;
+        },
+        {} as typeof prev.eventTypes,
+      ),
+    }));
   };
 
   const deleteDrawing = async (id: string) => {
@@ -332,6 +366,23 @@ export function MapPage() {
     : undefined;
 
   const eventCount = markerList.filter((m) => [2, 4, 5, 6, 7, 8].includes(m.type)).length;
+  const eventTypeCounts = useMemo(() => {
+    const counts: Record<MapEventTypeKey, number> = {
+      cargo: 0,
+      heli: 0,
+      chinook: 0,
+      vendor: 0,
+      bradley: 0,
+      convoy: 0,
+      crate: 0,
+      other: 0,
+    };
+    for (const m of markerList) {
+      if (![2, 4, 5, 6, 7, 8].includes(m.type)) continue;
+      counts[classifyMapEventMarker(m)]++;
+    }
+    return counts;
+  }, [markerList]);
   const vendingCount = markerList.filter((m) => m.type === 3).length;
   const onlineCount = teamOnMap.filter((m) => m.isOnline).length;
 
@@ -445,6 +496,31 @@ export function MapPage() {
   const mapContent =
     mapReady && mapTransform ? (
       <div className="map-layout" ref={mapLayoutRef}>
+        <MapLayersPanel
+          layers={layers}
+          onlineCount={onlineCount}
+          teamOnMapCount={teamOnMap.length}
+          vendingCount={vendingCount}
+          monumentCount={monumentList.length}
+          eventCount={eventCount}
+          eventTypeCounts={eventTypeCounts}
+          showTeamOverlays={showTeamOverlays}
+          drawings={drawings}
+          pins={pins}
+          canSwitch={canSwitch}
+          onToggleLayer={toggleLayer}
+          onToggleEventType={toggleEventType}
+          onToggleAllEventTypes={toggleAllEventTypes}
+          onShowTeamOverlaysChange={setShowTeamOverlays}
+          onRefresh={() => void refreshLive()}
+          onDeletePin={deletePin}
+          onDeleteDrawing={deleteDrawing}
+          onSelectPin={(pinId) => setSelection({ kind: "pin", pinId })}
+          onSelectDrawing={(drawingId) => setSelection({ kind: "drawing", drawingId })}
+          worldEvents={worldEvents}
+          trackingId={trackEventId}
+          onTrackEvent={handleTrackEvent}
+        />
         <div className="map-layout-main">
           <MapViewport
             width={mapW}
@@ -572,120 +648,14 @@ export function MapPage() {
 
       {mapContent}
 
-      <section className="card map-controls" style={{ marginBottom: "1rem" }}>
-        <h2>Layers</h2>
-        <div className="map-layer-toggles">
-          <label>
-            <input type="checkbox" checked={layers.team} onChange={() => toggleLayer("team")} />
-            Team ({onlineCount} online / {teamOnMap.length})
-          </label>
-          <label>
-            <input type="checkbox" checked={layers.vending} onChange={() => toggleLayer("vending")} />
-            Vending ({vendingCount})
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={layers.monuments}
-              onChange={() => toggleLayer("monuments")}
-            />
-            Monuments ({monumentList.length})
-          </label>
-          <label>
-            <input type="checkbox" checked={layers.events} onChange={() => toggleLayer("events")} />
-            Events ({eventCount})
-          </label>
-          <label>
-            <input type="checkbox" checked={layers.grid} onChange={() => toggleLayer("grid")} />
-            Grid
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={showTeamOverlays}
-              onChange={() => setShowTeamOverlays((v) => !v)}
-            />
-            Team annotations ({drawings.length} drawings, {pins.length} pins)
-          </label>
-          <button type="button" className="btn-secondary" onClick={() => void refreshLive()}>
-            Refresh now
-          </button>
-        </div>
-        <ul className="map-legend">
-          <li><span className="legend-swatch team-online" /> Team (online)</li>
-          <li><span className="legend-swatch team-offline" /> Team (offline)</li>
-          <li><span className="legend-swatch vending" /> Vending (in stock)</li>
-          <li><span className="legend-swatch vending-out" /> Vending (empty)</li>
-          <li><span className="legend-swatch monument" /> Monument</li>
-          <li><span className="legend-swatch events" /> Events (cargo, heli, etc.)</li>
-          <li><span className="legend-swatch grid" /> Grid (150m cells)</li>
-          <li><span className="legend-swatch monument" style={{ background: "#eab308" }} /> Team pin</li>
-        </ul>
-        {canSwitch && (
-          <p className="muted" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-            Click <strong>Annotate</strong> on the map toolbar, choose <strong>Draw</strong> or <strong>Pin</strong>, then
-            click or drag on the map. Annotations are shared with everyone on this server.
-          </p>
-        )}
-        {showTeamOverlays && (drawings.length > 0 || pins.length > 0) && (
-          <div className="map-overlay-list">
-            <h3>Team annotations</h3>
-            {pins.length > 0 && (
-              <ul>
-                {pins.map((pin) => (
-                  <li key={pin.id}>
-                    <button type="button" className="map-overlay-list-item" onClick={() => setSelection({ kind: "pin", pinId: pin.id })}>
-                      <strong>{pin.label}</strong>
-                      <span className="muted">pin</span>
-                    </button>
-                    {canSwitch && (
-                      <button type="button" className="btn-secondary map-overlay-delete" onClick={() => void deletePin(pin.id)}>
-                        Delete
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {drawings.length > 0 && (
-              <ul>
-                {drawings.map((stroke) => (
-                  <li key={stroke.id}>
-                    <button
-                      type="button"
-                      className="map-overlay-list-item"
-                      onClick={() => setSelection({ kind: "drawing", drawingId: stroke.id })}
-                    >
-                      <span className="map-drawing-color-preview" style={{ background: stroke.color }} />
-                      <strong>{stroke.label || "Drawing"}</strong>
-                      <span className="muted">by {stroke.createdBy}</span>
-                    </button>
-                    {canSwitch && (
-                      <button type="button" className="btn-secondary map-overlay-delete" onClick={() => void deleteDrawing(stroke.id)}>
-                        Delete
-                      </button>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </section>
-
-      <MapEventDock
-        worldEvents={worldEvents}
-        onTrack={handleTrackEvent}
-        trackingId={trackEventId}
-      />
-
       <section className="card" style={{ marginBottom: "1rem" }}>
         <h2>Vending Search</h2>
         <p className="muted" style={{ marginTop: 0 }}>
           Filter by item or shop name, currency, price per item, and deals below median price.
         </p>
-        <div className="search-row">
+        <div className="search-row vending-search-row">
           <input
+            type="text"
             value={vendingQ}
             onChange={(e) => setVendingQ(e.target.value)}
             placeholder="Item or shop name..."
@@ -699,6 +669,7 @@ export function MapPage() {
           <label>
             Currency
             <input
+              type="text"
               value={vendingCurrency}
               onChange={(e) => setVendingCurrency(e.target.value)}
               placeholder="e.g. scrap, sulfur"

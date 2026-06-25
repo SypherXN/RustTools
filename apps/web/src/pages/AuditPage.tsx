@@ -4,6 +4,8 @@ import { apiFetch } from "../lib/api";
 interface AuditEvent {
   id: string;
   userId: string | null;
+  discordId: string | null;
+  discordUsername: string | null;
   action: string;
   targetType: string | null;
   targetId: string | null;
@@ -38,6 +40,7 @@ export function AuditPage() {
             <thead>
               <tr>
                 <th>Time</th>
+                <th>User</th>
                 <th>Action</th>
                 <th>Target</th>
                 <th>Details</th>
@@ -47,6 +50,22 @@ export function AuditPage() {
               {events.map((event) => (
                 <tr key={event.id}>
                   <td>{new Date(event.createdAt).toLocaleString()}</td>
+                  <td>
+                    {event.discordUsername ? (
+                      <>
+                        <strong>{event.discordUsername}</strong>
+                        {event.discordId && (
+                          <div className="muted" style={{ fontSize: "0.82rem" }}>
+                            <code>{event.discordId}</code>
+                          </div>
+                        )}
+                      </>
+                    ) : event.userId ? (
+                      <code>{event.userId}</code>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td>{event.action}</td>
                   <td>
                     {event.targetType ?? "—"}

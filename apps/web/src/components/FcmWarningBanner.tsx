@@ -29,8 +29,8 @@ export function FcmWarningBanner() {
       : `FCM credentials expire in ${status.daysRemaining ?? 0} day(s) (${status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : "unknown"}). Re-register soon to avoid losing pairing.`;
 
   return (
-    <div className={`fcm-warning-banner fcm-warning-banner--${severity}`}>
-      <strong>FCM credentials:</strong> {message}
+    <div className={`fcm-warning-banner fcm-warning-banner--${severity}`} role="alert">
+      <span>FCM credentials: {message}</span>
     </div>
   );
 }

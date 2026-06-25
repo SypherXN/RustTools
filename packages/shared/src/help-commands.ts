@@ -1,3 +1,42 @@
+export interface WebHelpCategory {
+  name: string;
+  commands: string[];
+}
+
+/** In-game team chat commands grouped for the web dashboard. */
+export function formatWebHelpCategories(): WebHelpCategory[] {
+  return [
+    {
+      name: "Team",
+      commands: ["!online", "!offline", "!afk", "!alive", "!leader"],
+    },
+    {
+      name: "World events",
+      commands: ["!cargo", "!heli", "!chinook", "!vendor", "!large", "!small", "!events"],
+    },
+    {
+      name: "World & TC",
+      commands: ["!deepsea", "!ds", "!upkeepdetail"],
+    },
+    {
+      name: "Switches",
+      commands: ["!<alias>", "!<alias> on|off|toggle|status", "!<alias> on 60s"],
+    },
+    {
+      name: "Messaging",
+      commands: ["!send <discord-user> <msg>"],
+    },
+    {
+      name: "Admin",
+      commands: ["!mute", "!unmute"],
+    },
+    {
+      name: "Help",
+      commands: ["!help"],
+    },
+  ];
+}
+
 /** `!help` in team chat or the Discord commands channel. */
 export function parseHelpTeamChatCommand(message: string): boolean {
   const text = message.trim().toLowerCase();

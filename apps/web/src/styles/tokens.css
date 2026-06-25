@@ -1,0 +1,44 @@
+:root {
+  color-scheme: dark;
+
+  /* Surfaces */
+  --bg: #060809;
+  --bg-elevated: rgba(12, 16, 20, 0.92);
+  --bg-panel: rgba(10, 14, 18, 0.78);
+  --border: rgba(255, 107, 26, 0.18);
+  --border-strong: rgba(255, 107, 26, 0.45);
+
+  /* Text */
+  --text: #e8edf4;
+  --muted: #8b9bb0;
+
+  /* Orange accent */
+  --accent: #ff6b1a;
+  --accent-bright: #ff8c42;
+  --accent-hover: #ff8c42;
+  --accent-dim: rgba(255, 107, 26, 0.12);
+  --accent-glow: 0 0 12px rgba(255, 107, 26, 0.35);
+  --accent-glow-strong: 0 0 20px rgba(255, 107, 26, 0.5);
+
+  /* Semantic */
+  --discord: #5865f2;
+  --ok: #3dd68c;
+  --success: #3dd68c;
+  --info: #5eb8ff;
+  --warn: #ffb347;
+  --error: #ff6b6b;
+
+  /* Typography */
+  --font-ui: "Rajdhani", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  font-family: var(--font-ui);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}

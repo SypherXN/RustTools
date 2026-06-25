@@ -9,6 +9,29 @@ import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
 
+type SettingsTab =
+  | "server"
+  | "account"
+  | "alarms"
+  | "tc"
+  | "deepsea"
+  | "team-chat"
+  | "events"
+  | "legacy"
+  | "admin";
+
+const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; adminOnly?: boolean }> = [
+  { id: "server", label: "Server & Map" },
+  { id: "account", label: "Account" },
+  { id: "alarms", label: "Smart Alarms" },
+  { id: "tc", label: "TC Decay" },
+  { id: "deepsea", label: "Deep Sea" },
+  { id: "team-chat", label: "Team Chat" },
+  { id: "events", label: "Event Timers" },
+  { id: "legacy", label: "Legacy Automations" },
+  { id: "admin", label: "Admin", adminOnly: true },
+];
+
 export function SettingsPage() {
   const { user, refresh } = useAuth();
   const canAdmin = useCan("admin");
@@ -25,6 +48,7 @@ export function SettingsPage() {
     mapMeta?: { seed: number | null; salt: number | null; mapName: string | null; mapSize: number | null };
     connectString?: string | null;
   } | null>(null);
+  const [tab, setTab] = useState<SettingsTab>("server");
 
   useEffect(() => {
     void apiFetch<{
@@ -223,6 +247,21 @@ export function SettingsPage() {
         <p>Account linking, servers, and pairing setup.</p>
       </header>
 
+      <nav className="page-tabs">
+        {SETTINGS_TABS.filter((t) => !t.adminOnly || canAdmin).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={tab === t.id ? "btn-primary" : "btn-secondary"}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "server" && (
+        <>
       <ServerSwitcher />
 
       <section className="card">
@@ -264,7 +303,11 @@ export function SettingsPage() {
           </p>
         )}
       </section>
+        </>
+      )}
 
+      {tab === "account" && (
+        <>
       <section className="card">
         <h2>Permissions</h2>
         <p className="muted">
@@ -350,7 +393,10 @@ export function SettingsPage() {
           </>
         )}
       </section>
+        </>
+      )}
 
+      {tab === "alarms" && (
       <section className="card">
         <h2>Smart Alarm Notifications</h2>
         <p className="muted">
@@ -367,6 +413,7 @@ export function SettingsPage() {
         {notificationsSaved && <div className="alert">Notification settings saved.</div>}
         {notifications && (
           <div className="form-stack">
+            <div className="checkbox-group">
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -376,11 +423,6 @@ export function SettingsPage() {
               />
               <span>Send to Discord</span>
             </label>
-            {notifications.settings.smartAlarm.discord && !notifications.capabilities.discordConfigured && (
-              <p className="alert alert-error">
-                Discord is enabled but no alarm channel is configured on the server.
-              </p>
-            )}
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -417,6 +459,12 @@ export function SettingsPage() {
               />
               <span>Play browser siren when this tab is open</span>
             </label>
+            </div>
+            {notifications.settings.smartAlarm.discord && !notifications.capabilities.discordConfigured && (
+              <p className="alert alert-error">
+                Discord is enabled but no alarm channel is configured on the server.
+              </p>
+            )}
             {notifications.settings.smartAlarm.teamChat && !notifications.capabilities.rustPlusConnected && (
               <p className="alert alert-error">
                 Team chat is enabled but Rust+ is not connected to the active server.
@@ -475,7 +523,9 @@ export function SettingsPage() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "tc" && (
       <section className="card">
         <h2>TC Decay Alerts</h2>
         <p className="muted">
@@ -484,6 +534,7 @@ export function SettingsPage() {
         </p>
         {notifications && (
           <div className="form-stack">
+            <div className="checkbox-group">
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -511,6 +562,7 @@ export function SettingsPage() {
               />
               <span>Ping @everyone on Discord</span>
             </label>
+            </div>
             <label>
               Warning threshold (hours)
               <input
@@ -547,7 +599,9 @@ export function SettingsPage() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "deepsea" && (
       <section className="card">
         <h2>Deep Sea Notifications</h2>
         <p className="muted">
@@ -557,6 +611,7 @@ export function SettingsPage() {
         </p>
         {notifications && (
           <div className="form-stack">
+            <div className="checkbox-group">
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -575,10 +630,13 @@ export function SettingsPage() {
               />
               <span>Send to in-game team chat</span>
             </label>
+            </div>
           </div>
         )}
       </section>
+      )}
 
+      {tab === "team-chat" && (
       <section className="card">
         <h2>Team Chat Bot</h2>
         <p className="muted">
@@ -619,7 +677,9 @@ export function SettingsPage() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "events" && (
       <section className="card">
         <h2>Event Timers</h2>
         <p className="muted">
@@ -697,7 +757,9 @@ export function SettingsPage() {
           </div>
         )}
       </section>
+      )}
 
+      {tab === "legacy" && (
       <section className="card">
         <h2>Legacy Automations</h2>
         <p className="muted">
@@ -838,13 +900,14 @@ export function SettingsPage() {
           </div>
         )}
       </section>
+      )}
 
-      {canAdmin && (
+      {tab === "admin" && canAdmin && (
+        <>
         <section className="card">
           <h2>Data Management</h2>
           <DataResetPanel disabled={notificationsSaving || linking} />
         </section>
-      )}
 
       <section className="card">
         <h2>Pairing Setup</h2>
@@ -858,6 +921,8 @@ export function SettingsPage() {
           <li>Pair smart devices with the wire tool</li>
         </ol>
       </section>
+        </>
+      )}
     </div>
   );
 }

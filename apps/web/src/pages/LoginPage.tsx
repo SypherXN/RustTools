@@ -11,7 +11,6 @@ export function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) {
-      // Discord sometimes redirects to the frontend root if the callback URL is misconfigured.
       window.location.replace(`/api/auth/discord/callback?${params.toString()}`);
     }
   }, []);
@@ -23,8 +22,10 @@ export function LoginPage() {
   return (
     <div className="login-page">
       <div className="login-card">
+        <img className="login-brand-icon" src="/icon-192.png" alt="" width={72} height={72} />
         <h1>RustTools</h1>
-        <p>Control your base, monitor storage, and stay connected with your team.</p>
+        <p className="login-tagline">&gt; Awaiting Discord authentication…</p>
+        <p className="muted">Control your base, monitor storage, and stay connected with your team.</p>
         {errorMessage && <div className="alert alert-error">{errorMessage}</div>}
         <a className="btn btn-discord" href={getDiscordLoginUrl()}>
           Login with Discord

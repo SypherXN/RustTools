@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Routes, Route, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ActiveServerProvider } from "./hooks/useActiveServer";
@@ -16,20 +17,51 @@ import { StoragePage } from "./pages/StoragePage";
 import { TeamPage } from "./pages/TeamPage";
 import { FcmWarningBanner } from "./components/FcmWarningBanner";
 import { AlarmNotifier } from "./components/AlarmNotifier";
+import { BootLoader } from "./components/BootLoader";
+import { useRustPlusStatus } from "./hooks/useRustPlusStatus";
+import {
+  IconAudit,
+  IconAutomations,
+  IconCamera,
+  IconDashboard,
+  IconDevices,
+  IconMap,
+  IconSettings,
+  IconStorage,
+  IconTeam,
+} from "./components/NavIcons";
+
+function NavItem({ to, end, icon, children }: { to: string; end?: boolean; icon: ReactNode; children: ReactNode }) {
+  return (
+    <NavLink to={to} end={end}>
+      {icon}
+      <span>{children}</span>
+    </NavLink>
+  );
+}
 
 function Shell() {
   const { user, loading, logout } = useAuth();
+  const rustPlusStatus = useRustPlusStatus();
 
   if (loading) {
     return (
-      <div className="center">
-        <p>Loading...</p>
-      </div>
+      <>
+        <BootLoader active />
+        <div className="center">
+          <p className="muted">Loading…</p>
+        </div>
+      </>
     );
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <>
+        <BootLoader active={false} />
+        <LoginPage />
+      </>
+    );
   }
 
   if (!user.permissions.view) {
@@ -49,53 +81,100 @@ function Shell() {
     );
   }
 
+  const statusLabel =
+    rustPlusStatus === "ok"
+      ? "Rust+ online"
+      : rustPlusStatus === "warn"
+        ? "Rust+ offline"
+        : rustPlusStatus === "error"
+          ? "API unreachable"
+          : "Checking…";
+
+  const statusClass =
+    rustPlusStatus === "ok"
+      ? "status-pill--ok"
+      : rustPlusStatus === "warn"
+        ? "status-pill--warn"
+        : rustPlusStatus === "error"
+          ? "status-pill--error"
+          : "";
+
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark">R+</span>
-          <span>RustTools</span>
-        </div>
-        <nav>
-          <NavLink to="/" end>Dashboard</NavLink>
-          <NavLink to="/devices">Devices</NavLink>
-          <NavLink to="/automations">Automations</NavLink>
-          {LIVE_CAMERAS_ENABLED && <NavLink to="/cameras">Cameras</NavLink>}
-          <NavLink to="/storage">Storage</NavLink>
-          <NavLink to="/map">Map</NavLink>
-          <NavLink to="/team">Team</NavLink>
-          {user.permissions.admin && <NavLink to="/audit">Audit</NavLink>}
-          <NavLink to="/settings">Settings</NavLink>
-        </nav>
-        <div className="sidebar-footer">
-          <p className="user-name">{user.user.discordUsername}</p>
-          <p className="muted permission-badge">{permissionLabel(user.permissions)}</p>
-          <button type="button" onClick={() => void logout()}>
-            Log out
-          </button>
-        </div>
-      </aside>
-      <main className="content">
-        {isDemoMode() && (
-          <div className="demo-banner">
-            Demo mode — mock data only. Run <code>npm run dev:web</code> for live API.
+    <>
+      <BootLoader active={false} />
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="brand">
+            <img className="brand-mark" src="/icon-192.png" alt="" width={36} height={36} />
+            <div className="brand-text">
+              <span>RustTools</span>
+              <span className="brand-sub">Rust+ Dashboard</span>
+            </div>
           </div>
-        )}
-        <FcmWarningBanner />
-        <AlarmNotifier />
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/devices" element={<DevicesPage />} />
-          <Route path="/automations" element={<AutomationsPage />} />
-          {LIVE_CAMERAS_ENABLED && <Route path="/cameras" element={<CameraPage />} />}
-          <Route path="/storage" element={<StoragePage />} />
-          <Route path="/map" element={<MapPage />} />
-          <Route path="/team" element={<TeamPage />} />
-          <Route path="/audit" element={<RequirePermission capability="admin"><AuditPage /></RequirePermission>} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </main>
-    </div>
+          <nav>
+            <NavItem to="/" end icon={<IconDashboard />}>
+              Dashboard
+            </NavItem>
+            <NavItem to="/devices" icon={<IconDevices />}>
+              Devices
+            </NavItem>
+            <NavItem to="/automations" icon={<IconAutomations />}>
+              Automations
+            </NavItem>
+            {LIVE_CAMERAS_ENABLED && (
+              <NavItem to="/cameras" icon={<IconCamera />}>
+                Cameras
+              </NavItem>
+            )}
+            <NavItem to="/storage" icon={<IconStorage />}>
+              Storage
+            </NavItem>
+            <NavItem to="/map" icon={<IconMap />}>
+              Map
+            </NavItem>
+            <NavItem to="/team" icon={<IconTeam />}>
+              Team
+            </NavItem>
+            {user.permissions.admin && (
+              <NavItem to="/audit" icon={<IconAudit />}>
+                Audit
+              </NavItem>
+            )}
+            <NavItem to="/settings" icon={<IconSettings />}>
+              Settings
+            </NavItem>
+          </nav>
+          <div className="sidebar-footer">
+            <span className={`status-pill ${statusClass}`}>{statusLabel}</span>
+            <p className="user-name">{user.user.discordUsername}</p>
+            <p className="muted permission-badge">{permissionLabel(user.permissions)}</p>
+            <button type="button" className="btn-secondary" onClick={() => void logout()}>
+              Log out
+            </button>
+          </div>
+        </aside>
+        <main className="content">
+          {isDemoMode() && (
+            <div className="demo-banner">
+              Demo mode — mock data only. Run <code>npm run dev:web</code> for live API.
+            </div>
+          )}
+          <FcmWarningBanner />
+          <AlarmNotifier />
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/devices" element={<DevicesPage />} />
+            <Route path="/automations" element={<AutomationsPage />} />
+            {LIVE_CAMERAS_ENABLED && <Route path="/cameras" element={<CameraPage />} />}
+            <Route path="/storage" element={<StoragePage />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/team" element={<TeamPage />} />
+            <Route path="/audit" element={<RequirePermission capability="admin"><AuditPage /></RequirePermission>} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
+      </div>
+    </>
   );
 }
 

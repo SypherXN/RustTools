@@ -1,5 +1,12 @@
 import type { MapCoordinateTransform } from "@rusttools/shared";
-import { worldLengthToMapPixels, worldToMapPixel } from "@rusttools/shared";
+import {
+  isBradleyMarker,
+  isConvoyMarker,
+  isTravelingVendorMarker,
+  MAP_MARKER_TYPE,
+  worldLengthToMapPixels,
+  worldToMapPixel,
+} from "@rusttools/shared";
 import { useMemo } from "react";
 import type { MapClusterContext, MapSelection, MarkerSelection } from "../lib/map-clusters";
 import { countClusterAt, resolveMapSelection } from "../lib/map-clusters";
@@ -46,15 +53,64 @@ export interface MapMonument {
   y: number;
 }
 
+export type MapEventTypeKey =
+  | "cargo"
+  | "heli"
+  | "chinook"
+  | "vendor"
+  | "bradley"
+  | "convoy"
+  | "crate"
+  | "other";
+
+export interface MapEventTypeLayers {
+  cargo: boolean;
+  heli: boolean;
+  chinook: boolean;
+  vendor: boolean;
+  bradley: boolean;
+  convoy: boolean;
+  crate: boolean;
+  other: boolean;
+}
+
 export interface MapLayers {
   team: boolean;
   vending: boolean;
   monuments: boolean;
   events: boolean;
   grid: boolean;
+  eventTypes: MapEventTypeLayers;
 }
 
+export const DEFAULT_EVENT_TYPE_LAYERS: MapEventTypeLayers = {
+  cargo: true,
+  heli: true,
+  chinook: true,
+  vendor: true,
+  bradley: true,
+  convoy: true,
+  crate: true,
+  other: true,
+};
+
 const EVENT_TYPES = new Set([2, 4, 5, 6, 7, 8]);
+
+export function classifyMapEventMarker(marker: MapMarkerPoint): MapEventTypeKey {
+  if (marker.type === MAP_MARKER_TYPE.CARGO) return "cargo";
+  if (marker.type === MAP_MARKER_TYPE.HELI) return "heli";
+  if (marker.type === MAP_MARKER_TYPE.CH47) return "chinook";
+  if (isTravelingVendorMarker(marker)) return "vendor";
+  if (isBradleyMarker(marker)) return "bradley";
+  if (isConvoyMarker(marker)) return "convoy";
+  if (marker.type === MAP_MARKER_TYPE.CRATE) return "crate";
+  return "other";
+}
+
+export function isMapEventMarkerVisible(marker: MapMarkerPoint, layers: MapLayers): boolean {
+  if (!layers.events || !EVENT_TYPES.has(marker.type)) return false;
+  return layers.eventTypes[classifyMapEventMarker(marker)];
+}
 
 function pointKey(x: number, y: number): string {
   return `${Math.round(x)}:${Math.round(y)}`;
@@ -195,7 +251,7 @@ export function MapOverlay({
     (m) => m.locationKnown !== false && m.x != null && m.y != null,
   );
   const vendingMarkers = markers.filter((m) => m.type === 3);
-  const eventMarkers = markers.filter((m) => EVENT_TYPES.has(m.type));
+  const eventMarkers = markers.filter((m) => isMapEventMarkerVisible(m, layers));
 
   const clusterCtx = useMemo<MapClusterContext>(
     () => ({ team: teamOnMap, markers, monuments, layers }),
@@ -214,10 +270,10 @@ export function MapOverlay({
       height={height}
       preserveAspectRatio="none"
     >
-      {layers.events && eventTrails?.cargo?.length
+      {layers.events && layers.eventTypes.cargo && eventTrails?.cargo?.length
         ? renderTrail(eventTrails.cargo, transform, "map-event-trail map-event-trail-cargo")
         : null}
-      {layers.events && eventTrails?.heli?.length
+      {layers.events && layers.eventTypes.heli && eventTrails?.heli?.length
         ? renderTrail(eventTrails.heli, transform, "map-event-trail map-event-trail-heli")
         : null}
 
@@ -246,8 +302,7 @@ export function MapOverlay({
           );
         })}
 
-      {layers.events &&
-        eventMarkers.map((m) => {
+      {eventMarkers.map((m) => {
           const { x, y } = toPixel(m.x, m.y, transform);
           const className = `map-marker map-marker-event map-marker-type-${m.type}${isSelected(selection, "event", m.id) ? " selected" : ""}${onSelect ? " interactive" : ""}`;
           const radiusPx =

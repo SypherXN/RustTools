@@ -7,7 +7,7 @@ CREATE TABLE `discord_blacklist` (
 	`created_by` text,
 	`created_at` integer NOT NULL
 );
-
+--> statement-breakpoint
 CREATE TABLE `discord_live_embeds` (
 	`guild_id` text NOT NULL,
 	`purpose` text NOT NULL,

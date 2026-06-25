@@ -646,7 +646,7 @@ function AutomationRuleEditor({
               />
             </div>
           </label>
-          <label className="checkbox-row">
+          <label className="automation-checkbox">
             <input
               type="checkbox"
               checked={trigger.overnight ?? false}
@@ -654,7 +654,7 @@ function AutomationRuleEditor({
             />
             <span>Window crosses midnight (e.g. 18:00–06:00)</span>
           </label>
-          <label>
+          <label className="automation-field-compact">
             Fire when
             <select
               value={trigger.scheduleEdge ?? "enter"}
@@ -1048,6 +1048,7 @@ export function AutomationsPage() {
   };
 
   const deleteTemplate = async (templateId: string) => {
+    if (!window.confirm("Delete this template? This cannot be undone.")) return;
     await apiFetch(`/automation-rule-templates/${templateId}`, { method: "DELETE" });
     await load();
   };
@@ -1152,8 +1153,9 @@ export function AutomationsPage() {
         <section className="card">
           <h2>Logic rules</h2>
           <p className="muted automation-tab-intro">
-            Build rules from any combination of triggers, conditions, and actions. Save a configuration
-            as a <strong>template</strong> to reuse when creating new rules on this server.
+            Build rules from any combination of triggers, conditions, and actions. Use{" "}
+            <strong>Save as template</strong> on a rule to store a reusable configuration. Saved templates
+            appear below — each has a <strong>Delete</strong> button to remove it from this server.
           </p>
           {canAdmin && automationBase && (
             <div className="automation-base-card">
@@ -1241,9 +1243,14 @@ export function AutomationsPage() {
           )}
           {canAdmin && (
             <>
-              {templates.length > 0 && (
-                <div className="automation-templates">
-                  <h3>Your templates</h3>
+              <div className="automation-templates">
+                <h3>Saved templates</h3>
+                {templates.length === 0 ? (
+                  <p className="muted automation-templates-empty">
+                    No saved templates yet. Create or edit a rule, then click{" "}
+                    <strong>Save as template</strong> to add one here.
+                  </p>
+                ) : (
                   <ul className="automation-template-list">
                     {templates.map((template) => (
                       <li key={template.id} className="automation-template-item">
@@ -1278,32 +1285,10 @@ export function AutomationsPage() {
                       </li>
                     ))}
                   </ul>
-                </div>
-              )}
+                )}
+              </div>
               {!showCreateRule ? (
                 <div className="btn-row">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() =>
-                      startCreateRule({
-                        name: "Night lights",
-                        trigger: {
-                          type: "schedule_window",
-                          startHour: 18,
-                          startMinute: 0,
-                          endHour: 6,
-                          endMinute: 0,
-                          overnight: true,
-                          scheduleEdge: "enter",
-                        },
-                        conditions: [{ type: "time_is_night" }],
-                        actions: [{ type: "toggle_switch_group" }],
-                      })
-                    }
-                  >
-                    Night lights schedule
-                  </button>
                   <button type="button" className="btn-primary" onClick={() => startCreateRule()}>
                     New rule
                   </button>

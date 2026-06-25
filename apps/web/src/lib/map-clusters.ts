@@ -1,4 +1,5 @@
 import type { MapLayers, MapMarkerPoint, MapMonument, MapTeamMember } from "../components/MapOverlay";
+import { isMapEventMarkerVisible } from "../components/MapOverlay";
 
 /** World-unit radius for treating markers as stacked (e.g. Outpost vending row). */
 export const MAP_CLUSTER_TOLERANCE = 18;
@@ -30,8 +31,6 @@ export interface MapClusterContext {
   layers: MapLayers;
 }
 
-const EVENT_TYPES = new Set([2, 4, 5, 6, 7, 8]);
-
 function distSq(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
   const dy = ay - by;
@@ -53,7 +52,7 @@ function collectClickable(ctx: MapClusterContext): ClusterEntry[] {
 
   if (ctx.layers.events) {
     for (const m of ctx.markers) {
-      if (!EVENT_TYPES.has(m.type)) continue;
+      if (!isMapEventMarkerVisible(m, ctx.layers)) continue;
       const label = m.name.trim() && m.name !== m.label ? m.name : m.label;
       items.push({
         selection: { kind: "event", markerId: m.id },
