@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAuth } from "../hooks/useAuth";
 import { isDemoMode } from "../lib/demo";
+import { assetUrl } from "../lib/asset-url";
 
 function playSiren(): void {
   try {
@@ -59,7 +60,7 @@ export function AlarmNotifier() {
   useEffect(() => {
     if (!user || isDemoMode()) return;
     if (!("serviceWorker" in navigator)) return;
-    void navigator.serviceWorker.register("/sw.js").catch(() => {
+    void navigator.serviceWorker.register(assetUrl("sw.js")).catch(() => {
       /* optional */
     });
   }, [user]);

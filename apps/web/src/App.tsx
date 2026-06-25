@@ -3,6 +3,7 @@ import { Routes, Route, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ActiveServerProvider } from "./hooks/useActiveServer";
 import { isDemoMode } from "./lib/demo";
+import { assetUrl } from "./lib/asset-url";
 import { LIVE_CAMERAS_ENABLED } from "./lib/features";
 import { RequirePermission, permissionLabel } from "./components/RequirePermission";
 import { AuditPage } from "./pages/AuditPage";
@@ -105,7 +106,7 @@ function Shell() {
       <div className="layout">
         <aside className="sidebar">
           <div className="brand">
-            <img className="brand-mark" src="/icon-192.png" alt="" width={36} height={36} />
+            <img className="brand-mark" src={assetUrl("icon-192.png")} alt="" width={36} height={36} />
             <div className="brand-text">
               <span>RustTools</span>
               <span className="brand-sub">Rust+ Dashboard</span>

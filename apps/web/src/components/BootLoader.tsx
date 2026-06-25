@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isDemoMode } from "../lib/demo";
+import { assetUrl } from "../lib/asset-url";
 
 const BOOT_LINES: Array<{ text: string; className?: string; delay: number }> = [
   { text: "> Initializing RustTools v1.0...", className: "tag-cmd", delay: 0 },
@@ -71,7 +72,7 @@ export function BootLoader({ active, onComplete }: BootLoaderProps) {
     <div className={`boot-loader${visible ? "" : " boot-loader--hidden"}`} aria-hidden={!visible}>
       <div className="boot-loader-inner">
         <div className="boot-loader-brand">
-          <img className="boot-loader-icon" src="/icon-192.png" alt="" width={64} height={64} />
+          <img className="boot-loader-icon" src={assetUrl("icon-192.png")} alt="" width={64} height={64} />
           <h1>RustTools</h1>
           <p>Rust+ Companion Dashboard</p>
         </div>
