@@ -255,6 +255,7 @@ export async function registerServerRoutes(
     const body = request.body as {
       smartAlarm?: Partial<ServerNotificationSettings["smartAlarm"]>;
       deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
+      teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
     };
 
     const settings = await updateActiveNotificationSettings(deps.db, body);

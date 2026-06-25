@@ -1,6 +1,7 @@
 export const DISCORD_CHANNEL_PURPOSES = [
   "alarms",
   "team_chat",
+  "commands",
   "events",
   "deep_sea",
   "storage",
@@ -12,6 +13,7 @@ export type DiscordChannelPurpose = (typeof DISCORD_CHANNEL_PURPOSES)[number];
 export const DISCORD_CHANNEL_PURPOSE_LABELS: Record<DiscordChannelPurpose, string> = {
   alarms: "Smart alarms",
   team_chat: "Team chat mirror",
+  commands: "In-game command runner",
   events: "Map events (cargo, heli, chinook)",
   deep_sea: "Deep Sea open/close alerts",
   storage: "Storage monitor changes",

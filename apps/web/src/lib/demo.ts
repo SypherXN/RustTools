@@ -58,6 +58,7 @@ let demoNotificationSettings: NotificationSettingsResponse = {
   settings: {
     smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
     deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
+    teamChatBot: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.teamChatBot },
   },
   capabilities: {
     discordConfigured: true,
@@ -493,6 +494,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       const patch = body as {
         smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
         deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
+        teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
       };
       demoNotificationSettings = {
         ...demoNotificationSettings,
@@ -504,6 +506,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
           deepSea: {
             ...demoNotificationSettings.settings.deepSea,
             ...patch.deepSea,
+          },
+          teamChatBot: {
+            ...demoNotificationSettings.settings.teamChatBot,
+            ...patch.teamChatBot,
           },
         },
       };

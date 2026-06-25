@@ -8,6 +8,7 @@ import {
   type NotificationSettingsCapabilities,
   type NotificationSettingsResponse,
   type ServerNotificationSettings,
+  type TeamChatBotSettings,
 } from "@rusttools/shared";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
 
@@ -62,6 +63,7 @@ export async function updateActiveNotificationSettings(
   patch: {
     smartAlarm?: Partial<ServerNotificationSettings["smartAlarm"]>;
     deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
+    teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
   },
 ): Promise<ServerNotificationSettings | null> {
   const [server] = await db
@@ -87,6 +89,25 @@ export async function updateActiveNotificationSettings(
       updatedAt: new Date(),
     })
     .where(eq(rustServers.id, server.id));
+
+  return next;
+}
+
+export async function updateTeamChatBotSettings(
+  db: Database,
+  serverId: string,
+  patch: Partial<TeamChatBotSettings>,
+): Promise<ServerNotificationSettings> {
+  const current = await getServerNotificationSettings(db, serverId);
+  const next = mergeNotificationSettings(current, { teamChatBot: patch });
+
+  await db
+    .update(rustServers)
+    .set({
+      notificationSettingsJson: JSON.stringify(next),
+      updatedAt: new Date(),
+    })
+    .where(eq(rustServers.id, serverId));
 
   return next;
 }

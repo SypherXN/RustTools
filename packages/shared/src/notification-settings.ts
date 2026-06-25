@@ -11,7 +11,12 @@ export interface DeepSeaNotificationSettings {
 export interface ServerNotificationSettings {
   smartAlarm: SmartAlarmNotificationSettings;
   deepSea: DeepSeaNotificationSettings;
+  teamChatBot: TeamChatBotSettings;
 }
+
+export type { TeamChatBotSettings } from "./team-chat-control.js";
+import type { TeamChatBotSettings } from "./team-chat-control.js";
+import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
 
 export interface NotificationSettingsCapabilities {
   discordConfigured: boolean;
@@ -32,6 +37,7 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
     discord: true,
     teamChat: false,
   },
+  teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
 };
 
 export function mergeNotificationSettings(
@@ -39,6 +45,7 @@ export function mergeNotificationSettings(
   patch: {
     smartAlarm?: Partial<SmartAlarmNotificationSettings>;
     deepSea?: Partial<DeepSeaNotificationSettings>;
+    teamChatBot?: Partial<TeamChatBotSettings>;
   },
 ): ServerNotificationSettings {
   return {
@@ -50,6 +57,10 @@ export function mergeNotificationSettings(
       ...current.deepSea,
       ...patch.deepSea,
     },
+    teamChatBot: {
+      ...current.teamChatBot,
+      ...patch.teamChatBot,
+    },
   };
 }
 
@@ -60,6 +71,7 @@ export function parseServerNotificationSettings(
     return {
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
+      teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
     };
   }
   try {
@@ -67,11 +79,13 @@ export function parseServerNotificationSettings(
     return mergeNotificationSettings(DEFAULT_SERVER_NOTIFICATION_SETTINGS, {
       smartAlarm: parsed.smartAlarm,
       deepSea: parsed.deepSea,
+      teamChatBot: parsed.teamChatBot,
     });
   } catch {
     return {
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
+      teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
     };
   }
 }

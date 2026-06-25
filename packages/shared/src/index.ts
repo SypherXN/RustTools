@@ -13,6 +13,7 @@ export * from "./team-roster-commands.js";
 export * from "./monument-info.js";
 export * from "./devices.js";
 export * from "./team-chat.js";
+export * from "./team-chat-control.js";
 export * from "./notification-settings.js";
 export * from "./discord-channels.js";
 export * from "./deep-sea.js";

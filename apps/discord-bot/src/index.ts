@@ -268,10 +268,44 @@ async function main() {
   if (!env.botToken) throw new Error("DISCORD_BOT_TOKEN is required");
   if (!env.internalApiKey) throw new Error("INTERNAL_API_KEY is required");
 
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
 
   client.once(Events.ClientReady, (c) => {
     console.log(`Discord bot logged in as ${c.user.tag}`);
+  });
+
+  client.on(Events.MessageCreate, async (message) => {
+    if (message.author.bot || !message.guildId || !message.channel.isTextBased()) return;
+
+    const text = message.content.trim();
+    if (!text.startsWith("!")) return;
+
+    try {
+      const result = await internalPost<{ reply: string | null }>(
+        "/internal/commands-channel/execute",
+        message.author.id,
+        {
+          guildId: message.guildId,
+          channelId: message.channelId,
+          message: text,
+        },
+      );
+
+      if (result.reply) {
+        await message.reply(result.reply);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Command failed";
+      await message.reply(msg).catch(() => {
+        /* channel may disallow replies */
+      });
+    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {

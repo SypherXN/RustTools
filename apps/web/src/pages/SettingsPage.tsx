@@ -30,6 +30,7 @@ export function SettingsPage() {
   const saveNotifications = async (patch: {
     smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
     deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
+    teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
   }) => {
     if (!notifications) return;
     setNotificationsSaving(true);
@@ -73,6 +74,22 @@ export function SettingsPage() {
     };
     setNotifications(next);
     void saveNotifications({ deepSea: { [key]: value } });
+  };
+
+  const updateTeamChatBot = (
+    key: keyof NotificationSettingsResponse["settings"]["teamChatBot"],
+    value: boolean | number,
+  ) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        teamChatBot: { ...notifications.settings.teamChatBot, [key]: value },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ teamChatBot: { [key]: value } });
   };
 
   const linkRust = async () => {
@@ -242,6 +259,47 @@ export function SettingsPage() {
               />
               <span>Send to in-game team chat</span>
             </label>
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Team Chat Bot</h2>
+        <p className="muted">
+          Control in-game bot behavior. Admins can also use <code>!mute</code> and <code>!unmute</code>{" "}
+          in team chat (requires linked Steam ID + admin role). Link a Discord channel with{" "}
+          <code>/channel set purpose:In-game command runner</code> to run <code>!commands</code> from
+          Discord.
+        </p>
+        {notifications && (
+          <div className="form-stack">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.teamChatBot.muted}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTeamChatBot("muted", e.target.checked)}
+              />
+              <span>Muted in team chat (no bot replies or automated team chat)</span>
+            </label>
+            <label>
+              Command delay (ms)
+              <input
+                type="number"
+                min={0}
+                max={60_000}
+                step={250}
+                value={notifications.settings.teamChatBot.commandDelayMs}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateTeamChatBot("commandDelayMs", Math.max(0, Number(e.target.value) || 0))
+                }
+              />
+            </label>
+            <p className="muted">
+              Minimum time between handled <code>!commands</code>. <code>!mute</code> /{" "}
+              <code>!unmute</code> are not delayed.
+            </p>
           </div>
         )}
       </section>

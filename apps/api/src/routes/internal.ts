@@ -15,8 +15,10 @@ import {
   listDiscordChannelBindings,
 } from "../lib/discord-channels.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
+import { resolveDiscordChannelId } from "../lib/discord-channels.js";
 import { getActiveServerId } from "../lib/rust-data.js";
 import { getSwitchState } from "../lib/vending.js";
+import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
 import { isDiscordChannelPurpose } from "@rusttools/shared";
 
 function discordIdFrom(request: FastifyRequest): string | undefined {
@@ -284,5 +286,41 @@ export async function registerInternalRoutes(
 
     const bindings = await listDiscordChannelBindings(deps.db, guildId.trim());
     return { ok: true, cleared, bindings };
+  });
+
+  app.post("/internal/commands-channel/execute", async (request, reply) => {
+    const { discordUserId, guildId, channelId, message } = request.body as {
+      discordUserId: string;
+      guildId: string;
+      channelId: string;
+      message: string;
+    };
+
+    const perm = await requireDiscordCapability(discordUserId, "switch");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    if (!guildId?.trim() || !channelId?.trim() || !message?.trim()) {
+      return reply.status(400).send({ error: "guildId, channelId, and message are required" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    const boundChannel = await resolveDiscordChannelId(deps.db, guildId.trim(), "commands");
+    if (!boundChannel || boundChannel !== channelId.trim()) {
+      return reply.status(403).send({ error: "Channel is not configured as the commands channel" });
+    }
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(503).send({ error: "No active server" });
+    }
+
+    const result = await executeTeamChatCommand(deps.db, deps.rustPlus, {
+      serverId,
+      message: message.trim(),
+    });
+
+    return { reply: result?.reply ?? null };
   });
 }
