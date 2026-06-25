@@ -3,6 +3,7 @@ import type { DeepSeaStatus, TeamApiResponse, WorldEventsStatus } from "@rusttoo
 import { formatDurationSince } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useActiveServer } from "../hooks/useActiveServer";
 
 interface HealthResponse {
   status: string;
@@ -24,6 +25,7 @@ interface ServerInfoResponse {
 
 export function DashboardPage() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const { epoch } = useActiveServer();
   const [server, setServer] = useState<ServerInfoResponse | null>(null);
   const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
   const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
@@ -35,7 +37,7 @@ export function DashboardPage() {
     apiFetch<HealthResponse>("/health")
       .then(setHealth)
       .catch((err: Error) => setError(err.message));
-  }, []);
+  }, [epoch]);
 
   useEffect(() => {
     apiFetch<ServerInfoResponse>("/servers/active/info")
@@ -59,7 +61,7 @@ export function DashboardPage() {
     apiFetch<{ status: WorldEventsStatus }>("/servers/active/world-events")
       .then((d) => setWorldEvents(d.status))
       .catch(() => setWorldEvents(null));
-  }, []);
+  }, [epoch]);
 
   useWebSocket((event, payload) => {
     if (event === "deepSeaChanged") setDeepSea(payload as DeepSeaStatus);

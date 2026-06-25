@@ -15,6 +15,7 @@ import { apiFetch } from "../lib/api";
 import { formatTeamGridLocation } from "../lib/team-location";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
+import { useActiveServer } from "../hooks/useActiveServer";
 
 export function TeamPage() {
   const [teamInfo, setTeamInfo] = useState<ParsedTeamInfo | null>(null);
@@ -33,6 +34,7 @@ export function TeamPage() {
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const canSwitch = useCan("switch");
   const canAdmin = useCan("admin");
+  const { epoch } = useActiveServer();
 
   const applyTeamPayload = useCallback((data: TeamApiResponse) => {
     setTeamInfo(data.team);
@@ -90,7 +92,7 @@ export function TeamPage() {
       });
     const interval = setInterval(loadTeam, 30_000);
     return () => clearInterval(interval);
-  }, [loadTeam]);
+  }, [loadTeam, epoch]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);

@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
-import { formatMonumentRecyclers, getCctvForMonument, getMonumentInfo, rustItemIconUrl, worldToGridLabel } from "@rusttools/shared";
-import type { MapPin, MapOverlaysResponse } from "@rusttools/shared";
+import { useState, type ReactNode } from "react";
+import { formatMonumentRecyclers, getCctvForMonument, getMonumentInfo, worldToGridLabel } from "@rusttools/shared";
+import { VendingTradeRow } from "./VendingTradeRow";
+import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
+import { MAP_DRAWING_COLORS } from "@rusttools/shared";
 import { apiFetch, apiUpload } from "../lib/api";
 import type { MapSelection } from "../lib/map-clusters";
 import type { MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
@@ -23,6 +25,7 @@ interface MapDetailPanelProps {
   monuments: MapMonument[];
   team: MapTeamMember[];
   pins: MapPin[];
+  drawings: MapDrawingStroke[];
   worldSize: number;
   onClose: () => void;
   onSelect?: (selection: MapSelection) => void;
@@ -30,6 +33,17 @@ interface MapDetailPanelProps {
   followingSteamId?: string | null;
   canEditPins?: boolean;
   onPinUpdated?: (pin: MapPin) => void;
+  onPinDeleted?: (pinId: string) => void;
+  onDrawingUpdated?: (drawing: MapDrawingStroke) => void;
+  onDrawingDeleted?: (drawingId: string) => void;
+  pendingPin?: { x: number; y: number } | null;
+  pendingDrawing?: { points: MapDrawingPoint[] } | null;
+  pendingDrawingColor?: string;
+  onPendingDrawingColorChange?: (color: string) => void;
+  onPendingPinSave?: (label: string, notes: string) => void;
+  onPendingPinDiscard?: () => void;
+  onPendingDrawingSave?: (label: string, color: string) => void;
+  onPendingDrawingDiscard?: () => void;
 }
 
 function formatCoords(x: number, y: number, worldSize: number): string {
@@ -56,38 +70,8 @@ function VendingDetails({
       ) : (
         <ul className="map-detail-trades">
           {orders.map((order, i) => (
-            <li
-              key={`${order.itemShortname}-${order.costItemShortname}-${i}`}
-              className="map-vending-trade"
-              title={`${order.itemName} ×${order.quantity} for ${order.costQuantity} ${order.costItemName}`}
-            >
-              <div className="map-vending-trade-side">
-                <img
-                  className="map-vending-trade-icon"
-                  src={rustItemIconUrl(order.itemShortname)}
-                  alt=""
-                  loading="lazy"
-                />
-                <div className="map-vending-trade-meta">
-                  <span className="map-vending-trade-name">{order.itemName}</span>
-                  <span className="map-vending-trade-qty">×{order.quantity.toLocaleString()}</span>
-                </div>
-              </div>
-              <span className="map-vending-trade-arrow" aria-hidden>
-                →
-              </span>
-              <div className="map-vending-trade-side map-vending-trade-side-cost">
-                <img
-                  className="map-vending-trade-icon"
-                  src={rustItemIconUrl(order.costItemShortname)}
-                  alt=""
-                  loading="lazy"
-                />
-                <div className="map-vending-trade-meta">
-                  <span className="map-vending-trade-name">{order.costItemName}</span>
-                  <span className="map-vending-trade-qty">×{order.costQuantity.toLocaleString()}</span>
-                </div>
-              </div>
+            <li key={`${order.itemShortname}-${order.costItemShortname}-${i}`}>
+              <VendingTradeRow order={order} />
             </li>
           ))}
         </ul>
@@ -220,11 +204,13 @@ function PinDetails({
   worldSize,
   canEdit,
   onUpdated,
+  onDeleted,
 }: {
   pin: MapPin;
   worldSize: number;
   canEdit?: boolean;
   onUpdated?: (pin: MapPin) => void;
+  onDeleted?: (pinId: string) => void;
 }) {
   const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
   return (
@@ -264,7 +250,234 @@ function PinDetails({
           />
         </label>
       )}
+      {canEdit && onDeleted && (
+        <button
+          type="button"
+          className="btn-secondary map-pin-delete"
+          onClick={() => {
+            if (window.confirm(`Delete pin "${pin.label}"?`)) {
+              onDeleted(pin.id);
+            }
+          }}
+        >
+          Delete pin
+        </button>
+      )}
       <p className="muted">Added by {pin.createdBy}</p>
+    </>
+  );
+}
+
+function DrawingColorPicker({
+  color,
+  onChange,
+}: {
+  color: string;
+  onChange: (color: string) => void;
+}) {
+  return (
+    <fieldset className="map-drawing-colors">
+      <legend>Color</legend>
+      <div className="map-drawing-color-row">
+        {MAP_DRAWING_COLORS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`map-drawing-color-swatch${color === option.value ? " active" : ""}`}
+            style={{ background: option.value }}
+            title={option.name}
+            aria-label={option.name}
+            aria-pressed={color === option.value}
+            onClick={() => onChange(option.value)}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function PendingPinCreate({
+  point,
+  worldSize,
+  onSave,
+  onDiscard,
+}: {
+  point: { x: number; y: number };
+  worldSize: number;
+  onSave: (label: string, notes: string) => void;
+  onDiscard: () => void;
+}) {
+  const [label, setLabel] = useState("Base");
+  const [notes, setNotes] = useState("");
+
+  return (
+    <>
+      <p className="map-detail-meta">{formatCoords(point.x, point.y, worldSize)}</p>
+      <label>
+        Label
+        <input
+          value={label}
+          autoFocus
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && label.trim()) onSave(label.trim(), notes.trim());
+            if (e.key === "Escape") onDiscard();
+          }}
+        />
+      </label>
+      <label>
+        Notes <span className="muted">(optional)</span>
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && label.trim()) onSave(label.trim(), notes.trim());
+            if (e.key === "Escape") onDiscard();
+          }}
+        />
+      </label>
+      <div className="map-detail-actions">
+        <button type="button" className="btn-secondary" onClick={onDiscard}>
+          Discard
+        </button>
+        <button type="button" disabled={!label.trim()} onClick={() => onSave(label.trim(), notes.trim())}>
+          Place pin
+        </button>
+      </div>
+    </>
+  );
+}
+
+function PendingDrawingCreate({
+  points,
+  worldSize,
+  color,
+  onColorChange,
+  onSave,
+  onDiscard,
+}: {
+  points: MapDrawingPoint[];
+  worldSize: number;
+  color: string;
+  onColorChange: (color: string) => void;
+  onSave: (label: string, color: string) => void;
+  onDiscard: () => void;
+}) {
+  const [label, setLabel] = useState("");
+  const start = points[0];
+
+  return (
+    <>
+      <p className="map-detail-meta">
+        {start ? formatCoords(start.x, start.y, worldSize) : "—"}
+        <span className="muted"> · {points.length} points</span>
+      </p>
+      <label>
+        Name <span className="muted">(optional)</span>
+        <input
+          value={label}
+          autoFocus
+          placeholder="e.g. Raid path"
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") onSave(label.trim(), color);
+            if (e.key === "Escape") onDiscard();
+          }}
+        />
+      </label>
+      <DrawingColorPicker color={color} onChange={onColorChange} />
+      <div className="map-detail-actions">
+        <button type="button" className="btn-secondary" onClick={onDiscard}>
+          Discard
+        </button>
+        <button type="button" onClick={() => onSave(label.trim(), color)}>
+          Save drawing
+        </button>
+      </div>
+    </>
+  );
+}
+
+function DrawingDetails({
+  drawing,
+  worldSize,
+  canEdit,
+  onUpdated,
+  onDeleted,
+}: {
+  drawing: MapDrawingStroke;
+  worldSize: number;
+  canEdit?: boolean;
+  onUpdated?: (drawing: MapDrawingStroke) => void;
+  onDeleted?: (drawingId: string) => void;
+}) {
+  const [label, setLabel] = useState(drawing.label);
+  const [color, setColor] = useState(drawing.color);
+  const start = drawing.points[0];
+
+  const save = async () => {
+    const updated = await apiFetch<MapDrawingStroke>(`/servers/active/map/drawings/${drawing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ label: label.trim(), color }),
+    });
+    onUpdated?.(updated);
+  };
+
+  return (
+    <>
+      <p className="map-detail-meta">
+        {start ? formatCoords(start.x, start.y, worldSize) : "—"}
+        <span className="muted"> · {drawing.points.length} points</span>
+      </p>
+      {canEdit ? (
+        <>
+          <label>
+            Name
+            <input value={label} onChange={(e) => setLabel(e.target.value)} />
+          </label>
+          <fieldset className="map-drawing-colors">
+            <legend>Color</legend>
+            <div className="map-drawing-color-row">
+              {MAP_DRAWING_COLORS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`map-drawing-color-swatch${color === option.value ? " active" : ""}`}
+                  style={{ background: option.value }}
+                  title={option.name}
+                  aria-label={option.name}
+                  aria-pressed={color === option.value}
+                  onClick={() => setColor(option.value)}
+                />
+              ))}
+            </div>
+          </fieldset>
+          <button type="button" onClick={() => void save()}>
+            Save changes
+          </button>
+          {onDeleted && (
+            <button
+              type="button"
+              className="btn-secondary map-pin-delete"
+              onClick={() => {
+                if (window.confirm("Delete this drawing?")) {
+                  onDeleted(drawing.id);
+                }
+              }}
+            >
+              Delete drawing
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          {drawing.label && <p>{drawing.label}</p>}
+          <p className="muted">
+            Color: <span className="map-drawing-color-preview" style={{ background: drawing.color }} />
+          </p>
+        </>
+      )}
+      <p className="muted">Added by {drawing.createdBy}</p>
     </>
   );
 }
@@ -306,6 +519,7 @@ export function MapDetailPanel({
   monuments,
   team,
   pins,
+  drawings,
   worldSize,
   onClose,
   onSelect,
@@ -313,12 +527,26 @@ export function MapDetailPanel({
   followingSteamId,
   canEditPins,
   onPinUpdated,
+  onPinDeleted,
+  onDrawingUpdated,
+  onDrawingDeleted,
+  pendingPin,
+  pendingDrawing,
+  pendingDrawingColor = MAP_DRAWING_COLORS[0].value,
+  onPendingDrawingColorChange,
+  onPendingPinSave,
+  onPendingPinDiscard,
+  onPendingDrawingSave,
+  onPendingDrawingDiscard,
 }: MapDetailPanelProps) {
   if (!selection) {
     return (
       <aside className="map-detail-panel map-detail-panel-empty">
         <h2>Details</h2>
-        <p className="muted">Click a vending machine, monument, event, or teammate on the map.</p>
+        <p className="muted">
+          Click a vending machine, monument, event, teammate, or team pin on the map. Use{" "}
+          <strong>Annotate</strong> to draw or place pins — name and color them in this panel.
+        </p>
       </aside>
     );
   }
@@ -371,7 +599,53 @@ export function MapDetailPanel({
       body = <p className="muted">Pin not found.</p>;
     } else {
       title = pin.label;
-      body = <PinDetails pin={pin} worldSize={worldSize} canEdit={canEditPins} onUpdated={onPinUpdated} />;
+      body = <PinDetails pin={pin} worldSize={worldSize} canEdit={canEditPins} onUpdated={onPinUpdated} onDeleted={onPinDeleted} />;
+    }
+  } else if (selection.kind === "drawing") {
+    const drawing = drawings.find((d) => d.id === selection.drawingId);
+    if (!drawing) {
+      body = <p className="muted">Drawing not found.</p>;
+    } else {
+      title = drawing.label || "Drawing";
+      body = (
+        <DrawingDetails
+          drawing={drawing}
+          worldSize={worldSize}
+          canEdit={canEditPins}
+          onUpdated={onDrawingUpdated}
+          onDeleted={onDrawingDeleted}
+        />
+      );
+    }
+  } else if (selection.kind === "pendingPin") {
+    if (!pendingPin) {
+      body = <p className="muted">Pin placement cancelled.</p>;
+    } else {
+      title = "New pin";
+      body = (
+        <PendingPinCreate
+          point={pendingPin}
+          worldSize={worldSize}
+          onSave={(label, notes) => onPendingPinSave?.(label, notes)}
+          onDiscard={() => onPendingPinDiscard?.()}
+        />
+      );
+    }
+  } else if (selection.kind === "pendingDrawing") {
+    if (!pendingDrawing) {
+      body = <p className="muted">Drawing discarded.</p>;
+    } else {
+      title = "New drawing";
+      body = (
+        <PendingDrawingCreate
+          points={pendingDrawing.points}
+          worldSize={worldSize}
+          color={pendingDrawingColor}
+          onColorChange={(color) => onPendingDrawingColorChange?.(color)}
+          onSave={(label, color) => onPendingDrawingSave?.(label, color)}
+          onDiscard={() => onPendingDrawingDiscard?.()}
+        />
+      );
     }
   } else if (selection.kind === "cluster") {
     title = `${selection.items.length} markers`;

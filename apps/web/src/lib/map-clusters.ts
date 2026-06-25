@@ -18,6 +18,9 @@ export interface ClusterEntry {
 export type MapSelection =
   | MarkerSelection
   | { kind: "pin"; pinId: string }
+  | { kind: "drawing"; drawingId: string }
+  | { kind: "pendingPin" }
+  | { kind: "pendingDrawing" }
   | { kind: "cluster"; x: number; y: number; items: ClusterEntry[] };
 
 export interface MapClusterContext {

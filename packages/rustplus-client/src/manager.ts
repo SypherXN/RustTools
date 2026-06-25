@@ -52,6 +52,54 @@ type RustPlusMessage = {
   };
 };
 
+function extractRustPlusErrorCode(err: unknown): string | null {
+  if (typeof err === "string" && err.length > 0) return err;
+  if (err instanceof Error && err.message.length > 0) return err.message;
+  if (typeof err === "object" && err != null) {
+    const direct = (err as { error?: unknown }).error;
+    if (typeof direct === "string" && direct.length > 0) return direct;
+    if (typeof direct === "object" && direct != null && "error" in direct) {
+      const nested = (direct as { error?: unknown }).error;
+      if (typeof nested === "string" && nested.length > 0) return nested;
+    }
+  }
+  return null;
+}
+
+function normalizeRustPlusError(err: unknown, fallback: string): Error {
+  const code = extractRustPlusErrorCode(err);
+  if (code) return new Error(code);
+  return new Error(fallback);
+}
+
+/** Turn Rust+ camera subscribe errors into actionable UI text. */
+export function formatCameraSubscribeError(err: unknown): string {
+  const code = extractRustPlusErrorCode(err)?.toLowerCase() ?? "";
+
+  if (code === "not_found") {
+    return (
+      "Camera not found. Check the ID, confirm the monument exists on this map, or ask the server owner to run " +
+      "`cctvrender.enabled true` in the server console (CCTV streaming is off by default on most servers)."
+    );
+  }
+  if (code === "busy" || code === "occupied" || code === "in_use") {
+    return "That camera is already in use (in-game or another Rust+ client). Disconnect the other viewer first.";
+  }
+  if (code === "rate_limit") {
+    return "Rust+ rate limit hit — wait a few seconds and try again.";
+  }
+  if (code.includes("disabled") || code.includes("cctv")) {
+    return (
+      "CCTV streaming is disabled on this server. The owner must run `cctvrender.enabled true` in the server console."
+    );
+  }
+
+  const message = normalizeRustPlusError(err, "Camera subscribe failed").message;
+  return message === "Camera subscribe failed"
+    ? `${message} (no details from server — CCTV may be disabled; try \`cctvrender.enabled true\` on the server).`
+    : message;
+}
+
 function withRustTimeout<T>(
   label: string,
   send: (callback: (message: RustPlusMessage) => void) => void,
@@ -111,7 +159,7 @@ export class RustPlusManager {
       credentials.ip,
       credentials.port,
       credentials.playerId,
-      credentials.playerToken,
+      Number.parseInt(String(credentials.playerToken), 10),
     );
 
     await this.waitForConnection(client);
@@ -530,6 +578,85 @@ export class RustPlusManager {
         }
       },
     });
+  }
+
+  private activeCamera: {
+    cameraId: string;
+    camera: import("@liamcottle/rustplus.js").RustPlusCamera;
+    onRender?: (frame: Buffer) => void;
+  } | null = null;
+
+  getCameraStatus(): { active: boolean; cameraId: string | null; isAutoTurret: boolean } {
+    return {
+      active: this.activeCamera != null,
+      cameraId: this.activeCamera?.cameraId ?? null,
+      isAutoTurret: this.activeCamera?.camera.isAutoTurret() ?? false,
+    };
+  }
+
+  async subscribeCamera(
+    cameraId: string,
+    onFrame: (frame: Buffer) => void,
+  ): Promise<{ width?: number; height?: number; controlFlags?: number }> {
+    await this.unsubscribeCamera();
+    const conn = this.getActiveConnection();
+    const camera = conn.client.getCamera(cameraId);
+    this.activeCamera = { cameraId, camera, onRender: onFrame };
+
+    camera.on("render", (frame: Buffer) => {
+      this.activeCamera?.onRender?.(frame);
+      this.eventBus.emit({
+        type: "cameraFrame",
+        serverId: this.activeServerId!,
+        cameraId,
+        frameBase64: frame.toString("base64"),
+      });
+    });
+
+    try {
+      await camera.subscribe();
+    } catch (err) {
+      this.activeCamera = null;
+      const code = extractRustPlusErrorCode(err);
+      console.error(`[RustPlus] Camera subscribe failed (${cameraId}):`, code ?? err);
+      throw new Error(formatCameraSubscribeError(err));
+    }
+
+    const info = (camera as { cameraSubscribeInfo?: { width?: number; height?: number; controlFlags?: number } })
+      .cameraSubscribeInfo;
+
+    return {
+      width: info?.width,
+      height: info?.height,
+      controlFlags: info?.controlFlags ?? (camera.isAutoTurret() ? 1 : 0),
+    };
+  }
+
+  async unsubscribeCamera(): Promise<void> {
+    if (!this.activeCamera) return;
+    try {
+      await this.activeCamera.camera.unsubscribe();
+    } catch {
+      // ignore
+    }
+    this.activeCamera = null;
+  }
+
+  async sendCameraInput(buttons: number, mouseDeltaX: number, mouseDeltaY: number): Promise<void> {
+    if (!this.activeCamera) {
+      throw new Error("No active camera subscription");
+    }
+    await this.activeCamera.camera.move(buttons, mouseDeltaX, mouseDeltaY);
+  }
+
+  async shootCamera(): Promise<void> {
+    if (!this.activeCamera) {
+      throw new Error("No active camera subscription");
+    }
+    if (!this.activeCamera.camera.isAutoTurret()) {
+      throw new Error("Active camera is not an auto turret");
+    }
+    await this.activeCamera.camera.shoot();
   }
 }
 

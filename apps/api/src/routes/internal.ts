@@ -174,6 +174,30 @@ export async function registerInternalRoutes(
     return { device, info };
   });
 
+  app.get("/internal/storage/recycle/:entityDbId", async (request, reply) => {
+    const discordUserId = discordIdFrom(request);
+    const perm = await requireDiscordCapability(discordUserId, "view");
+    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+
+    const { entityDbId } = request.params as { entityDbId: string };
+    const [device] = await deps.db
+      .select()
+      .from(rustEntities)
+      .where(and(eq(rustEntities.id, entityDbId), eq(rustEntities.entityType, "storage_monitor")))
+      .limit(1);
+
+    if (!device) {
+      return reply.status(404).send({ error: "Storage monitor not found" });
+    }
+
+    const info = await deps.rustPlus.getEntityInfo(device.entityId);
+    const { buildRecycleBreakdownEmbed } = await import("../lib/storage-discord-embed.js");
+    const { recycleFromEntityInfo } = await import("../lib/vending.js");
+    const recycle = recycleFromEntityInfo(info);
+    const embed = buildRecycleBreakdownEmbed(device.displayName ?? device.name, recycle);
+    return { embed };
+  });
+
   app.post("/internal/chat", async (request, reply) => {
     const { discordUserId, message } = request.body as {
       discordUserId: string;

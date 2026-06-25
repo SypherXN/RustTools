@@ -44,6 +44,7 @@ export const mapDrawings = sqliteTable("map_drawings", {
   color: text("color").notNull(),
   width: integer("width").notNull(),
   pointsJson: text("points_json").notNull(),
+  label: text("label").notNull().default(""),
   createdBy: text("created_by").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
@@ -73,8 +74,114 @@ export const rustEntities = sqliteTable("rust_entities", {
   name: text("name").notNull(),
   displayName: text("display_name"),
   icon: text("icon"),
+  settingsJson: text("settings_json"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const switchGroups = sqliteTable("switch_groups", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  displayName: text("display_name"),
+  chatCommand: text("chat_command"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const switchGroupMembers = sqliteTable(
+  "switch_group_members",
+  {
+    groupId: text("group_id")
+      .notNull()
+      .references(() => switchGroups.id, { onDelete: "cascade" }),
+    entityId: text("entity_id")
+      .notNull()
+      .references(() => rustEntities.id, { onDelete: "cascade" }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.groupId, table.entityId] }),
+  }),
+);
+
+export const deviceLibraryGroups = sqliteTable("device_library_groups", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  parentId: text("parent_id"),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const deviceLibraryMembers = sqliteTable(
+  "device_library_members",
+  {
+    groupId: text("group_id")
+      .notNull()
+      .references(() => deviceLibraryGroups.id, { onDelete: "cascade" }),
+    entityId: text("entity_id")
+      .notNull()
+      .references(() => rustEntities.id, { onDelete: "cascade" }),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.groupId, table.entityId] }),
+  }),
+);
+
+export const automationRules = sqliteTable("automation_rules", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  triggerJson: text("trigger_json").notNull(),
+  conditionsJson: text("conditions_json").notNull().default("[]"),
+  actionsJson: text("actions_json").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const automationRuleTemplates = sqliteTable("automation_rule_templates", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  triggerJson: text("trigger_json").notNull(),
+  conditionsJson: text("conditions_json").notNull().default("[]"),
+  actionsJson: text("actions_json").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const switchScheduledJobs = sqliteTable("switch_scheduled_jobs", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  entityId: text("entity_id")
+    .notNull()
+    .references(() => rustEntities.id, { onDelete: "cascade" }),
+  revertValue: integer("revert_value", { mode: "boolean" }).notNull(),
+  runAt: integer("run_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const savedCameras = sqliteTable("saved_cameras", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  cameraId: text("camera_id").notNull(),
+  label: text("label").notNull(),
+  libraryGroupId: text("library_group_id"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
 export const auditEvents = sqliteTable("audit_events", {

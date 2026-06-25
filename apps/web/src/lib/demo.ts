@@ -8,6 +8,7 @@ import type {
 } from "@rusttools/shared";
 import {
   aggregateStorageItemSearch,
+  DEFAULT_AUTOMATION_BASE_SETTINGS,
   DEFAULT_SERVER_NOTIFICATION_SETTINGS,
   FULL_USER_PERMISSIONS,
   parseStorageEntityInfo,
@@ -794,6 +795,66 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path === "/audit") return { events: demoAuditEvents } as T;
+
+  if (path === "/automation-rules") {
+    if (method === "GET") return { rules: [] } as T;
+    if (method === "POST") return { ok: true, id: "demo-rule" } as T;
+  }
+
+  const automationRuleMatch = path.match(/^\/automation-rules\/([^/]+)$/);
+  if (automationRuleMatch && (method === "PATCH" || method === "DELETE")) {
+    return { ok: true } as T;
+  }
+
+  if (path === "/automation-rule-templates") {
+    if (method === "GET") return { templates: [] } as T;
+    if (method === "POST") return { ok: true, id: "demo-template" } as T;
+  }
+
+  const automationTemplateMatch = path.match(/^\/automation-rule-templates\/([^/]+)$/);
+  if (automationTemplateMatch && (method === "PATCH" || method === "DELETE")) {
+    return { ok: true } as T;
+  }
+
+  if (path === "/switch-groups") {
+    if (method === "GET") return { groups: [] } as T;
+    if (method === "POST") return { ok: true, id: "demo-group" } as T;
+  }
+
+  const switchGroupMatch = path.match(/^\/switch-groups\/([^/]+)$/);
+  if (switchGroupMatch && (method === "PATCH" || method === "DELETE")) {
+    return { ok: true } as T;
+  }
+
+  if (path === "/device-library") {
+    return { groups: [], cameras: [] } as T;
+  }
+
+  if (path === "/device-library/groups" && method === "POST") {
+    return { ok: true, id: "demo-library-group" } as T;
+  }
+
+  const deviceLibraryGroupMatch = path.match(/^\/device-library\/groups\/([^/]+)$/);
+  if (deviceLibraryGroupMatch && method === "PATCH") {
+    return { ok: true } as T;
+  }
+
+  if (path === "/automation-settings") {
+    if (method === "GET") {
+      return {
+        automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
+        pins: [],
+      } as T;
+    }
+    if (method === "PATCH") {
+      return {
+        automationBase: {
+          ...DEFAULT_AUTOMATION_BASE_SETTINGS,
+          ...(body as { automationBase?: Record<string, unknown> }).automationBase,
+        },
+      } as T;
+    }
+  }
 
   throw new Error(`Demo mode: unhandled API path ${method} ${path}`);
 }

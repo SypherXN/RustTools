@@ -1,6 +1,20 @@
 export interface SmartAlarmNotificationSettings {
   discord: boolean;
   teamChat: boolean;
+  /** Prefix Discord content with @everyone when enabled (#45). */
+  pingEveryone: boolean;
+}
+
+export interface TcDecayNotificationSettings {
+  discord: boolean;
+  teamChat: boolean;
+  pingEveryone: boolean;
+  /** Alert when upkeep drops below this many hours (#48–49). */
+  warningHours: number;
+  /** Critical alert threshold (hours). */
+  criticalHours: number;
+  /** Poll interval in minutes for proactive TC checks. */
+  pollIntervalMinutes: number;
 }
 
 export interface DeepSeaNotificationSettings {
@@ -8,12 +22,23 @@ export interface DeepSeaNotificationSettings {
   teamChat: boolean;
 }
 
-export interface ServerNotificationSettings {
-  smartAlarm: SmartAlarmNotificationSettings;
-  deepSea: DeepSeaNotificationSettings;
-  teamChatBot: TeamChatBotSettings;
-  eventTimers: EventTimerSettings;
+/** Default base point for team proximity automations. */
+export interface AutomationBaseSettings {
+  x: number | null;
+  y: number | null;
+  /** Grid cells (Chebyshev) from base — same as switch proximity mode. */
+  radiusGrid: number;
+  mapPinId: string | null;
+  label?: string;
 }
+
+export const DEFAULT_AUTOMATION_BASE_SETTINGS: AutomationBaseSettings = {
+  x: null,
+  y: null,
+  radiusGrid: 1,
+  mapPinId: null,
+  label: "Base",
+};
 
 export type { TeamChatBotSettings } from "./team-chat-control.js";
 export type { EventTimerSettings } from "./world-events.js";
@@ -21,6 +46,15 @@ import type { TeamChatBotSettings } from "./team-chat-control.js";
 import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
 import type { EventTimerSettings } from "./world-events.js";
 import { DEFAULT_EVENT_TIMER_SETTINGS } from "./world-events.js";
+
+export interface ServerNotificationSettings {
+  smartAlarm: SmartAlarmNotificationSettings;
+  deepSea: DeepSeaNotificationSettings;
+  tcDecay: TcDecayNotificationSettings;
+  teamChatBot: TeamChatBotSettings;
+  eventTimers: EventTimerSettings;
+  automationBase: AutomationBaseSettings;
+}
 
 export interface NotificationSettingsCapabilities {
   discordConfigured: boolean;
@@ -32,17 +66,29 @@ export interface NotificationSettingsResponse {
   capabilities: NotificationSettingsCapabilities;
 }
 
+export const DEFAULT_TC_DECAY_SETTINGS: TcDecayNotificationSettings = {
+  discord: true,
+  teamChat: true,
+  pingEveryone: false,
+  warningHours: 24,
+  criticalHours: 6,
+  pollIntervalMinutes: 15,
+};
+
 export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = {
   smartAlarm: {
     discord: true,
     teamChat: false,
+    pingEveryone: false,
   },
   deepSea: {
     discord: true,
     teamChat: false,
   },
+  tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
   teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
   eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
+  automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
 };
 
 export function mergeNotificationSettings(
@@ -50,8 +96,10 @@ export function mergeNotificationSettings(
   patch: {
     smartAlarm?: Partial<SmartAlarmNotificationSettings>;
     deepSea?: Partial<DeepSeaNotificationSettings>;
+    tcDecay?: Partial<TcDecayNotificationSettings>;
     teamChatBot?: Partial<TeamChatBotSettings>;
     eventTimers?: Partial<EventTimerSettings>;
+    automationBase?: Partial<AutomationBaseSettings>;
   },
 ): ServerNotificationSettings {
   return {
@@ -63,6 +111,10 @@ export function mergeNotificationSettings(
       ...current.deepSea,
       ...patch.deepSea,
     },
+    tcDecay: {
+      ...current.tcDecay,
+      ...patch.tcDecay,
+    },
     teamChatBot: {
       ...current.teamChatBot,
       ...patch.teamChatBot,
@@ -70,6 +122,10 @@ export function mergeNotificationSettings(
     eventTimers: {
       ...current.eventTimers,
       ...patch.eventTimers,
+    },
+    automationBase: {
+      ...current.automationBase,
+      ...patch.automationBase,
     },
   };
 }
@@ -81,8 +137,10 @@ export function parseServerNotificationSettings(
     return {
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
+      tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
+      automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
     };
   }
   try {
@@ -90,34 +148,56 @@ export function parseServerNotificationSettings(
     return mergeNotificationSettings(DEFAULT_SERVER_NOTIFICATION_SETTINGS, {
       smartAlarm: parsed.smartAlarm,
       deepSea: parsed.deepSea,
+      tcDecay: parsed.tcDecay,
       teamChatBot: parsed.teamChatBot,
       eventTimers: parsed.eventTimers,
+      automationBase: parsed.automationBase,
     });
   } catch {
     return {
       smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
+      tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
+      automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
     };
   }
 }
 
-export function formatSmartAlarmTeamChatMessage(event: {
-  title?: string;
-  message?: string;
-  body?: Record<string, unknown>;
-}): string {
+export function formatSmartAlarmTeamChatMessage(
+  event: {
+    title?: string;
+    message?: string;
+    body?: Record<string, unknown>;
+  },
+  customMessage?: string | null,
+  entityName?: string | null,
+): string {
+  if (customMessage?.trim()) {
+    return customMessage.trim();
+  }
+
   const title = event.title?.trim() || "Smart Alarm";
   const message = event.message?.trim();
   const body = event.body ?? {};
-  const entityName =
-    (typeof body.entityName === "string" && body.entityName) ||
-    (typeof body.name === "string" && body.name) ||
-    null;
+  const resolvedName =
+    entityName ??
+    ((typeof body.entityName === "string" && body.entityName) ||
+      (typeof body.name === "string" && body.name) ||
+      null);
 
-  if (entityName && message) return `[Alarm] ${entityName}: ${message}`;
+  if (resolvedName && message) return `[Alarm] ${resolvedName}: ${message}`;
   if (message) return `[Alarm] ${title}: ${message}`;
-  if (entityName) return `[Alarm] ${entityName} triggered`;
+  if (resolvedName) return `[Alarm] ${resolvedName} triggered`;
   return `[Alarm] ${title}`;
+}
+
+export function formatTcDecayAlertMessage(
+  tcName: string,
+  upkeepLabel: string,
+  level: "warning" | "critical",
+): string {
+  const prefix = level === "critical" ? "[TC CRITICAL]" : "[TC Warning]";
+  return `${prefix} ${tcName}: ${upkeepLabel} of upkeep remaining`;
 }

@@ -10,6 +10,7 @@ import { StorageIconPicker } from "../components/StorageIconPicker";
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
+import { useActiveServer } from "../hooks/useActiveServer";
 
 interface Monitor {
   id: string;
@@ -48,6 +49,7 @@ export function StoragePage() {
   const [error, setError] = useState<string | null>(null);
   const [alert, setAlert] = useState<string | null>(null);
   const canAdmin = useCan("admin");
+  const { epoch } = useActiveServer();
 
   const loadMonitors = async () => {
     const data = await apiFetch<{ monitors: Monitor[] }>("/storage");
@@ -55,8 +57,10 @@ export function StoragePage() {
   };
 
   useEffect(() => {
+    setSelected(null);
+    setStorage(null);
     loadMonitors().catch((err: Error) => setError(err.message));
-  }, []);
+  }, [epoch]);
 
   useWebSocket((event, payload) => {
     if (event === "storageChanged") {

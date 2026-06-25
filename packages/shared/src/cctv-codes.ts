@@ -64,3 +64,13 @@ export function getCctvForMonument(tokenOrName: string): CctvEntry | null {
 export function listCctvMonuments(): string[] {
   return Object.keys(CCTV_BY_NAME).sort();
 }
+
+/** Static monument CCTV codes (excludes dynamic patterns with `*`). */
+export function listStaticCctvCodes(): string[] {
+  const codes = new Set<string>();
+  for (const entry of Object.values(CCTV_BY_NAME)) {
+    if (entry.dynamic) continue;
+    for (const code of entry.codes) codes.add(code);
+  }
+  return [...codes].sort();
+}

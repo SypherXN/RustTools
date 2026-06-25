@@ -4,6 +4,7 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { registerAuthRoutes } from "./auth.js";
 import { registerAuditRoutes } from "./audit.js";
 import { registerDeviceRoutes } from "./devices.js";
+import { registerAutomationRoutes } from "./automation.js";
 import { registerServerRoutes } from "./map.js";
 import { registerInternalRoutes } from "./internal.js";
 
@@ -30,6 +31,7 @@ export async function registerRoutes(
   await registerAuthRoutes(app, deps.db);
   await registerServerRoutes(app, deps);
   await registerDeviceRoutes(app, deps);
+  await registerAutomationRoutes(app, deps);
   await registerAuditRoutes(app, deps.db);
   await registerInternalRoutes(app, deps);
 }

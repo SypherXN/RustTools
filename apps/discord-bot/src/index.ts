@@ -7,7 +7,23 @@ import {
 import { internalFetch, internalPost, mapAttachment } from "./api.js";
 import { env } from "./config.js";
 import type { DiscordChannelBinding } from "@rusttools/shared";
-import { DISCORD_CHANNEL_PURPOSE_LABELS } from "@rusttools/shared";
+import { DISCORD_CHANNEL_PURPOSE_LABELS, formatDiscordHelpSections } from "@rusttools/shared";
+
+async function handleHelp(interaction: ChatInputCommandInteraction) {
+  const sections = formatDiscordHelpSections();
+  await interaction.reply({
+    embeds: [
+      {
+        title: "RustTools commands",
+        description:
+          "Use slash commands here. In a linked **commands** channel, `!` commands from in-game team chat also work (`!help` there too).",
+        fields: sections.map((s) => ({ name: s.name, value: s.value })),
+        color: 0x5865f2,
+      },
+    ],
+    ephemeral: true,
+  });
+}
 
 async function handleStatus(interaction: ChatInputCommandInteraction) {
   const health = await internalFetch<{
@@ -309,10 +325,31 @@ async function main() {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isButton() && interaction.customId.startsWith("storage_recycle:")) {
+      const entityDbId = interaction.customId.slice("storage_recycle:".length);
+      try {
+        const data = await internalFetch<{ embed: { title: string; description: string; color: number; fields: Array<{ name: string; value: string }> } }>(
+          `/internal/storage/recycle/${encodeURIComponent(entityDbId)}`,
+          interaction.user.id,
+        );
+        await interaction.reply({
+          embeds: [data.embed],
+          ephemeral: true,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to load recycle breakdown";
+        await interaction.reply({ content: msg, ephemeral: true });
+      }
+      return;
+    }
+
     if (!interaction.isChatInputCommand()) return;
 
     try {
       switch (interaction.commandName) {
+        case "help":
+          await handleHelp(interaction);
+          break;
         case "status":
           await handleStatus(interaction);
           break;

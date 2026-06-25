@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import path from "node:path";
 import fs from "node:fs";
-import { createDatabase, resolveDatabasePath } from "@rusttools/db";
+import { createDatabase, resolveDatabasePath, runMigrations } from "@rusttools/db";
 import { users } from "@rusttools/db";
 import { eq } from "drizzle-orm";
 import { NotificationService, RustPlusManager } from "@rusttools/rustplus-client";
@@ -22,7 +22,16 @@ import { WsHub } from "./services/ws-hub.js";
 async function sendDiscordMessage(notification: {
   channelId: string;
   content?: string;
-  embed?: { title?: string; description?: string; color?: number };
+  embed?: {
+    title?: string;
+    description?: string;
+    color?: number;
+    fields?: Array<{ name: string; value: string; inline?: boolean }>;
+  };
+  components?: Array<{
+    type: number;
+    components: Array<{ type: number; style: number; label: string; custom_id: string }>;
+  }>;
 }): Promise<void> {
   if (!notification.channelId || !env.discord.botToken) return;
 
@@ -35,6 +44,7 @@ async function sendDiscordMessage(notification: {
     body: JSON.stringify({
       content: notification.content,
       embeds: notification.embed ? [notification.embed] : undefined,
+      components: notification.components,
     }),
   });
 }
@@ -46,6 +56,7 @@ async function main() {
     fs.mkdirSync(dbDir, { recursive: true });
   }
 
+  runMigrations(env.databaseUrl);
   const db = createDatabase(`file:${dbPath}`);
   const wsHub = new WsHub();
 

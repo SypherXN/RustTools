@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../lib/api";
 import { useCan } from "../hooks/usePermissions";
+import { useActiveServer } from "../hooks/useActiveServer";
 
 interface Server {
   id: string;
@@ -13,11 +14,16 @@ interface Server {
 export function ServerSwitcher() {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const canAdmin = useCan("admin");
+  const { notifyActivated } = useActiveServer();
 
   const load = () => {
     apiFetch<{ servers: Server[] }>("/servers")
-      .then((d) => setServers(d.servers))
+      .then((d) => {
+        setServers(d.servers);
+        setError(null);
+      })
       .catch(() => setServers([]));
   };
 
@@ -27,9 +33,13 @@ export function ServerSwitcher() {
 
   const activate = async (id: string) => {
     setLoading(true);
+    setError(null);
     try {
       await apiFetch(`/servers/${id}/activate`, { method: "POST" });
       load();
+      notifyActivated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to activate server");
     } finally {
       setLoading(false);
     }
@@ -40,6 +50,7 @@ export function ServerSwitcher() {
   return (
     <section className="card server-switcher">
       <h2>Servers</h2>
+      {error && <div className="alert alert-error">{error}</div>}
       <ul className="server-list">
         {servers.map((s) => (
           <li key={s.id} className={s.isActive ? "active" : ""}>

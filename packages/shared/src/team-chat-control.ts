@@ -1,3 +1,5 @@
+import { parseHelpTeamChatCommand } from "./help-commands.js";
+
 export interface TeamChatBotSettings {
   /** When true, the bot does not send messages to in-game team chat. */
   muted: boolean;
@@ -42,6 +44,7 @@ export function isTeamChatBotCommand(message: string): boolean {
   return (
     parseMuteTeamChatCommand(text) ||
     parseUnmuteTeamChatCommand(text) ||
+    parseHelpTeamChatCommand(text) ||
     parseSendTeamChatCommand(text) !== null ||
     /^!deepsea\b/i.test(text) ||
     /^!ds\b/i.test(text) ||

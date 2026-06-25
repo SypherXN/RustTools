@@ -5,7 +5,9 @@ import {
   formatRosterCommandResponse,
   formatEventChatCommandResponse,
   parseEventTeamChatCommand,
+  formatTeamChatHelpReplies,
   parseDeepSeaTeamChatCommand,
+  parseHelpTeamChatCommand,
   parseLeaderTeamChatCommand,
   parseMuteTeamChatCommand,
   parseRosterTeamChatCommand,
@@ -25,6 +27,7 @@ import { hasSteamAdminCapability } from "./steam-admin.js";
 import { processTeamRoster } from "./team-tracker.js";
 import { buildUpkeepDetailTeamChatReplies } from "./tc-upkeep-report.js";
 import { fetchWorldEventsStatus } from "./world-events-status.js";
+import { executeSwitchChatCommand } from "./switch-command-handler.js";
 
 export interface TeamChatCommandContext {
   serverId: string;
@@ -42,7 +45,11 @@ export interface TeamChatCommandResult {
 const lastCommandAtMs = new Map<string, number>();
 
 function isControlCommand(message: string): boolean {
-  return parseMuteTeamChatCommand(message) || parseUnmuteTeamChatCommand(message);
+  return (
+    parseMuteTeamChatCommand(message) ||
+    parseUnmuteTeamChatCommand(message) ||
+    parseHelpTeamChatCommand(message)
+  );
 }
 
 export function shouldThrottleTeamChatCommand(
@@ -90,6 +97,10 @@ export async function executeTeamChatCommand(
     }
     await updateTeamChatBotSettings(db, ctx.serverId, { muted: false });
     return { reply: "RustTools: Bot unmuted in team chat." };
+  }
+
+  if (parseHelpTeamChatCommand(message)) {
+    return { replies: formatTeamChatHelpReplies() };
   }
 
   if (settings.teamChatBot.muted) {
@@ -178,6 +189,11 @@ export async function executeTeamChatCommand(
 
     await rustPlus.promoteToLeader(sender.steamId);
     return { reply: `RustTools: ${sender.name} is now team leader.` };
+  }
+
+  const switchResult = await executeSwitchChatCommand(db, rustPlus, ctx.serverId, message);
+  if (switchResult) {
+    return { reply: switchResult.reply };
   }
 
   return null;

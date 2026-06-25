@@ -82,7 +82,13 @@ export type RustPlusEvent =
   | { type: "serverPaired"; serverId: string; name: string }
   | { type: "entityPaired"; serverId: string; entityId: number; entityType: EntityType; name: string }
   | { type: "mapMarkers"; serverId: string; markers: unknown }
-  | { type: "fcmAlarm"; title?: string; message?: string; body: Record<string, unknown> };
+  | { type: "fcmAlarm"; title?: string; message?: string; body: Record<string, unknown> }
+  | {
+      type: "cameraFrame";
+      serverId: string;
+      cameraId: string;
+      frameBase64: string;
+    };
 
 export type RustPlusEventType = RustPlusEvent["type"];
 

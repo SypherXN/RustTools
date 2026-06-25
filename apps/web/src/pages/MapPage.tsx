@@ -2,21 +2,25 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type {
   MapCoordinateTransform,
+  MapDrawingPoint,
   MapDrawingStroke,
   MapOverlaysResponse,
   MapPin,
   VendingSearchResult,
   WorldEventsStatus,
 } from "@rusttools/shared";
+import { MAP_DRAWING_COLORS } from "@rusttools/shared";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
 import { MapOverlay, type MapLayers, type MapMarkerPoint, type MapMonument, type MapTeamMember } from "../components/MapOverlay";
 import { MapViewport, type MapFocusTarget } from "../components/MapViewport";
-import { MapDrawingLayer } from "../components/MapDrawingLayer";
+import { MapDrawingLayer, type MapAnnotateTool } from "../components/MapDrawingLayer";
+import { VendingTradeRow } from "../components/VendingTradeRow";
 import { MapEventDock, type MapTrackableEvent } from "../components/MapEventDock";
 import { useMapImageSrc } from "../hooks/useMapImageSrc";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
+import { useActiveServer } from "../hooks/useActiveServer";
 import { apiFetch } from "../lib/api";
 import { demoMapMarkers, demoMapSize, demoMonuments, demoTeam, demoMapTransform, isDemoMode } from "../lib/demo";
 
@@ -61,6 +65,7 @@ const DEFAULT_LAYERS: MapLayers = {
 
 export function MapPage() {
   const canSwitch = useCan("switch");
+  const { epoch } = useActiveServer();
   const [searchParams] = useSearchParams();
   const memberParam = searchParams.get("member");
   const [mapImage, setMapImage] = useState<MapData["map"] | null>(null);
@@ -72,6 +77,8 @@ export function MapPage() {
   );
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [showTeamOverlays, setShowTeamOverlays] = useState(true);
+  const [annotateMode, setAnnotateMode] = useState(false);
+  const [annotateTool, setAnnotateTool] = useState<MapAnnotateTool>("pen");
   const [vendingQ, setVendingQ] = useState("");
   const [vendingCurrency, setVendingCurrency] = useState("");
   const [vendingMinPrice, setVendingMinPrice] = useState("");
@@ -87,6 +94,10 @@ export function MapPage() {
   const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
   const [drawings, setDrawings] = useState<MapDrawingStroke[]>([]);
   const [pins, setPins] = useState<MapPin[]>([]);
+  const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
+  const [pendingDrawing, setPendingDrawing] = useState<{ points: MapDrawingPoint[] } | null>(null);
+  const [drawColor, setDrawColor] = useState<string>(MAP_DRAWING_COLORS[0].value);
+  const [pendingDrawingColor, setPendingDrawingColor] = useState<string>(MAP_DRAWING_COLORS[0].value);
   const [followSteamId, setFollowSteamId] = useState<string | null>(null);
   const [trackEventId, setTrackEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +127,10 @@ export function MapPage() {
 
   useEffect(() => {
     setLoading(true);
+    setSelection(null);
+    setFocusTarget(null);
+    setFollowSteamId(null);
+    setTrackEventId(null);
     Promise.all([
       apiFetch<MapData>("/servers/active/map"),
       apiFetch<MapOverlaysResponse>("/servers/active/map/overlays").catch(() => ({
@@ -132,10 +147,11 @@ export function MapPage() {
         setDrawings(overlays.drawings);
         setPins(overlays.pins);
         setLastUpdated(new Date());
+        setError(null);
       })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [epoch]);
 
   useEffect(() => {
     if (loading) return;
@@ -206,6 +222,101 @@ export function MapPage() {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const deleteDrawing = async (id: string) => {
+    try {
+      await apiFetch(`/servers/active/map/drawings/${id}`, { method: "DELETE" });
+      setDrawings((prev) => prev.filter((d) => d.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete drawing");
+    }
+  };
+
+  const deletePin = async (id: string) => {
+    try {
+      await apiFetch(`/servers/active/map/pins/${id}`, { method: "DELETE" });
+      setPins((prev) => prev.filter((p) => p.id !== id));
+      if (selection?.kind === "pin" && selection.pinId === id) {
+        setSelection(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete pin");
+    }
+  };
+
+  const discardPendingPin = useCallback(() => {
+    setPendingPin(null);
+    setSelection((sel) => (sel?.kind === "pendingPin" ? null : sel));
+  }, []);
+
+  const discardPendingDrawing = useCallback(() => {
+    setPendingDrawing(null);
+    setSelection((sel) => (sel?.kind === "pendingDrawing" ? null : sel));
+  }, []);
+
+  const savePendingPin = useCallback(
+    async (label: string, notes: string) => {
+      if (!pendingPin) return;
+      try {
+        const pin = await apiFetch<MapPin>("/servers/active/map/pins", {
+          method: "POST",
+          body: JSON.stringify({ label, notes, x: pendingPin.x, y: pendingPin.y }),
+        });
+        setPins((prev) => [...prev, pin]);
+        setPendingPin(null);
+        setSelection({ kind: "pin", pinId: pin.id });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to place pin");
+      }
+    },
+    [pendingPin],
+  );
+
+  const savePendingDrawing = useCallback(
+    async (label: string, color: string) => {
+      if (!pendingDrawing) return;
+      try {
+        const stroke = await apiFetch<MapDrawingStroke>("/servers/active/map/drawings", {
+          method: "POST",
+          body: JSON.stringify({
+            tool: "pen",
+            label,
+            color,
+            width: 3,
+            points: pendingDrawing.points,
+          }),
+        });
+        setDrawings((prev) => [...prev, stroke]);
+        setPendingDrawing(null);
+        setSelection({ kind: "drawing", drawingId: stroke.id });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save drawing");
+      }
+    },
+    [pendingDrawing],
+  );
+
+  useEffect(() => {
+    if (!annotateMode) {
+      setPendingPin(null);
+      setPendingDrawing(null);
+      setSelection((sel) =>
+        sel?.kind === "pendingPin" || sel?.kind === "pendingDrawing" ? null : sel,
+      );
+    }
+  }, [annotateMode]);
+
+  useEffect(() => {
+    if (annotateTool !== "pin") {
+      discardPendingPin();
+    }
+  }, [annotateTool, discardPendingPin]);
+
+  useEffect(() => {
+    if (annotateTool !== "pen") {
+      discardPendingDrawing();
+    }
+  }, [annotateTool, discardPendingDrawing]);
+
   const mapW = mapImage?.width ?? demoMapSize.width;
   const mapH = mapImage?.height ?? demoMapSize.height;
   const teamOnMap = team.length > 0 ? team : isDemoMode() ? demoTeam : [];
@@ -227,6 +338,53 @@ export function MapPage() {
   const mapTransform = transform ?? demoMapTransform;
   const worldSize = mapTransform.worldSize;
   const mapReady = Boolean(mapImage?.imageBase64 || showDemoMap);
+
+  const annotateToolbar =
+    canSwitch && mapReady ? (
+      <>
+        <button
+          type="button"
+          className={`btn-secondary${annotateMode ? " active" : ""}`}
+          onClick={() => setAnnotateMode((v) => !v)}
+        >
+          {annotateMode ? "Done" : "Annotate"}
+        </button>
+        {annotateMode && (
+          <>
+            <button
+              type="button"
+              className={`btn-secondary${annotateTool === "pen" ? " active" : ""}`}
+              onClick={() => setAnnotateTool("pen")}
+            >
+              Draw
+            </button>
+            <button
+              type="button"
+              className={`btn-secondary${annotateTool === "pin" ? " active" : ""}`}
+              onClick={() => setAnnotateTool("pin")}
+            >
+              Pin
+            </button>
+            {annotateTool === "pen" && pendingDrawing == null && (
+              <div className="map-annotate-colors" role="group" aria-label="Stroke color">
+                {MAP_DRAWING_COLORS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`map-drawing-color-swatch${drawColor === option.value ? " active" : ""}`}
+                    style={{ background: option.value }}
+                    title={option.name}
+                    aria-label={option.name}
+                    aria-pressed={drawColor === option.value}
+                    onClick={() => setDrawColor(option.value)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </>
+    ) : null;
 
   const followMember = followSteamId
     ? teamOnMap.find((m) => m.steamId === followSteamId)
@@ -296,6 +454,8 @@ export function MapPage() {
             transform={mapTransform}
             focusTarget={focusTarget}
             trackTarget={trackTarget}
+            disablePan={annotateMode && canSwitch}
+            toolbarExtra={annotateToolbar}
             onUserPan={() => {
               setFollowSteamId(null);
               setTrackEventId(null);
@@ -317,20 +477,34 @@ export function MapPage() {
               selection={selection}
               onSelect={setSelection}
             />
-            {showTeamOverlays && (
-              <MapDrawingLayer
-                width={mapW}
-                height={mapH}
-                transform={mapTransform}
-                drawings={drawings}
-                pins={pins}
-                enabled={showTeamOverlays}
-                canEdit={canSwitch}
-                onDrawingsChange={setDrawings}
-                onPinsChange={setPins}
-                onSelectPin={(pin) => setSelection({ kind: "pin", pinId: pin.id })}
-              />
-            )}
+            <MapDrawingLayer
+              width={mapW}
+              height={mapH}
+              transform={mapTransform}
+              drawings={drawings}
+              pins={pins}
+              visible={showTeamOverlays}
+              editMode={annotateMode}
+              canEdit={canSwitch}
+              tool={annotateTool}
+              hasPendingPin={pendingPin != null}
+              hasPendingDrawing={pendingDrawing != null}
+              pendingPin={pendingPin}
+              pendingDrawing={pendingDrawing}
+              drawColor={drawColor}
+              pendingDrawingColor={pendingDrawingColor}
+              onPendingPin={(point) => {
+                setPendingPin({ x: point.x, y: point.y });
+                setSelection({ kind: "pendingPin" });
+              }}
+              onPendingDrawing={(points) => {
+                setPendingDrawing({ points });
+                setPendingDrawingColor(drawColor);
+                setSelection({ kind: "pendingDrawing" });
+              }}
+              onSelectPin={(pin) => setSelection({ kind: "pin", pinId: pin.id })}
+              onSelectDrawing={(drawing) => setSelection({ kind: "drawing", drawingId: drawing.id })}
+            />
           </MapViewport>
         </div>
         <MapDetailPanel
@@ -339,8 +513,19 @@ export function MapPage() {
           monuments={monumentList}
           team={teamOnMap}
           pins={pins}
+          drawings={drawings}
           worldSize={worldSize}
-          onClose={() => setSelection(null)}
+          onClose={() => {
+            if (selection?.kind === "pendingPin") {
+              discardPendingPin();
+              return;
+            }
+            if (selection?.kind === "pendingDrawing") {
+              discardPendingDrawing();
+              return;
+            }
+            setSelection(null);
+          }}
           onSelect={setSelection}
           onFollowTeam={(steamId) => {
             setFollowSteamId(steamId);
@@ -350,6 +535,19 @@ export function MapPage() {
           followingSteamId={followSteamId}
           canEditPins={canSwitch}
           onPinUpdated={(pin) => setPins((prev) => prev.map((p) => (p.id === pin.id ? pin : p)))}
+          onPinDeleted={deletePin}
+          onDrawingUpdated={(drawing) =>
+            setDrawings((prev) => prev.map((d) => (d.id === drawing.id ? drawing : d)))
+          }
+          onDrawingDeleted={deleteDrawing}
+          pendingPin={pendingPin}
+          pendingDrawing={pendingDrawing}
+          pendingDrawingColor={pendingDrawingColor}
+          onPendingDrawingColorChange={setPendingDrawingColor}
+          onPendingPinSave={(label, notes) => void savePendingPin(label, notes)}
+          onPendingPinDiscard={discardPendingPin}
+          onPendingDrawingSave={(label, color) => void savePendingDrawing(label, color)}
+          onPendingDrawingDiscard={discardPendingDrawing}
         />
       </div>
     ) : loading ? (
@@ -407,7 +605,7 @@ export function MapPage() {
               checked={showTeamOverlays}
               onChange={() => setShowTeamOverlays((v) => !v)}
             />
-            Team overlays ({drawings.length} drawings, {pins.length} pins)
+            Team annotations ({drawings.length} drawings, {pins.length} pins)
           </label>
           <button type="button" className="btn-secondary" onClick={() => void refreshLive()}>
             Refresh now
@@ -421,7 +619,58 @@ export function MapPage() {
           <li><span className="legend-swatch monument" /> Monument</li>
           <li><span className="legend-swatch events" /> Events (cargo, heli, etc.)</li>
           <li><span className="legend-swatch grid" /> Grid (150m cells)</li>
+          <li><span className="legend-swatch monument" style={{ background: "#eab308" }} /> Team pin</li>
         </ul>
+        {canSwitch && (
+          <p className="muted" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
+            Click <strong>Annotate</strong> on the map toolbar, choose <strong>Draw</strong> or <strong>Pin</strong>, then
+            click or drag on the map. Annotations are shared with everyone on this server.
+          </p>
+        )}
+        {showTeamOverlays && (drawings.length > 0 || pins.length > 0) && (
+          <div className="map-overlay-list">
+            <h3>Team annotations</h3>
+            {pins.length > 0 && (
+              <ul>
+                {pins.map((pin) => (
+                  <li key={pin.id}>
+                    <button type="button" className="map-overlay-list-item" onClick={() => setSelection({ kind: "pin", pinId: pin.id })}>
+                      <strong>{pin.label}</strong>
+                      <span className="muted">pin</span>
+                    </button>
+                    {canSwitch && (
+                      <button type="button" className="btn-secondary map-overlay-delete" onClick={() => void deletePin(pin.id)}>
+                        Delete
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {drawings.length > 0 && (
+              <ul>
+                {drawings.map((stroke) => (
+                  <li key={stroke.id}>
+                    <button
+                      type="button"
+                      className="map-overlay-list-item"
+                      onClick={() => setSelection({ kind: "drawing", drawingId: stroke.id })}
+                    >
+                      <span className="map-drawing-color-preview" style={{ background: stroke.color }} />
+                      <strong>{stroke.label || "Drawing"}</strong>
+                      <span className="muted">by {stroke.createdBy}</span>
+                    </button>
+                    {canSwitch && (
+                      <button type="button" className="btn-secondary map-overlay-delete" onClick={() => void deleteDrawing(stroke.id)}>
+                        Delete
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
       </section>
 
       <MapEventDock
@@ -507,10 +756,6 @@ export function MapPage() {
           <ul className="vending-list">
             {vending.slice(0, 20).map((v, i) => {
               const key = vendingResultKey(v, i);
-              const deal =
-                v.profitMarginPercent != null && v.profitMarginPercent > 0
-                  ? ` · ${v.profitMarginPercent}% below median`
-                  : "";
               return (
                 <li key={key}>
                   <button
@@ -518,9 +763,16 @@ export function MapPage() {
                     className={`vending-list-item${activeVendingKey === key ? " active" : ""}`}
                     onClick={() => focusVendingResult(v, i)}
                   >
-                    <strong>{v.name}</strong> @ {Math.round(v.x)}, {Math.round(v.y)} — {v.itemName}{" "}
-                    ×{v.quantity} for {v.costQuantity.toLocaleString()} {v.costItemName}
-                    {deal}
+                    <div className="vending-list-item-header">
+                      <strong>{v.name}</strong>
+                      <span className="muted">
+                        @ {Math.round(v.x)}, {Math.round(v.y)}
+                      </span>
+                    </div>
+                    <VendingTradeRow order={v} className="vending-list-trade" />
+                    {v.profitMarginPercent != null && v.profitMarginPercent > 0 && (
+                      <span className="vending-list-deal">{v.profitMarginPercent}% below median</span>
+                    )}
                   </button>
                 </li>
               );

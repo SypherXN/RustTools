@@ -17,7 +17,13 @@ declare module "@liamcottle/rustplus.js" {
   export type RustPlusCallback = (message: RustPlusMessage) => void;
 
   export default class RustPlus extends EventEmitter {
-    constructor(ip: string, port: number | string, playerId: string, playerToken: string);
+    constructor(
+      ip: string,
+      port: number | string,
+      playerId: string | number,
+      playerToken: string | number,
+      useFacepunchProxy?: boolean,
+    );
     connect(): void;
     disconnect(): void;
     getInfo(callback: RustPlusCallback): void;
@@ -29,6 +35,17 @@ declare module "@liamcottle/rustplus.js" {
     setEntityValue(entityId: number, value: boolean, callback: RustPlusCallback): void;
     sendTeamMessage(message: string, callback: RustPlusCallback): void;
     promoteToLeader(steamId: string, callback: RustPlusCallback): void;
+    getCamera(cameraId: string): RustPlusCamera;
+  }
+
+  export interface RustPlusCamera extends EventEmitter {
+    subscribe(): Promise<void>;
+    unsubscribe(): Promise<void>;
+    move(buttons: number, mouseDeltaX: number, mouseDeltaY: number): Promise<void>;
+    shoot(): Promise<void>;
+    isAutoTurret(): boolean;
+    on(event: "render", listener: (frame: Buffer) => void): this;
+    on(event: "subscribed", listener: () => void): this;
   }
 }
 

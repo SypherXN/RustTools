@@ -1,8 +1,12 @@
 import { Routes, Route, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { ActiveServerProvider } from "./hooks/useActiveServer";
 import { isDemoMode } from "./lib/demo";
+import { LIVE_CAMERAS_ENABLED } from "./lib/features";
 import { RequirePermission, permissionLabel } from "./components/RequirePermission";
 import { AuditPage } from "./pages/AuditPage";
+import { AutomationsPage } from "./pages/AutomationsPage";
+import { CameraPage } from "./pages/CameraPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DevicesPage } from "./pages/DevicesPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -53,6 +57,8 @@ function Shell() {
         <nav>
           <NavLink to="/" end>Dashboard</NavLink>
           <NavLink to="/devices">Devices</NavLink>
+          <NavLink to="/automations">Automations</NavLink>
+          {LIVE_CAMERAS_ENABLED && <NavLink to="/cameras">Cameras</NavLink>}
           <NavLink to="/storage">Storage</NavLink>
           <NavLink to="/map">Map</NavLink>
           <NavLink to="/team">Team</NavLink>
@@ -76,6 +82,8 @@ function Shell() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/devices" element={<DevicesPage />} />
+          <Route path="/automations" element={<AutomationsPage />} />
+          {LIVE_CAMERAS_ENABLED && <Route path="/cameras" element={<CameraPage />} />}
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/team" element={<TeamPage />} />
@@ -90,7 +98,9 @@ function Shell() {
 export function App() {
   return (
     <AuthProvider>
-      <Shell />
+      <ActiveServerProvider>
+        <Shell />
+      </ActiveServerProvider>
     </AuthProvider>
   );
 }

@@ -14,3 +14,4 @@ export type Database = ReturnType<typeof createDatabase>;
 
 export * from "./schema.js";
 export { resolveDatabaseUrl, resolveDatabasePath } from "./paths.js";
+export { runMigrations } from "./run-migrations.js";

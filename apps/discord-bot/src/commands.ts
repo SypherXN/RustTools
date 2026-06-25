@@ -8,6 +8,9 @@ const channelPurposeChoices = DISCORD_CHANNEL_PURPOSES.map((purpose) => ({
 
 export const commands = [
   new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("List RustTools commands for Discord and in-game chat"),
+  new SlashCommandBuilder()
     .setName("status")
     .setDescription("Check RustTools API and Rust+ connection status"),
   new SlashCommandBuilder()

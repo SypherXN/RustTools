@@ -277,6 +277,7 @@ export async function registerServerRoutes(
     const body = request.body as {
       smartAlarm?: Partial<ServerNotificationSettings["smartAlarm"]>;
       deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
+      tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
       teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
       eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
     };

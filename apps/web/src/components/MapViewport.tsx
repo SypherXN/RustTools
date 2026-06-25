@@ -24,6 +24,9 @@ interface MapViewportProps {
   /** Continuous camera lock — recenters when coordinates change. */
   trackTarget?: MapTrackTarget | null;
   onUserPan?: () => void;
+  /** When true, drag-to-pan is disabled (e.g. while annotating the map). */
+  disablePan?: boolean;
+  toolbarExtra?: ReactNode;
   children: ReactNode;
 }
 
@@ -42,19 +45,23 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-const MIN_USER_SCALE = 0.35;
+const MIN_USER_SCALE = 1;
 const MAX_USER_SCALE = 12;
-const MIN_TOTAL_SCALE = 0.05;
 const FOCUS_USER_SCALE = 3;
 
-function computeFitScale(viewportWidth: number, mapWidth: number): number | null {
-  if (viewportWidth < 1 || mapWidth < 1) return null;
-  const scale = viewportWidth / mapWidth;
+function computeFitScale(
+  viewportWidth: number,
+  viewportHeight: number,
+  mapWidth: number,
+  mapHeight: number,
+): number | null {
+  if (viewportWidth < 1 || viewportHeight < 1 || mapWidth < 1 || mapHeight < 1) return null;
+  const scale = Math.min(viewportWidth / mapWidth, viewportHeight / mapHeight);
   return Number.isFinite(scale) && scale > 0 ? scale : null;
 }
 
 function totalScale(view: ViewState): number {
-  return Math.max(MIN_TOTAL_SCALE, view.fitScale * view.userScale);
+  return view.fitScale * view.userScale;
 }
 
 function constrainPan(pan: Pan, scale: number, width: number, height: number, vw: number, vh: number): Pan {
@@ -69,9 +76,14 @@ function constrainPan(pan: Pan, scale: number, width: number, height: number, vw
   return { x, y };
 }
 
-function centerPan(fitScale: number, userScale: number, height: number, vh: number): Pan {
-  const scaledH = height * fitScale * userScale;
-  return { x: 0, y: (vh - scaledH) / 2 };
+function centerPan(fitScale: number, userScale: number, width: number, height: number, vw: number, vh: number): Pan {
+  const scale = fitScale * userScale;
+  const mapW = width * scale;
+  const mapH = height * scale;
+  return {
+    x: mapW <= vw ? (vw - mapW) / 2 : 0,
+    y: mapH <= vh ? (vh - mapH) / 2 : 0,
+  };
 }
 
 const DEFAULT_VIEW: ViewState = { fitScale: 1, userScale: 1, pan: { x: 0, y: 0 } };
@@ -85,6 +97,8 @@ export function MapViewport({
   focusTarget,
   trackTarget,
   onUserPan,
+  disablePan = false,
+  toolbarExtra,
   children,
 }: MapViewportProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -140,11 +154,11 @@ export function MapViewport({
     const dims = readViewport();
     if (!dims) return;
 
-    const nextFitScale = computeFitScale(dims.vw, width);
+    const nextFitScale = computeFitScale(dims.vw, dims.vh, width, height);
     if (nextFitScale == null) return;
 
     const pan = constrainPan(
-      centerPan(nextFitScale, 1, height, dims.vh),
+      centerPan(nextFitScale, 1, width, height, dims.vw, dims.vh),
       nextFitScale,
       width,
       height,
@@ -165,7 +179,7 @@ export function MapViewport({
     if (Math.abs(dims.vw - lastW) < 1 && Math.abs(dims.vh - lastH) < 1) return;
     viewportSizeRef.current = { w: dims.vw, h: dims.vh };
 
-    const nextFitScale = computeFitScale(dims.vw, width);
+    const nextFitScale = computeFitScale(dims.vw, dims.vh, width, height);
     if (nextFitScale == null) return;
 
     applyView((prev) => ({ ...prev, fitScale: nextFitScale }));
@@ -267,7 +281,7 @@ export function MapViewport({
     const { x: px, y: py } = worldToMapPixel(focusTarget.worldX, focusTarget.worldY, transform);
     const fitScale = viewRef.current.fitScale;
     const userScale = clamp(FOCUS_USER_SCALE, MIN_USER_SCALE, MAX_USER_SCALE);
-    const scale = Math.max(MIN_TOTAL_SCALE, fitScale * userScale);
+    const scale = fitScale * userScale;
     const pan = constrainPan(
       { x: dims.vw / 2 - px * scale, y: dims.vh / 2 - py * scale },
       scale,
@@ -303,6 +317,7 @@ export function MapViewport({
   }, [trackTarget, focusTarget, readViewport, transform, width, height]);
 
   const onPointerDown = (e: React.PointerEvent) => {
+    if (disablePan) return;
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest(".map-marker-hit, .map-marker")) return;
@@ -348,14 +363,24 @@ export function MapViewport({
   const panX = Number.isFinite(view.pan.x) ? view.pan.x : 0;
   const panY = Number.isFinite(view.pan.y) ? view.pan.y : 0;
   const zoomPercent = Math.round(view.userScale * 100);
+  const atMinZoom = view.userScale <= MIN_USER_SCALE;
   const showImage = demo || Boolean(imageSrc);
 
   return (
     <div className="map-viewport-wrap">
       <div className="map-viewport-toolbar">
-        <span className="muted map-viewport-hint">Scroll to zoom · Drag to pan · Click markers for details</span>
+        <span className="muted map-viewport-hint">
+          {disablePan ? "Annotate mode — draw or place pins" : "Scroll to zoom · Drag to pan · Click markers for details"}
+        </span>
         <div className="map-viewport-controls">
-          <button type="button" className="btn-secondary" onClick={() => zoomBy(0.8)} aria-label="Zoom out">
+          {toolbarExtra}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => zoomBy(0.8)}
+            disabled={atMinZoom}
+            aria-label="Zoom out"
+          >
             −
           </button>
           <span className="map-zoom-label">{zoomPercent}%</span>

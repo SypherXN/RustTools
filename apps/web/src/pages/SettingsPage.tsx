@@ -4,10 +4,12 @@ import { apiFetch } from "../lib/api";
 import { ServerSwitcher } from "../components/ServerSwitcher";
 import type { NotificationSettingsResponse } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
+import { useActiveServer } from "../hooks/useActiveServer";
 
 export function SettingsPage() {
   const { user, refresh } = useAuth();
   const canAdmin = useCan("admin");
+  const { epoch } = useActiveServer();
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkMessage, setLinkMessage] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export function SettingsPage() {
     }>("/servers/active/info")
       .then((d) => setServerInfo(d))
       .catch(() => setServerInfo(null));
-  }, []);
+  }, [epoch]);
 
   useEffect(() => {
     setNotificationsLoading(true);
@@ -38,11 +40,12 @@ export function SettingsPage() {
         setNotificationsError(err instanceof Error ? err.message : "Failed to load notification settings");
       })
       .finally(() => setNotificationsLoading(false));
-  }, []);
+  }, [epoch]);
 
   const saveNotifications = async (patch: {
     smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
     deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
+    tcDecay?: Partial<NotificationSettingsResponse["settings"]["tcDecay"]>;
     teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
     eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
   }) => {
@@ -64,7 +67,7 @@ export function SettingsPage() {
     }
   };
 
-  const updateSmartAlarm = (key: "discord" | "teamChat", value: boolean) => {
+  const updateSmartAlarm = (key: "discord" | "teamChat" | "pingEveryone", value: boolean) => {
     if (!notifications) return;
     const next = {
       ...notifications,
@@ -75,6 +78,22 @@ export function SettingsPage() {
     };
     setNotifications(next);
     void saveNotifications({ smartAlarm: { [key]: value } });
+  };
+
+  const updateTcDecay = (
+    key: keyof NotificationSettingsResponse["settings"]["tcDecay"],
+    value: boolean | number,
+  ) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        tcDecay: { ...notifications.settings.tcDecay, [key]: value },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ tcDecay: { [key]: value } });
   };
 
   const updateDeepSea = (key: "discord" | "teamChat", value: boolean) => {
@@ -130,6 +149,7 @@ export function SettingsPage() {
       const res = await apiFetch<{ ok: boolean; message?: string }>("/auth/link-rust", {
         method: "POST",
       });
+      await refresh();
       await refresh();
       setLinkMessage(res.message ?? "Ready for in-game pairing.");
     } catch (err) {
@@ -235,9 +255,29 @@ export function SettingsPage() {
         {!canAdmin ? (
           <p className="muted">Only admins can start or manage Rust+ account linking.</p>
         ) : user?.linkedRust ? (
-          <p>
-            Steam ID linked: <code>{user.user.steamId}</code>
-          </p>
+          <>
+            <p>
+              Steam ID linked: <code>{user.user.steamId}</code>
+            </p>
+            {notifications && (
+              <p>
+                Rust+ WebSocket:{" "}
+                <span className={notifications.capabilities.rustPlusConnected ? "badge badge-ok" : "badge"}>
+                  {notifications.capabilities.rustPlusConnected ? "Connected" : "Disconnected"}
+                </span>
+              </p>
+            )}
+            {linkError && <div className="alert alert-error">{linkError}</div>}
+            {linkMessage && <div className="alert">{linkMessage}</div>}
+            <p className="muted">
+              {user.pendingRustLink
+                ? "Waiting for in-game pairing… open Rust+ and Pair with Server now."
+                : "Re-pair in-game to refresh your server token or link a different server."}
+            </p>
+            <button type="button" disabled={linking || user.pendingRustLink} onClick={() => void linkRust()}>
+              {linking ? "Starting…" : user.pendingRustLink ? "Waiting for pairing…" : "Re-pair Server"}
+            </button>
+          </>
         ) : (
           <>
             {linkError && <div className="alert alert-error">{linkError}</div>}
@@ -293,11 +333,92 @@ export function SettingsPage() {
               />
               <span>Send to in-game team chat</span>
             </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.smartAlarm.pingEveryone}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateSmartAlarm("pingEveryone", e.target.checked)}
+              />
+              <span>Ping @everyone on Discord (global default; per-alarm override on Devices)</span>
+            </label>
             {notifications.settings.smartAlarm.teamChat && !notifications.capabilities.rustPlusConnected && (
               <p className="alert alert-error">
                 Team chat is enabled but Rust+ is not connected to the active server.
               </p>
             )}
+          </div>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>TC Decay Alerts</h2>
+        <p className="muted">
+          Proactive tool cupboard upkeep warnings to Discord and team chat when decay time drops
+          below your thresholds.
+        </p>
+        {notifications && (
+          <div className="form-stack">
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.tcDecay.discord}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("discord", e.target.checked)}
+              />
+              <span>Send to Discord</span>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.tcDecay.teamChat}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("teamChat", e.target.checked)}
+              />
+              <span>Send to in-game team chat</span>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.tcDecay.pingEveryone}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("pingEveryone", e.target.checked)}
+              />
+              <span>Ping @everyone on Discord</span>
+            </label>
+            <label>
+              Warning threshold (hours)
+              <input
+                type="number"
+                min={1}
+                max={168}
+                value={notifications.settings.tcDecay.warningHours}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("warningHours", Number(e.target.value) || 24)}
+              />
+            </label>
+            <label>
+              Critical threshold (hours)
+              <input
+                type="number"
+                min={1}
+                max={48}
+                value={notifications.settings.tcDecay.criticalHours}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("criticalHours", Number(e.target.value) || 6)}
+              />
+            </label>
+            <label>
+              Poll interval (minutes)
+              <input
+                type="number"
+                min={5}
+                max={120}
+                value={notifications.settings.tcDecay.pollIntervalMinutes}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateTcDecay("pollIntervalMinutes", Number(e.target.value) || 15)}
+              />
+            </label>
           </div>
         )}
       </section>
@@ -490,7 +611,7 @@ export function SettingsPage() {
             Run <code>npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json</code>
           </li>
           <li>Restart the API so FCM listener picks up the config</li>
-          <li>Click <strong>Link Rust+ Account</strong> above</li>
+          <li>Click <strong>Link Rust+ Account</strong> or <strong>Re-pair Server</strong> above</li>
           <li>In Rust, open Rust+ menu → Pair with Server</li>
           <li>Pair smart devices with the wire tool</li>
         </ol>

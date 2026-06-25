@@ -21,6 +21,7 @@ function parseDrawingRow(row: typeof mapDrawings.$inferSelect): MapDrawingStroke
   return {
     id: row.id,
     tool: row.tool as MapDrawingStroke["tool"],
+    label: row.label ?? "",
     color: row.color,
     width: row.width,
     points: JSON.parse(row.pointsJson) as MapDrawingStroke["points"],
@@ -81,6 +82,7 @@ export async function registerMapOverlayRoutes(
 
     const body = request.body as {
       tool?: MapDrawingStroke["tool"];
+      label?: string;
       color?: string;
       width?: number;
       points?: MapDrawingStroke["points"];
@@ -90,12 +92,14 @@ export async function registerMapOverlayRoutes(
       return reply.status(400).send({ error: "tool, color, width, and points are required" });
     }
 
+    const label = body.label?.trim() ?? "";
     const id = generateId();
     const now = new Date();
     await deps.db.insert(mapDrawings).values({
       id,
       serverId: active.id,
       tool: body.tool,
+      label,
       color: body.color,
       width: body.width,
       pointsJson: JSON.stringify(body.points),
@@ -107,12 +111,37 @@ export async function registerMapOverlayRoutes(
       id,
       serverId: active.id,
       tool: body.tool,
+      label,
       color: body.color,
       width: body.width,
       pointsJson: JSON.stringify(body.points),
       createdBy: user.discordUsername,
       createdAt: now,
     });
+  });
+
+  app.patch("/servers/active/map/drawings/:id", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "switch");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const body = request.body as { label?: string; color?: string };
+
+    const [existing] = await deps.db.select().from(mapDrawings).where(eq(mapDrawings.id, id)).limit(1);
+    if (!existing) {
+      return reply.status(404).send({ error: "Drawing not found" });
+    }
+
+    await deps.db
+      .update(mapDrawings)
+      .set({
+        ...(body.label != null ? { label: body.label.trim() } : {}),
+        ...(body.color != null ? { color: body.color } : {}),
+      })
+      .where(eq(mapDrawings.id, id));
+
+    const [row] = await deps.db.select().from(mapDrawings).where(eq(mapDrawings.id, id)).limit(1);
+    return parseDrawingRow(row!);
   });
 
   app.delete("/servers/active/map/drawings/:id", async (request, reply) => {

@@ -36,6 +36,20 @@
       "when": 1740000006000,
       "tag": "0006_drop_map_file_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1740000007000,
+      "tag": "0007_smart_devices_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1740000009000,
+      "tag": "0009_automation_rule_templates",
+      "breakpoints": true
     }
   ]
 }
