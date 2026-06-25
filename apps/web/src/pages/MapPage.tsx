@@ -18,24 +18,11 @@ interface MapData {
   markers: MapMarkerPoint[];
 }
 
-interface VendingResult {
-  markerId?: string;
-  name: string;
-  x: number;
-  y: number;
-  item: string;
-  itemName: string;
-  itemShortname: string;
-  quantity: number;
-  costItem: string;
-  costItemName: string;
-  costItemShortname: string;
-  costQuantity: number;
-}
+import type { VendingSearchResult } from "@rusttools/shared";
 
 function resolveVendingMarker(
   markers: MapMarkerPoint[],
-  result: VendingResult,
+  result: VendingSearchResult,
 ): MapMarkerPoint | undefined {
   if (result.markerId) {
     const byId = markers.find((m) => m.id === result.markerId);
@@ -50,7 +37,7 @@ function resolveVendingMarker(
   );
 }
 
-function vendingResultKey(result: VendingResult, index: number): string {
+function vendingResultKey(result: VendingSearchResult, index: number): string {
   return result.markerId
     ? `${result.markerId}-${result.item}`
     : `${result.x}-${result.y}-${result.item}-${index}`;
@@ -76,7 +63,12 @@ export function MapPage() {
   );
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
   const [vendingQ, setVendingQ] = useState("");
-  const [vending, setVending] = useState<VendingResult[]>([]);
+  const [vendingCurrency, setVendingCurrency] = useState("");
+  const [vendingMinPrice, setVendingMinPrice] = useState("");
+  const [vendingMaxPrice, setVendingMaxPrice] = useState("");
+  const [vendingMinMargin, setVendingMinMargin] = useState("");
+  const [vendingSort, setVendingSort] = useState<"" | "price" | "margin">("");
+  const [vending, setVending] = useState<VendingSearchResult[]>([]);
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [focusTarget, setFocusTarget] = useState<MapFocusTarget | null>(null);
   const [activeVendingKey, setActiveVendingKey] = useState<string | null>(null);
@@ -139,16 +131,33 @@ export function MapPage() {
   });
 
   const searchVending = async () => {
-    if (!vendingQ.trim()) return;
-    const res = await apiFetch<{ results: VendingResult[] }>(
-      `/vending/search?q=${encodeURIComponent(vendingQ)}`,
+    const params = new URLSearchParams();
+    if (vendingQ.trim()) params.set("q", vendingQ.trim());
+    if (vendingCurrency.trim()) params.set("currency", vendingCurrency.trim());
+    if (vendingMinPrice.trim()) params.set("minPrice", vendingMinPrice.trim());
+    if (vendingMaxPrice.trim()) params.set("maxPrice", vendingMaxPrice.trim());
+    if (vendingMinMargin.trim()) params.set("minProfitMargin", vendingMinMargin.trim());
+    if (vendingSort) params.set("sort", vendingSort);
+
+    if (
+      !vendingQ.trim() &&
+      !vendingCurrency.trim() &&
+      !vendingMinPrice.trim() &&
+      !vendingMaxPrice.trim() &&
+      !vendingMinMargin.trim()
+    ) {
+      return;
+    }
+
+    const res = await apiFetch<{ results: VendingSearchResult[] }>(
+      `/vending/search?${params.toString()}`,
     );
     setVending(res.results);
     setActiveVendingKey(null);
     setLayers((prev) => ({ ...prev, vending: true }));
   };
 
-  const focusVendingResult = (result: VendingResult, index: number) => {
+  const focusVendingResult = (result: VendingSearchResult, index: number) => {
     const markersOnMap = markers.length > 0 ? markers : isDemoMode() ? demoMapMarkers : [];
     const marker = resolveVendingMarker(markersOnMap, result);
     if (!marker) return;
@@ -306,21 +315,85 @@ export function MapPage() {
 
       <section className="card" style={{ marginBottom: "1rem" }}>
         <h2>Vending Search</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Filter by item or shop name, currency, price per item, and deals below median price.
+        </p>
         <div className="search-row">
           <input
             value={vendingQ}
             onChange={(e) => setVendingQ(e.target.value)}
-            placeholder="Search items or shops..."
+            placeholder="Item or shop name..."
             onKeyDown={(e) => e.key === "Enter" && void searchVending()}
           />
           <button type="button" onClick={() => void searchVending()}>
             Search
           </button>
         </div>
+        <div className="vending-filters">
+          <label>
+            Currency
+            <input
+              value={vendingCurrency}
+              onChange={(e) => setVendingCurrency(e.target.value)}
+              placeholder="e.g. scrap, sulfur"
+              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
+            />
+          </label>
+          <label>
+            Min price
+            <input
+              type="number"
+              min={0}
+              value={vendingMinPrice}
+              onChange={(e) => setVendingMinPrice(e.target.value)}
+              placeholder="0"
+              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
+            />
+          </label>
+          <label>
+            Max price
+            <input
+              type="number"
+              min={0}
+              value={vendingMaxPrice}
+              onChange={(e) => setVendingMaxPrice(e.target.value)}
+              placeholder="Any"
+              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
+            />
+          </label>
+          <label>
+            Min deal %
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={vendingMinMargin}
+              onChange={(e) => setVendingMinMargin(e.target.value)}
+              placeholder="Below median"
+              title="Minimum percent below median price for this item"
+              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
+            />
+          </label>
+          <label>
+            Sort
+            <select
+              value={vendingSort}
+              onChange={(e) => setVendingSort(e.target.value as "" | "price" | "margin")}
+            >
+              <option value="">Default</option>
+              <option value="price">Price (low → high)</option>
+              <option value="margin">Best deal first</option>
+            </select>
+          </label>
+        </div>
         {vending.length > 0 && (
           <ul className="vending-list">
             {vending.slice(0, 20).map((v, i) => {
               const key = vendingResultKey(v, i);
+              const deal =
+                v.profitMarginPercent != null && v.profitMarginPercent > 0
+                  ? ` · ${v.profitMarginPercent}% below median`
+                  : "";
               return (
                 <li key={key}>
                   <button
@@ -329,7 +402,8 @@ export function MapPage() {
                     onClick={() => focusVendingResult(v, i)}
                   >
                     <strong>{v.name}</strong> @ {Math.round(v.x)}, {Math.round(v.y)} — {v.itemName}{" "}
-                    x{v.quantity} for {v.costQuantity} {v.costItemName}
+                    ×{v.quantity} for {v.costQuantity.toLocaleString()} {v.costItemName}
+                    {deal}
                   </button>
                 </li>
               );

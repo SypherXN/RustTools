@@ -132,7 +132,7 @@ export function StoragePage() {
     <div>
       <header className="page-header">
         <h1>Storage</h1>
-        <p>Storage monitor contents, TC upkeep, and recycle estimates.</p>
+        <p>Storage monitor contents, TC upkeep, and recycle estimates. In team chat: <code>!upkeepdetail</code>.</p>
       </header>
 
       {alert && <div className="alert">{alert}</div>}

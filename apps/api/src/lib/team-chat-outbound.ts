@@ -13,3 +13,21 @@ export async function sendTeamChatIfUnmuted(
   await rustPlus.sendTeamMessage(message);
   return true;
 }
+
+export async function sendTeamChatCommandResult(
+  db: Database,
+  rustPlus: RustPlusManager,
+  serverId: string,
+  result: { reply?: string; replies?: string[] },
+  force = false,
+): Promise<void> {
+  const messages = result.replies?.length
+    ? result.replies
+    : result.reply
+      ? [result.reply]
+      : [];
+
+  for (const message of messages) {
+    await sendTeamChatIfUnmuted(db, rustPlus, serverId, message, force);
+  }
+}

@@ -49,6 +49,7 @@ export function isTeamChatBotCommand(message: string): boolean {
     /^!online\b/i.test(text) ||
     /^!offline\b/i.test(text) ||
     /^!afk\b/i.test(text) ||
-    /^!alive\b/i.test(text)
+    /^!alive\b/i.test(text) ||
+    /^!upkeepdetail\b/i.test(text)
   );
 }

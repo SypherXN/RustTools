@@ -17,3 +17,5 @@ export * from "./team-chat-control.js";
 export * from "./notification-settings.js";
 export * from "./discord-channels.js";
 export * from "./deep-sea.js";
+export * from "./upkeep-detail.js";
+export * from "./vending.js";

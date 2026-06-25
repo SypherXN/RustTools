@@ -12,6 +12,7 @@ import {
   FULL_USER_PERMISSIONS,
   parseStorageEntityInfo,
   resolveStorageMonitorIcon,
+  searchVendingListings,
   STORAGE_CONTAINER_ICON_CATALOG,
 } from "@rusttools/shared";
 
@@ -581,16 +582,37 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path.startsWith("/vending/search")) {
-    const q = new URLSearchParams(path.split("?")[1] ?? "").get("q")?.toLowerCase() ?? "";
-    const results = demoVendingResults.filter(
-      (v) =>
-        v.name.toLowerCase().includes(q) ||
-        v.itemName.toLowerCase().includes(q) ||
-        v.itemShortname.toLowerCase().includes(q) ||
-        v.costItemName.toLowerCase().includes(q) ||
-        v.costItemShortname.toLowerCase().includes(q),
-    );
-    return { results: results.length ? results : demoVendingResults } as T;
+    const params = new URLSearchParams(path.split("?")[1] ?? "");
+    const q = params.get("q") ?? undefined;
+    const filters = {
+      currency: params.get("currency") ?? undefined,
+      minPrice: params.get("minPrice") ? Number(params.get("minPrice")) : undefined,
+      maxPrice: params.get("maxPrice") ? Number(params.get("maxPrice")) : undefined,
+      minProfitMargin: params.get("minProfitMargin")
+        ? Number(params.get("minProfitMargin"))
+        : undefined,
+    };
+    const sort = params.get("sort");
+    const sortMode = sort === "price" || sort === "margin" ? sort : undefined;
+    const markerPayload = {
+      markers: demoMapMarkers.map((marker) => ({
+        id: marker.id,
+        type: marker.type,
+        name: marker.name,
+        x: marker.x,
+        y: marker.y,
+        sellOrders: marker.sellOrders?.map((order) => ({
+          itemId: Number(order.item),
+          currencyId: Number(order.costItem),
+          costPerItem: order.costQuantity,
+          amountInStock: order.quantity,
+        })),
+      })),
+    };
+    const results = searchVendingListings(markerPayload, q, filters, sortMode);
+    return {
+      results: results.length ? results : searchVendingListings(markerPayload, "scrap"),
+    } as T;
   }
 
   if (path === "/servers/active/chat" && method === "POST") {

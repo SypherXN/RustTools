@@ -287,7 +287,7 @@ async function main() {
     if (!text.startsWith("!")) return;
 
     try {
-      const result = await internalPost<{ reply: string | null }>(
+      const result = await internalPost<{ replies: string[] }>(
         "/internal/commands-channel/execute",
         message.author.id,
         {
@@ -297,8 +297,8 @@ async function main() {
         },
       );
 
-      if (result.reply) {
-        await message.reply(result.reply);
+      if (result.replies?.length) {
+        await message.reply(result.replies.join("\n"));
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Command failed";

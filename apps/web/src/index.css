@@ -1049,6 +1049,26 @@ button:hover,
   gap: 0.35rem;
 }
 
+.vending-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.vending-filters label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--muted, #888);
+}
+
+.vending-filters input,
+.vending-filters select {
+  width: 100%;
+  min-width: 0;
+}
+
 .vending-list-item {
   display: block;
   width: 100%;

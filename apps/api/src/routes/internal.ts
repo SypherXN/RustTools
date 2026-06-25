@@ -321,6 +321,12 @@ export async function registerInternalRoutes(
       message: message.trim(),
     });
 
-    return { reply: result?.reply ?? null };
+    const replies = result?.replies?.length
+      ? result.replies
+      : result?.reply
+        ? [result.reply]
+        : [];
+
+    return { replies };
   });
 }

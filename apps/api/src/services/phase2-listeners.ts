@@ -8,7 +8,7 @@ import { processTeamRoster, enrichTeamApiResponse } from "../lib/team-tracker.js
 import { handleTeamRosterEvents } from "../lib/team-event-store.js";
 import { recordTeamChatMessage } from "../lib/team-chat-buffer.js";
 import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
-import { sendTeamChatIfUnmuted } from "../lib/team-chat-outbound.js";
+import { sendTeamChatCommandResult, sendTeamChatIfUnmuted } from "../lib/team-chat-outbound.js";
 import {
   parseMuteTeamChatCommand,
   parseUnmuteTeamChatCommand,
@@ -226,11 +226,11 @@ export function startPhase2Listeners(
         senderName: event.name,
         message: event.message,
       });
-      if (result?.reply) {
+      if (result) {
         const force =
           parseMuteTeamChatCommand(event.message) ||
           parseUnmuteTeamChatCommand(event.message);
-        await sendTeamChatIfUnmuted(db, rustPlus, event.serverId, result.reply, force);
+        await sendTeamChatCommandResult(db, rustPlus, event.serverId, result, force);
       }
     } catch (err) {
       console.error("[TeamChat] Failed to process command:", err);

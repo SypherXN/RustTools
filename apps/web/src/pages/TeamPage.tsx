@@ -225,7 +225,8 @@ export function TeamPage() {
           <p className="muted" style={{ marginTop: 0 }}>
             Type <code>!deepsea</code> or <code>!ds</code> for Deep Sea timer status. Roster commands:{" "}
             <code>!online</code>, <code>!offline</code>, <code>!afk</code>, <code>!alive</code>. Team members can
-            type <code>!leader</code> when RustTools is paired with the current leader. Admins:{" "}
+            type <code>!leader</code> when RustTools is paired with the current leader. TC upkeep report:{" "}
+            <code>!upkeepdetail</code>. Admins:{" "}
             <code>!mute</code> / <code>!unmute</code>. Send a Discord DM with{" "}
             <code>!send username message</code>.
           </p>

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import { buildMapTransform } from "@rusttools/shared";
+import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { parseTeamRoster, getWorldSize } from "../lib/rust-data.js";
 import { applyTeamTracking } from "../lib/team-tracker.js";
@@ -90,14 +90,52 @@ export async function registerServerRoutes(
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
-    const { q } = request.query as { q?: string };
-    if (!q?.trim()) {
-      return reply.status(400).send({ error: "Query parameter q is required" });
+    const {
+      q,
+      currency,
+      minPrice,
+      maxPrice,
+      minProfitMargin,
+      sort,
+    } = request.query as {
+      q?: string;
+      currency?: string;
+      minPrice?: string;
+      maxPrice?: string;
+      minProfitMargin?: string;
+      sort?: string;
+    };
+
+    const filters = {
+      currency: currency?.trim() || undefined,
+      minPrice: minPrice != null && minPrice !== "" ? Number(minPrice) : undefined,
+      maxPrice: maxPrice != null && maxPrice !== "" ? Number(maxPrice) : undefined,
+      minProfitMargin:
+        minProfitMargin != null && minProfitMargin !== ""
+          ? Number(minProfitMargin)
+          : undefined,
+    };
+
+    if (
+      Number.isNaN(filters.minPrice) ||
+      Number.isNaN(filters.maxPrice) ||
+      Number.isNaN(filters.minProfitMargin)
+    ) {
+      return reply.status(400).send({ error: "Price and profit margin filters must be numbers" });
+    }
+
+    const sortMode =
+      sort === "price" || sort === "margin" ? sort : undefined;
+
+    if (!hasVendingSearchInput(q, filters)) {
+      return reply.status(400).send({
+        error: "Provide a search query (q) and/or filters (currency, minPrice, maxPrice, minProfitMargin)",
+      });
     }
 
     try {
       const markers = await deps.rustPlus.getMapMarkers();
-      return { results: searchVending(markers, q.trim()) };
+      return { results: searchVending(markers, q?.trim(), filters, sortMode) };
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",

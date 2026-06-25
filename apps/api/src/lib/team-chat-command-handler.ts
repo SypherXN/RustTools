@@ -9,6 +9,7 @@ import {
   parseRosterTeamChatCommand,
   parseSendTeamChatCommand,
   parseUnmuteTeamChatCommand,
+  parseUpkeepDetailTeamChatCommand,
 } from "@rusttools/shared";
 import { fetchDeepSeaStatus } from "./deep-sea.js";
 import { sendDiscordDirectMessage } from "./discord-dm.js";
@@ -20,6 +21,7 @@ import {
 } from "./server-notification-settings.js";
 import { hasSteamAdminCapability } from "./steam-admin.js";
 import { processTeamRoster } from "./team-tracker.js";
+import { buildUpkeepDetailTeamChatReplies } from "./tc-upkeep-report.js";
 
 export interface TeamChatCommandContext {
   serverId: string;
@@ -29,7 +31,9 @@ export interface TeamChatCommandContext {
 }
 
 export interface TeamChatCommandResult {
-  reply: string;
+  reply?: string;
+  /** When set, each string is sent as its own team chat message (order preserved). */
+  replies?: string[];
 }
 
 const lastCommandAtMs = new Map<string, number>();
@@ -115,6 +119,11 @@ export async function executeTeamChatCommand(
   if (parseDeepSeaTeamChatCommand(message)) {
     const status = await fetchDeepSeaStatus(db, rustPlus, ctx.serverId);
     return { reply: formatDeepSeaTeamChatMessage(status) };
+  }
+
+  if (parseUpkeepDetailTeamChatCommand(message)) {
+    const replies = await buildUpkeepDetailTeamChatReplies(db, rustPlus, ctx.serverId);
+    return { replies };
   }
 
   const rosterCommand = parseRosterTeamChatCommand(message);
