@@ -5,6 +5,9 @@ import {
   emptyWorldEventStats,
   findOilRigMonuments,
   formatWorldEventAnnouncement,
+  legacyAutomationsFromEnv,
+  isBradleyMarker,
+  isConvoyMarker,
   isTravelingVendorMarker,
   MAP_MARKER_TYPE,
   markerEntityLabel,
@@ -47,6 +50,8 @@ interface ServerRuntime {
   heli: ActiveEntity | null;
   chinook: ActiveEntity | null;
   vendor: ActiveEntity | null;
+  bradley: ActiveEntity | null;
+  convoy: ActiveEntity | null;
   oil: Record<OilRigKind, OilRigRuntime>;
   stats: WorldEventStats;
   spawnAnnounced: Set<string>;
@@ -72,6 +77,8 @@ function emptyRuntime(persisted?: {
     heli: null,
     chinook: null,
     vendor: null,
+    bradley: null,
+    convoy: null,
     oil: {
       small: emptyOilRigRuntime(persisted?.oilSmallLastTriggeredAt ?? null),
       large: emptyOilRigRuntime(persisted?.oilLargeLastTriggeredAt ?? null),
@@ -128,6 +135,14 @@ function pickMarkers(
 
 function pickVendorMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
   return markers.filter((marker) => isTravelingVendorMarker(marker));
+}
+
+function pickBradleyMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
+  return markers.filter((marker) => isBradleyMarker(marker));
+}
+
+function pickConvoyMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
+  return markers.filter((marker) => isConvoyMarker(marker));
 }
 
 export class WorldEventTracker {
@@ -204,6 +219,16 @@ export class WorldEventTracker {
         runtime.stats.vendorLastDespawnAt,
         runtime.stats.vendorLastSpawnAt,
       ),
+      bradley: withLastSeen(
+        buildActive(runtime.bradley),
+        runtime.stats.bradleyLastDespawnAt,
+        runtime.stats.bradleyLastSpawnAt,
+      ),
+      convoy: withLastSeen(
+        buildActive(runtime.convoy),
+        runtime.stats.convoyLastDespawnAt,
+        runtime.stats.convoyLastSpawnAt,
+      ),
       oilRigs: {
         small: buildOilRigSnapshot(runtime.oil.small, timers, nowSec),
         large: buildOilRigSnapshot(runtime.oil.large, timers, nowSec),
@@ -253,7 +278,14 @@ export class WorldEventTracker {
             announcements.push({
               kind: "spawn",
               entity: key,
-              label: key === "vendor" ? "Traveling Vendor" : markerEntityLabel(type),
+              label:
+                key === "vendor"
+                  ? "Traveling Vendor"
+                  : key === "bradley"
+                    ? "Bradley APC"
+                    : key === "convoy"
+                      ? "Convoy"
+                      : markerEntityLabel(type),
               x: marker.x,
               y: marker.y,
             });
@@ -331,6 +363,22 @@ export class WorldEventTracker {
       "vendorLastSpawnAt",
       "vendorLastDespawnAt",
     );
+    runtime.bradley = processMobile(
+      "bradley",
+      MAP_MARKER_TYPE.GENERIC,
+      runtime.bradley,
+      pickBradleyMarkers(markers),
+      "bradleyLastSpawnAt",
+      "bradleyLastDespawnAt",
+    );
+    runtime.convoy = processMobile(
+      "convoy",
+      MAP_MARKER_TYPE.GENERIC,
+      runtime.convoy,
+      pickConvoyMarkers(markers),
+      "convoyLastSpawnAt",
+      "convoyLastDespawnAt",
+    );
 
     for (const kind of ["small", "large"] as const) {
       const rigState = runtime.oil[kind];
@@ -396,9 +444,11 @@ export const worldEventTracker = new WorldEventTracker();
 export function formatAnnouncementsForChat(
   announcements: WorldEventAnnouncement[],
   worldSize: number,
+  prefix?: string,
 ): string[] {
-  const prefix = process.env.AUTOMATION_EVENT_TEAM_CHAT_PREFIX?.trim() || "RustTools";
+  const resolvedPrefix =
+    prefix?.trim() || legacyAutomationsFromEnv().mapEvents.prefix;
   return announcements.map((announcement) =>
-    formatWorldEventAnnouncement(announcement, worldSize, prefix),
+    formatWorldEventAnnouncement(announcement, worldSize, resolvedPrefix),
   );
 }

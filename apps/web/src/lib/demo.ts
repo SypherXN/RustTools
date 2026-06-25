@@ -8,6 +8,7 @@ import type {
 } from "@rusttools/shared";
 import {
   aggregateStorageItemSearch,
+  mergeNotificationSettings,
   DEFAULT_AUTOMATION_BASE_SETTINGS,
   DEFAULT_SERVER_NOTIFICATION_SETTINGS,
   FULL_USER_PERMISSIONS,
@@ -57,12 +58,7 @@ export const demoServers = [
 ];
 
 let demoNotificationSettings: NotificationSettingsResponse = {
-  settings: {
-    smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
-    deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
-    teamChatBot: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.teamChatBot },
-    eventTimers: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.eventTimers },
-  },
+  settings: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS },
   capabilities: {
     discordConfigured: true,
     rustPlusConnected: true,
@@ -124,6 +120,24 @@ const demoWorldEventsStatus = {
     egressInSec: null,
     trail: [],
   },
+  bradley: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: Math.floor(Date.now() / 1000) - 5400,
+    egressInSec: null,
+    trail: [],
+  },
+  convoy: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: null,
+    egressInSec: null,
+    trail: [],
+  },
   oilRigs: {
     small: {
       triggered: false,
@@ -152,6 +166,10 @@ const demoWorldEventsStatus = {
     chinookLastDespawnAt: Math.floor(Date.now() / 1000) - 7000,
     vendorLastSpawnAt: null,
     vendorLastDespawnAt: null,
+    bradleyLastSpawnAt: Math.floor(Date.now() / 1000) - 5400,
+    bradleyLastDespawnAt: Math.floor(Date.now() / 1000) - 5000,
+    convoyLastSpawnAt: null,
+    convoyLastDespawnAt: null,
     oilSmallLastTriggeredAt: null,
     oilLargeLastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
   },
@@ -538,8 +556,31 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return {
       status: "ok",
       rustplus: { connected: true, activeServerId: "demo-server-1" },
-      fcm: { listening: true },
+      fcm: {
+        listening: true,
+        configured: true,
+        daysRemaining: 45,
+        warning: false,
+        expired: false,
+        expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+      },
     } as T;
+  }
+
+  if (path === "/admin/fcm-status") {
+    return {
+      configured: true,
+      listening: true,
+      registeredAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+      daysRemaining: 45,
+      warning: false,
+      expired: false,
+    } as T;
+  }
+
+  if (path === "/admin/data-reset" && method === "POST") {
+    return { ok: true, scope: body.scope, detail: "Demo mode — no data changed." } as T;
   }
 
   if (path === "/servers") return { servers: demoServers } as T;
@@ -580,32 +621,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/notifications") {
     if (method === "PATCH") {
-      const patch = body as {
-        smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
-        deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
-        teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
-        eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
-      };
+      const patch = body as Parameters<typeof mergeNotificationSettings>[1];
       demoNotificationSettings = {
         ...demoNotificationSettings,
-        settings: {
-          smartAlarm: {
-            ...demoNotificationSettings.settings.smartAlarm,
-            ...patch.smartAlarm,
-          },
-          deepSea: {
-            ...demoNotificationSettings.settings.deepSea,
-            ...patch.deepSea,
-          },
-          teamChatBot: {
-            ...demoNotificationSettings.settings.teamChatBot,
-            ...patch.teamChatBot,
-          },
-          eventTimers: {
-            ...demoNotificationSettings.settings.eventTimers,
-            ...patch.eventTimers,
-          },
-        },
+        settings: mergeNotificationSettings(demoNotificationSettings.settings, patch),
       };
       return demoNotificationSettings as T;
     }

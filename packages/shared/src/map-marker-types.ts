@@ -29,3 +29,17 @@ export function isTravelingVendorMarker(marker: { type: number; name: string }):
   }
   return false;
 }
+
+export function isConvoyMarker(marker: { type: number; name: string }): boolean {
+  if (marker.type === MAP_MARKER_TYPE.GENERIC) {
+    return /convoy|armored\s*train/i.test(marker.name);
+  }
+  return false;
+}
+
+export function isBradleyMarker(marker: { type: number; name: string }): boolean {
+  if (marker.type === MAP_MARKER_TYPE.GENERIC || marker.type === MAP_MARKER_TYPE.CRATE) {
+    return /bradley/i.test(marker.name);
+  }
+  return false;
+}

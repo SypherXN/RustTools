@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import multipart from "@fastify/multipart";
-import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
+import { buildMapTransform, formatAttributedTeamChatMessage, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { applyTeamTracking } from "../lib/team-tracker.js";
@@ -166,7 +166,8 @@ export async function registerServerRoutes(
     }
 
     try {
-      await deps.rustPlus.sendTeamMessage(message.trim());
+      const outbound = formatAttributedTeamChatMessage(user.discordUsername, message);
+      await deps.rustPlus.sendTeamMessage(outbound);
       return { ok: true };
     } catch (err) {
       return reply.status(502).send({

@@ -1,4 +1,5 @@
 export const DISCORD_CHANNEL_PURPOSES = [
+  "information",
   "alarms",
   "team_chat",
   "commands",
@@ -11,6 +12,7 @@ export const DISCORD_CHANNEL_PURPOSES = [
 export type DiscordChannelPurpose = (typeof DISCORD_CHANNEL_PURPOSES)[number];
 
 export const DISCORD_CHANNEL_PURPOSE_LABELS: Record<DiscordChannelPurpose, string> = {
+  information: "Live information board",
   alarms: "Smart alarms",
   team_chat: "Team chat mirror",
   commands: "In-game command runner",

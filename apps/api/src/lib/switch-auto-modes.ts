@@ -48,7 +48,7 @@ export async function evaluateSwitchAutoModes(
       rustPlus.getServerInfo(),
     ]);
     isDay = (time as { isDay?: boolean }).isDay !== false;
-    worldSize = getWorldSize(info);
+    worldSize = getWorldSize(info) ?? 4000;
     const parsed = parseTeamRoster(team, worldSize);
     teamMembers = parsed.members.map((m) => ({
       isOnline: m.isOnline,

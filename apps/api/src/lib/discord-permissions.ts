@@ -1,5 +1,8 @@
 import type { UserPermissions } from "@rusttools/shared";
+import type { Database } from "@rusttools/db";
 import { env } from "../config.js";
+import { configuredGuildId } from "./discord-channels.js";
+import { isDiscordBlacklisted } from "./discord-blacklist.js";
 
 export type DiscordCapability = "admin" | "switch" | "view";
 
@@ -87,5 +90,27 @@ export async function requireDiscordCapability(
   if (!(await hasDiscordCapability(discordUserId, capability))) {
     return { ok: false, error: `Missing ${capability} permission` };
   }
+  return { ok: true };
+}
+
+export async function requireDiscordBotAccess(
+  db: Database,
+  discordUserId: string | undefined,
+  capability: DiscordCapability,
+  guildId?: string | null,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const perm = await requireDiscordCapability(discordUserId, capability);
+  if (!perm.ok) return perm;
+
+  const resolvedGuild = guildId?.trim() || configuredGuildId();
+  if (resolvedGuild && discordUserId) {
+    const blocked = await isDiscordBlacklisted(db, resolvedGuild, {
+      discordId: discordUserId,
+    });
+    if (blocked) {
+      return { ok: false, error: "You are blacklisted from RustTools commands" };
+    }
+  }
+
   return { ok: true };
 }

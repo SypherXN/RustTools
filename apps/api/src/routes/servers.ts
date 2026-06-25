@@ -280,6 +280,8 @@ export async function registerServerRoutes(
       tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
       teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
       eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
+      automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
+      legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
     };
 
     const settings = await updateActiveNotificationSettings(deps.db, body);

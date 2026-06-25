@@ -1693,6 +1693,35 @@ button:hover,
   font-size: 0.9rem;
 }
 
+.fcm-warning-banner {
+  margin-bottom: 1rem;
+  padding: 0.65rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.fcm-warning-banner--warning {
+  background: #3d2f00;
+  border: 1px solid #8a6d00;
+  color: #ffe08a;
+}
+
+.fcm-warning-banner--critical {
+  background: #3d1212;
+  border: 1px solid #a33;
+  color: #ffb4b4;
+}
+
+.success-text {
+  color: #3dd68c;
+  margin-top: 0.75rem;
+}
+
+.error-text {
+  color: #e85d2a;
+  margin-top: 0.75rem;
+}
+
 .form-stack {
   display: flex;
   flex-direction: column;

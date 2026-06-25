@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { apiFetch } from "../lib/api";
 import { ServerSwitcher } from "../components/ServerSwitcher";
+import { DataResetPanel } from "../components/DataResetPanel";
 import type { NotificationSettingsResponse } from "@rusttools/shared";
+import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
+import { PushNotificationSetup } from "../components/PushNotificationSetup";
 
 export function SettingsPage() {
   const { user, refresh } = useAuth();
@@ -43,11 +46,24 @@ export function SettingsPage() {
   }, [epoch]);
 
   const saveNotifications = async (patch: {
-    smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]>;
+    smartAlarm?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]> & {
+      escalation?: Partial<NotificationSettingsResponse["settings"]["smartAlarm"]["escalation"]>;
+    };
     deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
     tcDecay?: Partial<NotificationSettingsResponse["settings"]["tcDecay"]>;
     teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
     eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
+    legacyAutomations?: Partial<NotificationSettingsResponse["settings"]["legacyAutomations"]> & {
+      nightLights?: Partial<
+        NotificationSettingsResponse["settings"]["legacyAutomations"]["nightLights"]
+      >;
+      teamOfflineSam?: Partial<
+        NotificationSettingsResponse["settings"]["legacyAutomations"]["teamOfflineSam"]
+      >;
+      mapEvents?: Partial<
+        NotificationSettingsResponse["settings"]["legacyAutomations"]["mapEvents"]
+      >;
+    };
   }) => {
     if (!notifications) return;
     setNotificationsSaving(true);
@@ -67,7 +83,10 @@ export function SettingsPage() {
     }
   };
 
-  const updateSmartAlarm = (key: "discord" | "teamChat" | "pingEveryone", value: boolean) => {
+  const updateSmartAlarm = (
+    key: "discord" | "teamChat" | "pingEveryone" | "webPush" | "browserSiren",
+    value: boolean,
+  ) => {
     if (!notifications) return;
     const next = {
       ...notifications,
@@ -78,6 +97,44 @@ export function SettingsPage() {
     };
     setNotifications(next);
     void saveNotifications({ smartAlarm: { [key]: value } });
+  };
+
+  const updateSmartAlarmEscalation = (
+    key: keyof NotificationSettingsResponse["settings"]["smartAlarm"]["escalation"],
+    value: boolean | string[],
+  ) => {
+    if (!notifications) return;
+    const escalation = { ...notifications.settings.smartAlarm.escalation, [key]: value };
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        smartAlarm: { ...notifications.settings.smartAlarm, escalation },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({
+      smartAlarm: {
+        escalation: { ...escalation },
+      },
+    });
+  };
+
+  const updateLegacyAutomations = (
+    section: "nightLights" | "teamOfflineSam" | "mapEvents",
+    patch: Record<string, unknown>,
+  ) => {
+    if (!notifications) return;
+    const legacyAutomations = {
+      ...notifications.settings.legacyAutomations,
+      [section]: { ...notifications.settings.legacyAutomations[section], ...patch },
+    };
+    const next = {
+      ...notifications,
+      settings: { ...notifications.settings, legacyAutomations },
+    };
+    setNotifications(next);
+    void saveNotifications({ legacyAutomations: { [section]: patch } });
   };
 
   const updateTcDecay = (
@@ -342,11 +399,79 @@ export function SettingsPage() {
               />
               <span>Ping @everyone on Discord (global default; per-alarm override on Devices)</span>
             </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.smartAlarm.webPush}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateSmartAlarm("webPush", e.target.checked)}
+              />
+              <span>Send web push notifications (PWA / background)</span>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={notifications.settings.smartAlarm.browserSiren}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) => updateSmartAlarm("browserSiren", e.target.checked)}
+              />
+              <span>Play browser siren when this tab is open</span>
+            </label>
             {notifications.settings.smartAlarm.teamChat && !notifications.capabilities.rustPlusConnected && (
               <p className="alert alert-error">
                 Team chat is enabled but Rust+ is not connected to the active server.
               </p>
             )}
+            <div className="form-subsection">
+              <h3>Browser push setup</h3>
+              <PushNotificationSetup disabled={notificationsSaving || !canAdmin} />
+            </div>
+            <div className="form-subsection">
+              <h3>SMS / email escalation</h3>
+              <p className="muted">
+                After Discord, optionally send Twilio SMS and SendGrid email (configure{" "}
+                <code>TWILIO_*</code> and <code>SENDGRID_*</code> on the API).
+              </p>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={notifications.settings.smartAlarm.escalation.enabled}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => updateSmartAlarmEscalation("enabled", e.target.checked)}
+                />
+                <span>Enable escalation</span>
+              </label>
+              <label>
+                SMS numbers (E.164, comma-separated)
+                <input
+                  type="text"
+                  value={notifications.settings.smartAlarm.escalation.smsNumbers.join(", ")}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => {
+                    const smsNumbers = e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    updateSmartAlarmEscalation("smsNumbers", smsNumbers);
+                  }}
+                />
+              </label>
+              <label>
+                Email addresses (comma-separated)
+                <input
+                  type="text"
+                  value={notifications.settings.smartAlarm.escalation.emailAddresses.join(", ")}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => {
+                    const emailAddresses = e.target.value
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    updateSmartAlarmEscalation("emailAddresses", emailAddresses);
+                  }}
+                />
+              </label>
+            </div>
           </div>
         )}
       </section>
@@ -574,35 +699,152 @@ export function SettingsPage() {
       </section>
 
       <section className="card">
-        <h2>Map Event Automations</h2>
+        <h2>Legacy Automations</h2>
         <p className="muted">
-          Configure on the server via <code>.env</code>:{" "}
-          <code>AUTOMATION_NIGHT_LIGHTS</code>, <code>AUTOMATION_TEAM_OFFLINE_SAM</code>,{" "}
-          <code>AUTOMATION_EVENT_TEAM_CHAT</code>
+          Night lights, team-offline SAM, and map event announcements. Env vars seed defaults for new
+          servers; changes here are stored per active server.
         </p>
-        <ul className="setup-steps">
-          <li>
-            <code>AUTOMATION_EVENT_TEAM_CHAT=true</code> — announce cargo, chinook, and patrol heli in
-            team chat with grid + coordinates
-          </li>
-          <li>
-            <code>AUTOMATION_EVENT_DISCORD=true</code> — also post to Discord (on by default when team
-            chat alerts are enabled)
-          </li>
-          <li>
-            <code>DISCORD_EVENT_CHANNEL_ID</code> — optional dedicated channel; otherwise uses{" "}
-            <code>DISCORD_NOTIFICATION_CHANNEL_ID</code>
-          </li>
-          <li>
-            <code>AUTOMATION_EVENT_TYPES</code> — optional filter, e.g.{" "}
-            <code>cargo,heli,chinook,vendor,oil</code>
-          </li>
-          <li>
-            <code>AUTOMATION_EVENT_TEAM_CHAT_PREFIX</code> — in-game message prefix (default{" "}
-            <code>RustTools</code>)
-          </li>
-        </ul>
+        {notifications && (
+          <div className="form-stack">
+            <div className="form-subsection">
+              <h3>Night lights</h3>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={notifications.settings.legacyAutomations.nightLights.enabled}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) =>
+                    updateLegacyAutomations("nightLights", { enabled: e.target.checked })
+                  }
+                />
+                <span>Turn on smart switches at night (also configure schedule in Automations)</span>
+              </label>
+              <label>
+                Switch entity IDs (comma-separated Rust+ IDs)
+                <input
+                  type="text"
+                  value={notifications.settings.legacyAutomations.nightLights.entityIds.join(", ")}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => {
+                    const entityIds = e.target.value
+                      .split(",")
+                      .map((s) => Number(s.trim()))
+                      .filter((n) => !Number.isNaN(n));
+                    updateLegacyAutomations("nightLights", { entityIds });
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="form-subsection">
+              <h3>Team offline SAM</h3>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={notifications.settings.legacyAutomations.teamOfflineSam.enabled}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) =>
+                    updateLegacyAutomations("teamOfflineSam", { enabled: e.target.checked })
+                  }
+                />
+                <span>Turn on SAM site switch when whole team goes offline</span>
+              </label>
+              <label>
+                SAM switch entity ID
+                <input
+                  type="number"
+                  value={notifications.settings.legacyAutomations.teamOfflineSam.switchEntityId ?? ""}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    updateLegacyAutomations("teamOfflineSam", {
+                      switchEntityId: raw ? Number(raw) : null,
+                    });
+                  }}
+                />
+              </label>
+            </div>
+
+            <div className="form-subsection">
+              <h3>Map event alerts</h3>
+              <label className="checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={notifications.settings.legacyAutomations.mapEvents.teamChat}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) =>
+                    updateLegacyAutomations("mapEvents", { teamChat: e.target.checked })
+                  }
+                />
+                <span>Announce in team chat</span>
+              </label>
+              <label>
+                Discord
+                <select
+                  value={
+                    notifications.settings.legacyAutomations.mapEvents.discord === null
+                      ? "inherit"
+                      : notifications.settings.legacyAutomations.mapEvents.discord
+                        ? "on"
+                        : "off"
+                  }
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateLegacyAutomations("mapEvents", {
+                      discord: v === "inherit" ? null : v === "on",
+                    });
+                  }}
+                >
+                  <option value="inherit">Same as team chat</option>
+                  <option value="on">Always on</option>
+                  <option value="off">Off</option>
+                </select>
+              </label>
+              <label>
+                Message prefix
+                <input
+                  type="text"
+                  value={notifications.settings.legacyAutomations.mapEvents.prefix}
+                  disabled={notificationsSaving || !canAdmin}
+                  onChange={(e) => updateLegacyAutomations("mapEvents", { prefix: e.target.value })}
+                />
+              </label>
+              <fieldset>
+                <legend>Event types</legend>
+                <div className="checkbox-grid">
+                  {DEFAULT_MAP_EVENT_TYPES.map((type) => (
+                    <label key={type} className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={notifications.settings.legacyAutomations.mapEvents.types.includes(
+                          type,
+                        )}
+                        disabled={notificationsSaving || !canAdmin}
+                        onChange={(e) => {
+                          const current = notifications.settings.legacyAutomations.mapEvents.types;
+                          const types = e.target.checked
+                            ? [...current, type]
+                            : current.filter((t) => t !== type);
+                          updateLegacyAutomations("mapEvents", { types });
+                        }}
+                      />
+                      <span>{type}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
+          </div>
+        )}
       </section>
+
+      {canAdmin && (
+        <section className="card">
+          <h2>Data Management</h2>
+          <DataResetPanel disabled={notificationsSaving || linking} />
+        </section>
+      )}
 
       <section className="card">
         <h2>Pairing Setup</h2>

@@ -71,7 +71,8 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
     {
       name: "Admin",
       value: [
-        "`/channel show|set|clear` — notification channel bindings",
+        "`/channel show|set|clear` — notification channel bindings (incl. live **information** board)",
+        "`/blacklist add|remove|list` — block Discord/Steam users from bot commands",
         "In-game admin: `!mute` `!unmute` the bot",
       ].join("\n"),
     },

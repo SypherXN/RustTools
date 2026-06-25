@@ -50,6 +50,20 @@ export const env = {
     notificationChannelId: optional("DISCORD_NOTIFICATION_CHANNEL_ID"),
   },
   internalApiKey: optional("INTERNAL_API_KEY"),
+  webPush: {
+    publicKey: optional("VAPID_PUBLIC_KEY"),
+    privateKey: optional("VAPID_PRIVATE_KEY"),
+    subject: optional("VAPID_SUBJECT", "mailto:admin@localhost"),
+  },
+  twilio: {
+    accountSid: optional("TWILIO_ACCOUNT_SID"),
+    authToken: optional("TWILIO_AUTH_TOKEN"),
+    fromNumber: optional("TWILIO_FROM_NUMBER"),
+  },
+  sendgrid: {
+    apiKey: optional("SENDGRID_API_KEY"),
+    fromEmail: optional("SENDGRID_FROM_EMAIL", "alerts@localhost"),
+  },
   rustplus: {
     fcmConfigPath: optional("RUSTPLUS_FCM_CONFIG_PATH", "./data/fcm-config.json"),
     get resolvedFcmConfigPath(): string {

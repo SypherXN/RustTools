@@ -8,6 +8,7 @@ export type AutomationTriggerType =
   | "team_all_offline_change"
   | "team_presence_change"
   | "time_of_day"
+  | "schedule_window"
   | "interval";
 
 /** Which teammates count for proximity rules. */
@@ -46,6 +47,15 @@ export interface AutomationTrigger {
   upkeepHours?: number;
   /** day | night for time_of_day. */
   phase?: "day" | "night";
+  /** schedule_window — local time 0–23. */
+  startHour?: number;
+  startMinute?: number;
+  endHour?: number;
+  endMinute?: number;
+  /** schedule_window — window crosses midnight (e.g. 18:00–06:00). */
+  overnight?: boolean;
+  /** schedule_window — run actions on window enter, exit, or both. */
+  scheduleEdge?: "enter" | "exit" | "both";
   /** Interval minutes for interval trigger. */
   intervalMinutes?: number;
   /** team_presence_change — fire when team crosses into this proximity state. */
@@ -106,6 +116,25 @@ export function defaultProximityCheckForCondition(
   type: "team_near_point" | "team_away_from_point",
 ): TeamProximityCheck {
   return type === "team_near_point" ? "any_near" : "none_near";
+}
+
+export function isLocalTimeInScheduleWindow(
+  trigger: Pick<
+    AutomationTrigger,
+    "startHour" | "startMinute" | "endHour" | "endMinute" | "overnight"
+  >,
+  now = new Date(),
+): boolean {
+  const startHour = trigger.startHour ?? 0;
+  const startMinute = trigger.startMinute ?? 0;
+  const endHour = trigger.endHour ?? 0;
+  const endMinute = trigger.endMinute ?? 0;
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  const overnight = trigger.overnight === true || end <= start;
+  if (overnight) return cur >= start || cur < end;
+  return cur >= start && cur < end;
 }
 
 /** Preset: no active (online, not AFK) teammates near base. */

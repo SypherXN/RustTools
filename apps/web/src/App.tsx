@@ -14,6 +14,8 @@ import { MapPage } from "./pages/MapPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoragePage } from "./pages/StoragePage";
 import { TeamPage } from "./pages/TeamPage";
+import { FcmWarningBanner } from "./components/FcmWarningBanner";
+import { AlarmNotifier } from "./components/AlarmNotifier";
 
 function Shell() {
   const { user, loading, logout } = useAuth();
@@ -79,6 +81,8 @@ function Shell() {
             Demo mode — mock data only. Run <code>npm run dev:web</code> for live API.
           </div>
         )}
+        <FcmWarningBanner />
+        <AlarmNotifier />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/devices" element={<DevicesPage />} />

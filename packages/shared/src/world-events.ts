@@ -56,6 +56,10 @@ export interface WorldEventStats {
   chinookLastDespawnAt: number | null;
   vendorLastSpawnAt: number | null;
   vendorLastDespawnAt: number | null;
+  bradleyLastSpawnAt: number | null;
+  bradleyLastDespawnAt: number | null;
+  convoyLastSpawnAt: number | null;
+  convoyLastDespawnAt: number | null;
   oilSmallLastTriggeredAt: number | null;
   oilLargeLastTriggeredAt: number | null;
 }
@@ -66,6 +70,8 @@ export interface WorldEventsStatus {
   heli: TrackedEntitySnapshot;
   chinook: TrackedEntitySnapshot;
   vendor: TrackedEntitySnapshot;
+  bradley: TrackedEntitySnapshot;
+  convoy: TrackedEntitySnapshot;
   oilRigs: Record<OilRigKind, OilRigSnapshot>;
   stats: WorldEventStats;
 }
@@ -188,6 +194,10 @@ export function emptyWorldEventStats(): WorldEventStats {
     chinookLastDespawnAt: null,
     vendorLastSpawnAt: null,
     vendorLastDespawnAt: null,
+    bradleyLastSpawnAt: null,
+    bradleyLastDespawnAt: null,
+    convoyLastSpawnAt: null,
+    convoyLastDespawnAt: null,
     oilSmallLastTriggeredAt: null,
     oilLargeLastTriggeredAt: null,
   };
@@ -240,7 +250,7 @@ export function buildTrackedEntitySnapshot(
   };
 }
 
-export type WorldEventEntity = "cargo" | "heli" | "chinook" | "vendor";
+export type WorldEventEntity = "cargo" | "heli" | "chinook" | "vendor" | "bradley" | "convoy";
 
 export type WorldEventAnnouncementKind =
   | "spawn"

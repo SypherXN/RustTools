@@ -103,6 +103,7 @@ const TRIGGER_LABELS: Record<AutomationTrigger["type"], string> = {
   team_all_offline_change: "Whole team went offline",
   team_presence_change: "Team base presence changes",
   time_of_day: "Time of day",
+  schedule_window: "Schedule window",
   interval: "On a schedule",
 };
 
@@ -158,6 +159,16 @@ function defaultTrigger(type: AutomationTrigger["type"]): AutomationTrigger {
       return { type, intervalMinutes: 60 };
     case "time_of_day":
       return { type, phase: "night" };
+    case "schedule_window":
+      return {
+        type,
+        startHour: 18,
+        startMinute: 0,
+        endHour: 6,
+        endMinute: 0,
+        overnight: true,
+        scheduleEdge: "enter",
+      };
     case "tc_upkeep_low":
       return { type, upkeepHours: 24 };
     case "team_presence_change":
@@ -577,6 +588,89 @@ function AutomationRuleEditor({
             <option value="night">Night</option>
           </select>
         </label>
+      )}
+
+      {trigger.type === "schedule_window" && (
+        <>
+          <label>
+            Start (local time)
+            <div className="inline-time-row">
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={trigger.startHour ?? 18}
+                onChange={(e) =>
+                  setTrigger({ ...trigger, startHour: Math.min(23, Math.max(0, Number(e.target.value) || 0)) })
+                }
+              />
+              <span>:</span>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={trigger.startMinute ?? 0}
+                onChange={(e) =>
+                  setTrigger({
+                    ...trigger,
+                    startMinute: Math.min(59, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+              />
+            </div>
+          </label>
+          <label>
+            End (local time)
+            <div className="inline-time-row">
+              <input
+                type="number"
+                min={0}
+                max={23}
+                value={trigger.endHour ?? 6}
+                onChange={(e) =>
+                  setTrigger({ ...trigger, endHour: Math.min(23, Math.max(0, Number(e.target.value) || 0)) })
+                }
+              />
+              <span>:</span>
+              <input
+                type="number"
+                min={0}
+                max={59}
+                value={trigger.endMinute ?? 0}
+                onChange={(e) =>
+                  setTrigger({
+                    ...trigger,
+                    endMinute: Math.min(59, Math.max(0, Number(e.target.value) || 0)),
+                  })
+                }
+              />
+            </div>
+          </label>
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={trigger.overnight ?? false}
+              onChange={(e) => setTrigger({ ...trigger, overnight: e.target.checked })}
+            />
+            <span>Window crosses midnight (e.g. 18:00–06:00)</span>
+          </label>
+          <label>
+            Fire when
+            <select
+              value={trigger.scheduleEdge ?? "enter"}
+              onChange={(e) =>
+                setTrigger({
+                  ...trigger,
+                  scheduleEdge: e.target.value as "enter" | "exit" | "both",
+                })
+              }
+            >
+              <option value="enter">Window starts</option>
+              <option value="exit">Window ends</option>
+              <option value="both">Window starts or ends</option>
+            </select>
+          </label>
+        </>
       )}
 
       {trigger.type === "tc_upkeep_low" && (
@@ -1187,9 +1281,33 @@ export function AutomationsPage() {
                 </div>
               )}
               {!showCreateRule ? (
-                <button type="button" className="btn-primary" onClick={() => startCreateRule()}>
-                  New rule
-                </button>
+                <div className="btn-row">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      startCreateRule({
+                        name: "Night lights",
+                        trigger: {
+                          type: "schedule_window",
+                          startHour: 18,
+                          startMinute: 0,
+                          endHour: 6,
+                          endMinute: 0,
+                          overnight: true,
+                          scheduleEdge: "enter",
+                        },
+                        conditions: [{ type: "time_is_night" }],
+                        actions: [{ type: "toggle_switch_group" }],
+                      })
+                    }
+                  >
+                    Night lights schedule
+                  </button>
+                  <button type="button" className="btn-primary" onClick={() => startCreateRule()}>
+                    New rule
+                  </button>
+                </div>
               ) : null}
             </>
           )}

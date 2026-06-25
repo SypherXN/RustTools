@@ -1,3 +1,10 @@
+import type { MapEventAutomationSettings } from "@rusttools/shared";
+import {
+  legacyAutomationsFromEnv,
+  mapEventDiscordEnabled,
+  mapEventTeamChatEnabled,
+  resolveMapEventAutomationSettings,
+} from "@rusttools/shared";
 import { worldToGridLabel } from "@rusttools/shared";
 import { MARKER_LABELS, MARKER_TYPE, parseMapMarkers, type ParsedMapMarker } from "./map-markers.js";
 
@@ -10,36 +17,25 @@ const EVENT_TYPE_ALIASES: Record<string, number> = {
   patrol: MARKER_TYPE.HELI,
 };
 
-const DEFAULT_WORLD_EVENT_ENTITIES = ["cargo", "heli", "chinook", "vendor", "oil"];
-
-const DEFAULT_EVENT_TYPES = [MARKER_TYPE.CARGO, MARKER_TYPE.CH47, MARKER_TYPE.HELI];
-
-export function eventTeamChatEnabled(): boolean {
-  return process.env.AUTOMATION_EVENT_TEAM_CHAT === "true";
+export function resolveMapEventSettings(
+  stored?: Partial<MapEventAutomationSettings> | null,
+): MapEventAutomationSettings {
+  return resolveMapEventAutomationSettings(stored ?? legacyAutomationsFromEnv().mapEvents);
 }
 
-/** Defaults to on when team chat alerts are on; set AUTOMATION_EVENT_DISCORD=false to disable. */
-export function eventDiscordEnabled(): boolean {
-  const explicit = process.env.AUTOMATION_EVENT_DISCORD?.trim().toLowerCase();
-  if (explicit === "true") return true;
-  if (explicit === "false") return false;
-  return eventTeamChatEnabled();
+export function eventTeamChatEnabled(settings?: MapEventAutomationSettings): boolean {
+  return mapEventTeamChatEnabled(resolveMapEventSettings(settings));
 }
 
-export function mapEventAlertsEnabled(): boolean {
-  return eventTeamChatEnabled() || eventDiscordEnabled();
+export function eventDiscordEnabled(settings?: MapEventAutomationSettings): boolean {
+  return mapEventDiscordEnabled(resolveMapEventSettings(settings));
 }
 
-export function configuredWorldEventEntities(): Set<string> {
-  const raw =
-    process.env.AUTOMATION_EVENT_TYPES?.trim() ||
-    process.env.AUTOMATION_EVENT_TEAM_CHAT_TYPES?.trim();
-  if (!raw) return new Set(DEFAULT_WORLD_EVENT_ENTITIES);
-  const entities = raw
-    .split(",")
-    .map((part) => part.trim().toLowerCase())
-    .filter(Boolean);
-  return entities.length > 0 ? new Set(entities) : new Set(DEFAULT_WORLD_EVENT_ENTITIES);
+export function configuredWorldEventEntities(
+  settings?: MapEventAutomationSettings,
+): Set<string> {
+  const resolved = resolveMapEventSettings(settings);
+  return new Set(resolved.types.map((t) => t.toLowerCase()));
 }
 
 export function worldEventAnnouncementEnabled(
@@ -53,26 +49,23 @@ export function worldEventAnnouncementEnabled(
   return true;
 }
 
-export function configuredMapEventTypes(): number[] {
-  const raw =
-    process.env.AUTOMATION_EVENT_TYPES?.trim() ||
-    process.env.AUTOMATION_EVENT_TEAM_CHAT_TYPES?.trim();
-  if (!raw) return DEFAULT_EVENT_TYPES;
-  const types = raw
-    .split(",")
+export function configuredMapEventTypes(settings?: MapEventAutomationSettings): number[] {
+  const resolved = resolveMapEventSettings(settings);
+  const types = resolved.types
     .map((part) => EVENT_TYPE_ALIASES[part.trim().toLowerCase()])
     .filter((value): value is number => value != null);
-  return types.length > 0 ? types : DEFAULT_EVENT_TYPES;
+  return types.length > 0 ? types : [MARKER_TYPE.CARGO, MARKER_TYPE.CH47, MARKER_TYPE.HELI];
 }
 
 export function formatEventTeamChatMessage(
   marker: Pick<ParsedMapMarker, "label" | "x" | "y">,
   worldSize: number,
+  prefix?: string,
 ): string {
   const grid = worldToGridLabel(marker.x, marker.y, worldSize);
-  const prefix = process.env.AUTOMATION_EVENT_TEAM_CHAT_PREFIX?.trim() || "RustTools";
+  const resolvedPrefix = prefix?.trim() || legacyAutomationsFromEnv().mapEvents.prefix;
   const name = marker.label.trim() || "World event";
-  return `[${prefix}] ${name} @ ${grid} (${Math.round(marker.x)}, ${Math.round(marker.y)})`;
+  return `[${resolvedPrefix}] ${name} @ ${grid} (${Math.round(marker.x)}, ${Math.round(marker.y)})`;
 }
 
 export function eventDiscordDescription(

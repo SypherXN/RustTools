@@ -241,3 +241,38 @@ export const teamConnectionLog = sqliteTable("team_connection_log", {
   occurredAt: integer("occurred_at").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
+
+export const discordBlacklist = sqliteTable("discord_blacklist", {
+  id: text("id").primaryKey(),
+  guildId: text("guild_id").notNull(),
+  discordId: text("discord_id"),
+  steamId: text("steam_id"),
+  reason: text("reason").notNull().default(""),
+  createdBy: text("created_by"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const discordLiveEmbeds = sqliteTable(
+  "discord_live_embeds",
+  {
+    guildId: text("guild_id").notNull(),
+    purpose: text("purpose").notNull(),
+    channelId: text("channel_id").notNull(),
+    messageId: text("message_id").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.guildId, table.purpose] }),
+  }),
+);
+
+export const pushSubscriptions = sqliteTable("push_subscriptions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  endpoint: text("endpoint").notNull().unique(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});

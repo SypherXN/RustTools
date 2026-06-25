@@ -16,8 +16,10 @@ import { consumeWsToken } from "./lib/ws-tokens.js";
 import { registerRoutes } from "./routes/index.js";
 import { handleFcmNotification } from "./services/fcm-handler.js";
 import { startPhase2Listeners } from "./services/phase2-listeners.js";
+import { startInformationEmbedUpdater } from "./services/information-embed-updater.js";
 import { reconnectStoredServers } from "./services/rustplus-bootstrap.js";
 import { WsHub } from "./services/ws-hub.js";
+import { postDiscordMessage } from "./lib/discord-messages.js";
 
 async function sendDiscordMessage(notification: {
   channelId: string;
@@ -33,20 +35,7 @@ async function sendDiscordMessage(notification: {
     components: Array<{ type: number; style: number; label: string; custom_id: string }>;
   }>;
 }): Promise<void> {
-  if (!notification.channelId || !env.discord.botToken) return;
-
-  await fetch(`https://discord.com/api/channels/${notification.channelId}/messages`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bot ${env.discord.botToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      content: notification.content,
-      embeds: notification.embed ? [notification.embed] : undefined,
-      components: notification.components,
-    }),
-  });
+  await postDiscordMessage(notification);
 }
 
 async function main() {
@@ -111,6 +100,7 @@ async function main() {
   await registerRoutes(app, { db, rustPlus });
 
   startPhase2Listeners(db, rustPlus, notifications);
+  startInformationEmbedUpdater(db, rustPlus);
 
   await reconnectStoredServers(db, rustPlus);
 

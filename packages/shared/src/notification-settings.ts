@@ -3,6 +3,18 @@ export interface SmartAlarmNotificationSettings {
   teamChat: boolean;
   /** Prefix Discord content with @everyone when enabled (#45). */
   pingEveryone: boolean;
+  /** In-browser notification + optional siren when tab open (#124). */
+  webPush: boolean;
+  browserSiren: boolean;
+  /** SMS/email escalation after Discord (#117). */
+  escalation: SmartAlarmEscalationSettings;
+}
+
+export interface SmartAlarmEscalationSettings {
+  enabled: boolean;
+  /** E.164 phone numbers for Twilio SMS. */
+  smsNumbers: string[];
+  emailAddresses: string[];
 }
 
 export interface TcDecayNotificationSettings {
@@ -42,6 +54,11 @@ export const DEFAULT_AUTOMATION_BASE_SETTINGS: AutomationBaseSettings = {
 
 export type { TeamChatBotSettings } from "./team-chat-control.js";
 export type { EventTimerSettings } from "./world-events.js";
+import type { LegacyAutomationSettings } from "./legacy-automations.js";
+import {
+  DEFAULT_LEGACY_AUTOMATION_SETTINGS,
+  legacyAutomationsFromEnv,
+} from "./legacy-automations.js";
 import type { TeamChatBotSettings } from "./team-chat-control.js";
 import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
 import type { EventTimerSettings } from "./world-events.js";
@@ -54,7 +71,14 @@ export interface ServerNotificationSettings {
   teamChatBot: TeamChatBotSettings;
   eventTimers: EventTimerSettings;
   automationBase: AutomationBaseSettings;
+  legacyAutomations: LegacyAutomationSettings;
 }
+
+export const DEFAULT_SMART_ALARM_ESCALATION: SmartAlarmEscalationSettings = {
+  enabled: false,
+  smsNumbers: [],
+  emailAddresses: [],
+};
 
 export interface NotificationSettingsCapabilities {
   discordConfigured: boolean;
@@ -80,6 +104,9 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
     discord: true,
     teamChat: false,
     pingEveryone: false,
+    webPush: true,
+    browserSiren: true,
+    escalation: { ...DEFAULT_SMART_ALARM_ESCALATION },
   },
   deepSea: {
     discord: true,
@@ -89,6 +116,7 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
   teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
   eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
   automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
+  legacyAutomations: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS },
 };
 
 export function mergeNotificationSettings(
@@ -100,12 +128,22 @@ export function mergeNotificationSettings(
     teamChatBot?: Partial<TeamChatBotSettings>;
     eventTimers?: Partial<EventTimerSettings>;
     automationBase?: Partial<AutomationBaseSettings>;
+    legacyAutomations?: Partial<LegacyAutomationSettings> & {
+      nightLights?: Partial<LegacyAutomationSettings["nightLights"]>;
+      teamOfflineSam?: Partial<LegacyAutomationSettings["teamOfflineSam"]>;
+      mapEvents?: Partial<LegacyAutomationSettings["mapEvents"]>;
+    };
   },
 ): ServerNotificationSettings {
+  const legacyPatch = patch.legacyAutomations;
   return {
     smartAlarm: {
       ...current.smartAlarm,
       ...patch.smartAlarm,
+      escalation: {
+        ...current.smartAlarm.escalation,
+        ...patch.smartAlarm?.escalation,
+      },
     },
     deepSea: {
       ...current.deepSea,
@@ -127,6 +165,20 @@ export function mergeNotificationSettings(
       ...current.automationBase,
       ...patch.automationBase,
     },
+    legacyAutomations: {
+      nightLights: {
+        ...current.legacyAutomations.nightLights,
+        ...legacyPatch?.nightLights,
+      },
+      teamOfflineSam: {
+        ...current.legacyAutomations.teamOfflineSam,
+        ...legacyPatch?.teamOfflineSam,
+      },
+      mapEvents: {
+        ...current.legacyAutomations.mapEvents,
+        ...legacyPatch?.mapEvents,
+      },
+    },
   };
 }
 
@@ -141,10 +193,12 @@ export function parseServerNotificationSettings(
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
+      legacyAutomations: legacyAutomationsFromEnv(),
     };
   }
   try {
     const parsed = JSON.parse(raw) as Partial<ServerNotificationSettings>;
+    const envLegacy = legacyAutomationsFromEnv();
     return mergeNotificationSettings(DEFAULT_SERVER_NOTIFICATION_SETTINGS, {
       smartAlarm: parsed.smartAlarm,
       deepSea: parsed.deepSea,
@@ -152,6 +206,7 @@ export function parseServerNotificationSettings(
       teamChatBot: parsed.teamChatBot,
       eventTimers: parsed.eventTimers,
       automationBase: parsed.automationBase,
+      legacyAutomations: parsed.legacyAutomations ?? envLegacy,
     });
   } catch {
     return {
@@ -161,6 +216,7 @@ export function parseServerNotificationSettings(
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
+      legacyAutomations: legacyAutomationsFromEnv(),
     };
   }
 }

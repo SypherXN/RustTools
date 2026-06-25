@@ -15,6 +15,8 @@ import {
   parseUnmuteTeamChatCommand,
   parseUpkeepDetailTeamChatCommand,
 } from "@rusttools/shared";
+import { configuredGuildId } from "./discord-channels.js";
+import { isDiscordBlacklisted } from "./discord-blacklist.js";
 import { fetchDeepSeaStatus } from "./deep-sea.js";
 import { sendDiscordDirectMessage } from "./discord-dm.js";
 import { findDiscordUserIdForSendTarget } from "./discord-send-target.js";
@@ -101,6 +103,14 @@ export async function executeTeamChatCommand(
 
   if (parseHelpTeamChatCommand(message)) {
     return { replies: formatTeamChatHelpReplies() };
+  }
+
+  if (ctx.senderSteamId) {
+    const guildId = configuredGuildId();
+    if (guildId) {
+      const blocked = await isDiscordBlacklisted(db, guildId, { steamId: ctx.senderSteamId });
+      if (blocked) return null;
+    }
   }
 
   if (settings.teamChatBot.muted) {

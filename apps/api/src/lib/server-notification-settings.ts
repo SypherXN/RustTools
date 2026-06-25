@@ -67,6 +67,7 @@ export async function updateActiveNotificationSettings(
     teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
     eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
     automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
+    legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
   },
 ): Promise<ServerNotificationSettings | null> {
   const [server] = await db

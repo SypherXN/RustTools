@@ -62,6 +62,11 @@ export interface ApiHealth {
   };
   fcm: {
     listening: boolean;
+    configured?: boolean;
+    daysRemaining?: number | null;
+    warning?: boolean;
+    expired?: boolean;
+    expiresAt?: string | null;
   };
 }
 

@@ -95,4 +95,35 @@ export const commands = [
             .addChoices(...channelPurposeChoices),
         ),
     ),
+  new SlashCommandBuilder()
+    .setName("blacklist")
+    .setDescription("Block Discord or Steam users from bot commands (admin)")
+    .addSubcommand((sub) =>
+      sub
+        .setName("add")
+        .setDescription("Add a user to the blacklist")
+        .addUserOption((opt) =>
+          opt.setName("user").setDescription("Discord user to block"),
+        )
+        .addStringOption((opt) =>
+          opt.setName("steam_id").setDescription("Steam ID to block (17 digits)"),
+        )
+        .addStringOption((opt) =>
+          opt.setName("reason").setDescription("Optional reason"),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("remove")
+        .setDescription("Remove a user from the blacklist")
+        .addUserOption((opt) =>
+          opt.setName("user").setDescription("Discord user to unblock"),
+        )
+        .addStringOption((opt) =>
+          opt.setName("steam_id").setDescription("Steam ID to unblock"),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub.setName("list").setDescription("List blacklisted users"),
+    ),
 ].map((cmd) => cmd.toJSON());

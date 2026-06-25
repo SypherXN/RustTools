@@ -1,13 +1,18 @@
-import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { and, eq, or } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
-import { rustEntities } from "@rusttools/db";
+import { rustEntities, users } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { logAudit } from "../lib/audit.js";
 import {
   assertInternalApiKey,
-  requireDiscordCapability,
+  requireDiscordBotAccess,
 } from "../lib/discord-permissions.js";
+import {
+  addDiscordBlacklistEntry,
+  listDiscordBlacklist,
+  removeDiscordBlacklistEntry,
+} from "../lib/discord-blacklist.js";
 import {
   assertGuildAllowed,
   bindDiscordChannel,
@@ -19,12 +24,32 @@ import { resolveDiscordChannelId } from "../lib/discord-channels.js";
 import { getActiveServerId } from "../lib/rust-data.js";
 import { getSwitchState } from "../lib/vending.js";
 import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
-import { isDiscordChannelPurpose } from "@rusttools/shared";
+import { isDiscordChannelPurpose, formatAttributedTeamChatMessage } from "@rusttools/shared";
+import {
+  clearInformationEmbedBinding,
+  ensureInformationEmbed,
+} from "../lib/information-embed.js";
 
 function discordIdFrom(request: FastifyRequest): string | undefined {
   const query = request.query as Record<string, string>;
   const body = request.body as Record<string, unknown> | undefined;
   return query.discordUserId ?? (body?.discordUserId as string | undefined);
+}
+
+async function requireInternalBotAccess(
+  db: Database,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  capability: "admin" | "switch" | "view",
+  guildId?: string | null,
+): Promise<string | null> {
+  const discordUserId = discordIdFrom(request);
+  const perm = await requireDiscordBotAccess(db, discordUserId, capability, guildId);
+  if (!perm.ok) {
+    reply.status(403).send({ error: perm.error });
+    return null;
+  }
+  return discordUserId ?? null;
 }
 
 export async function registerInternalRoutes(
@@ -39,9 +64,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/health", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const status = deps.rustPlus.getStatus();
     return {
@@ -55,27 +78,21 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/team", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const team = await deps.rustPlus.getTeamInfo();
     return { team };
   });
 
   app.get("/internal/time", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const time = await deps.rustPlus.getTime();
     return { time };
   });
 
   app.get("/internal/deepsea", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const serverId = await getActiveServerId(deps.db);
     if (!serverId) {
@@ -87,9 +104,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/devices", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const serverId = await getActiveServerId(deps.db);
     const devices = serverId
@@ -105,8 +120,7 @@ export async function registerInternalRoutes(
       action?: "on" | "off" | "toggle";
     };
 
-    const perm = await requireDiscordCapability(discordUserId, "switch");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "switch"))) return;
 
     const numericId = Number(target);
     const [device] = await deps.db
@@ -147,9 +161,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/storage/:target", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const { target } = request.params as { target: string };
     const numericId = Number(target);
@@ -175,9 +187,7 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/storage/recycle/:entityDbId", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const { entityDbId } = request.params as { entityDbId: string };
     const [device] = await deps.db
@@ -199,26 +209,40 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/chat", async (request, reply) => {
-    const { discordUserId, message } = request.body as {
+    const { discordUserId, message, discordUsername } = request.body as {
       discordUserId: string;
       message: string;
+      discordUsername?: string;
     };
 
-    const perm = await requireDiscordCapability(discordUserId, "switch");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "switch"))) return;
 
-    await deps.rustPlus.sendTeamMessage(message);
+    if (!message?.trim()) {
+      return reply.status(400).send({ error: "message is required" });
+    }
+
+    let senderLabel = discordUsername?.trim() ?? "";
+    if (!senderLabel && discordUserId) {
+      const [row] = await deps.db
+        .select({ discordUsername: users.discordUsername })
+        .from(users)
+        .where(eq(users.discordId, discordUserId))
+        .limit(1);
+      senderLabel = row?.discordUsername ?? discordUserId;
+    }
+
+    const outbound = formatAttributedTeamChatMessage(senderLabel, message);
+
+    await deps.rustPlus.sendTeamMessage(outbound);
     await logAudit(deps.db, {
       action: "discord_team_chat",
-      metadata: { discordUserId, message },
+      metadata: { discordUserId, message: message.trim(), outbound },
     });
     return { ok: true };
   });
 
   app.get("/internal/map", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
     const map = await deps.rustPlus.getMap();
     return {
@@ -229,14 +253,12 @@ export async function registerInternalRoutes(
   });
 
   app.get("/internal/channels", async (request, reply) => {
-    const discordUserId = discordIdFrom(request);
-    const perm = await requireDiscordCapability(discordUserId, "view");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
-
     const { guildId } = request.query as { guildId?: string };
     if (!guildId?.trim()) {
       return reply.status(400).send({ error: "guildId is required" });
     }
+
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view", guildId.trim()))) return;
 
     const guildError = assertGuildAllowed(guildId.trim());
     if (guildError) return reply.status(403).send({ error: guildError });
@@ -253,8 +275,8 @@ export async function registerInternalRoutes(
       channelId: string;
     };
 
-    const perm = await requireDiscordCapability(discordUserId, "admin");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    const perm = await requireInternalBotAccess(deps.db, request, reply, "admin", guildId.trim());
+    if (!perm) return;
 
     if (!guildId?.trim() || !channelId?.trim()) {
       return reply.status(400).send({ error: "guildId and channelId are required" });
@@ -267,6 +289,14 @@ export async function registerInternalRoutes(
     if (guildError) return reply.status(403).send({ error: guildError });
 
     await bindDiscordChannel(deps.db, guildId.trim(), purpose, channelId.trim());
+
+    if (purpose === "information") {
+      try {
+        await ensureInformationEmbed(deps.db, deps.rustPlus, guildId.trim(), channelId.trim());
+      } catch (err) {
+        console.error("[InformationEmbed] Failed to post initial board:", err);
+      }
+    }
 
     await logAudit(deps.db, {
       action: "discord_channel_bind",
@@ -286,8 +316,8 @@ export async function registerInternalRoutes(
       purpose: string;
     };
 
-    const perm = await requireDiscordCapability(discordUserId, "admin");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    const perm = await requireInternalBotAccess(deps.db, request, reply, "admin", guildId.trim());
+    if (!perm) return;
 
     if (!guildId?.trim()) {
       return reply.status(400).send({ error: "guildId is required" });
@@ -301,6 +331,10 @@ export async function registerInternalRoutes(
 
     const cleared = await clearDiscordChannelBinding(deps.db, guildId.trim(), purpose);
 
+    if (purpose === "information") {
+      await clearInformationEmbedBinding(deps.db, guildId.trim());
+    }
+
     await logAudit(deps.db, {
       action: "discord_channel_clear",
       targetType: "discord_channel_purpose",
@@ -313,15 +347,14 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/commands-channel/execute", async (request, reply) => {
-    const { discordUserId, guildId, channelId, message } = request.body as {
+    const { guildId, channelId, message } = request.body as {
       discordUserId: string;
       guildId: string;
       channelId: string;
       message: string;
     };
 
-    const perm = await requireDiscordCapability(discordUserId, "switch");
-    if (!perm.ok) return reply.status(403).send({ error: perm.error });
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "switch", guildId.trim()))) return;
 
     if (!guildId?.trim() || !channelId?.trim() || !message?.trim()) {
       return reply.status(400).send({ error: "guildId, channelId, and message are required" });
@@ -352,5 +385,93 @@ export async function registerInternalRoutes(
         : [];
 
     return { replies };
+  });
+
+  app.get("/internal/blacklist", async (request, reply) => {
+    const { guildId } = request.query as { guildId?: string };
+    if (!guildId?.trim()) {
+      return reply.status(400).send({ error: "guildId is required" });
+    }
+
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "admin", guildId.trim()))) return;
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    const entries = await listDiscordBlacklist(deps.db, guildId.trim());
+    return { entries };
+  });
+
+  app.post("/internal/blacklist/add", async (request, reply) => {
+    const { discordUserId, guildId, targetDiscordId, steamId, reason } = request.body as {
+      discordUserId: string;
+      guildId: string;
+      targetDiscordId?: string;
+      steamId?: string;
+      reason?: string;
+    };
+
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "admin", guildId?.trim()))) return;
+
+    if (!guildId?.trim()) {
+      return reply.status(400).send({ error: "guildId is required" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    try {
+      const entry = await addDiscordBlacklistEntry(deps.db, {
+        guildId: guildId.trim(),
+        discordId: targetDiscordId,
+        steamId,
+        reason,
+        createdBy: discordUserId,
+      });
+
+      await logAudit(deps.db, {
+        action: "discord_blacklist_add",
+        targetType: "blacklist",
+        targetId: entry.id,
+        metadata: { discordUserId, targetDiscordId, steamId },
+      });
+
+      return { ok: true, entry };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add blacklist entry";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.post("/internal/blacklist/remove", async (request, reply) => {
+    const { discordUserId, guildId, targetDiscordId, steamId } = request.body as {
+      discordUserId: string;
+      guildId: string;
+      targetDiscordId?: string;
+      steamId?: string;
+    };
+
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "admin", guildId?.trim()))) return;
+
+    if (!guildId?.trim()) {
+      return reply.status(400).send({ error: "guildId is required" });
+    }
+
+    const guildError = assertGuildAllowed(guildId.trim());
+    if (guildError) return reply.status(403).send({ error: guildError });
+
+    const removed = await removeDiscordBlacklistEntry(deps.db, guildId.trim(), {
+      discordId: targetDiscordId,
+      steamId,
+    });
+
+    if (removed) {
+      await logAudit(deps.db, {
+        action: "discord_blacklist_remove",
+        metadata: { discordUserId, targetDiscordId, steamId },
+      });
+    }
+
+    return { ok: true, removed };
   });
 }

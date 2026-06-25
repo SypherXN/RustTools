@@ -51,3 +51,10 @@ export function appendTeamChatMessage(
   const next = [...list, message];
   return next.length > max ? next.slice(-max) : next;
 }
+
+/** Prefix outbound team chat from Discord/web so in-game can see who sent it. */
+export function formatAttributedTeamChatMessage(sender: string, message: string): string {
+  const label = sender.trim().slice(0, 32) || "Discord";
+  const body = message.trim();
+  return `[${label}] ${body}`;
+}

@@ -12,6 +12,8 @@ export type EventChatCommand =
   | "large"
   | "small"
   | "vendor"
+  | "bradley"
+  | "convoy"
   | "events";
 
 const EVENT_COMMANDS: Record<string, EventChatCommand> = {
@@ -24,6 +26,8 @@ const EVENT_COMMANDS: Record<string, EventChatCommand> = {
   "!large": "large",
   "!small": "small",
   "!vendor": "vendor",
+  "!bradley": "bradley",
+  "!convoy": "convoy",
   "!events": "events",
 };
 
@@ -97,12 +101,18 @@ export function formatEventChatCommandResponse(
       return formatOilRigStatus("small", status, nowSec);
     case "vendor":
       return formatEntityStatus("Traveling Vendor", status.vendor, nowSec);
+    case "bradley":
+      return formatEntityStatus("Bradley APC", status.bradley, nowSec);
+    case "convoy":
+      return formatEntityStatus("Convoy", status.convoy, nowSec);
     case "events": {
       const lines = [
         formatEntityStatus("Cargo", status.cargo, nowSec),
         formatEntityStatus("Heli", status.heli, nowSec),
         formatEntityStatus("Chinook", status.chinook, nowSec),
         formatEntityStatus("Vendor", status.vendor, nowSec),
+        formatEntityStatus("Bradley", status.bradley, nowSec),
+        formatEntityStatus("Convoy", status.convoy, nowSec),
         formatOilRigStatus("small", status, nowSec),
         formatOilRigStatus("large", status, nowSec),
       ];

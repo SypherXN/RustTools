@@ -12,6 +12,7 @@ import type {
 import {
   defaultProximityCheckForCondition,
   evaluateTeamProximityCheck,
+  isLocalTimeInScheduleWindow,
   parseStorageEntityInfo,
 } from "@rusttools/shared";
 import { resolveAutomationPoint } from "./automation-base.js";
@@ -277,6 +278,7 @@ export async function dispatchAutomationEvent(
 const lastIntervalRun = new Map<string, number>();
 const lastTimeOfDayPhase = new Map<string, "day" | "night">();
 const lastPresenceState = new Map<string, boolean>();
+const lastScheduleWindowActive = new Map<string, boolean>();
 
 export async function evaluateTeamPresenceAutomationRules(
   db: Database,
@@ -355,6 +357,34 @@ export async function evaluateTimeOfDayAutomationRules(
   for (const rule of rules) {
     if (lastTimeOfDayPhase.get(rule.id) === phase) continue;
     lastTimeOfDayPhase.set(rule.id, phase);
+
+    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
+    await runActions(db, rustPlus, notifications, serverId, rule.actions);
+  }
+}
+
+export async function evaluateScheduleWindowAutomationRules(
+  db: Database,
+  rustPlus: RustPlusManager,
+  notifications: NotificationService,
+  serverId: string,
+): Promise<void> {
+  const rules = await listAutomationRules(db, serverId).then((rows) =>
+    rows.filter((r) => r.enabled && r.trigger.type === "schedule_window"),
+  );
+
+  for (const rule of rules) {
+    const inWindow = isLocalTimeInScheduleWindow(rule.trigger);
+    const was = lastScheduleWindowActive.get(rule.id) ?? false;
+    const edge = rule.trigger.scheduleEdge ?? "enter";
+
+    const shouldRun =
+      (edge === "enter" || edge === "both") && inWindow && !was
+        ? true
+        : (edge === "exit" || edge === "both") && !inWindow && was;
+
+    lastScheduleWindowActive.set(rule.id, inWindow);
+    if (!shouldRun) continue;
 
     if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
     await runActions(db, rustPlus, notifications, serverId, rule.actions);

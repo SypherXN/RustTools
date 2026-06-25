@@ -133,7 +133,8 @@ async function handleDeepSea(interaction: ChatInputCommandInteraction) {
 
 async function handleChat(interaction: ChatInputCommandInteraction) {
   const message = interaction.options.getString("message", true);
-  await internalPost("/internal/chat", interaction.user.id, { message });
+  const discordUsername = interaction.user.globalName ?? interaction.user.username;
+  await internalPost("/internal/chat", interaction.user.id, { message, discordUsername });
   await interaction.reply({ content: "Team message sent.", ephemeral: true });
 }
 
@@ -251,7 +252,10 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
     const label = DISCORD_CHANNEL_PURPOSE_LABELS[purpose as keyof typeof DISCORD_CHANNEL_PURPOSE_LABELS] ?? purpose;
 
     await interaction.reply({
-      content: `Linked <#${interaction.channelId}> for **${label}**.`,
+      content:
+        purpose === "information"
+          ? `Linked <#${interaction.channelId}> for **${label}**. A live-updating information board was posted (refreshes every minute).`
+          : `Linked <#${interaction.channelId}> for **${label}**.`,
       ephemeral: true,
     });
     void result;
@@ -275,6 +279,101 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
       content: result.cleared
         ? `Cleared **${label}** channel binding. Notifications will use .env fallbacks if configured.`
         : `No **${label}** binding was set via \`/channel\` (may still use .env).`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleBlacklist(interaction: ChatInputCommandInteraction) {
+  if (!interaction.guildId) {
+    await interaction.reply({
+      content: "This command can only be used in a Discord server.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === "list") {
+    const data = await internalFetch<{ entries: Array<{ discordId: string | null; steamId: string | null; reason: string }> }>(
+      `/internal/blacklist?guildId=${encodeURIComponent(interaction.guildId)}`,
+      interaction.user.id,
+    );
+
+    const lines = data.entries.length
+      ? data.entries.map((entry) => {
+          const who = entry.discordId
+            ? `<@${entry.discordId}>`
+            : entry.steamId
+              ? `Steam \`${entry.steamId}\``
+              : "Unknown";
+          const reason = entry.reason ? ` — ${entry.reason}` : "";
+          return `• ${who}${reason}`;
+        })
+      : ["No blacklisted users."];
+
+    await interaction.reply({
+      content: lines.join("\n"),
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (sub === "add") {
+    const user = interaction.options.getUser("user");
+    const steamId = interaction.options.getString("steam_id");
+    const reason = interaction.options.getString("reason") ?? undefined;
+
+    if (!user && !steamId) {
+      await interaction.reply({
+        content: "Provide a Discord user and/or Steam ID to blacklist.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    await internalPost("/internal/blacklist/add", interaction.user.id, {
+      guildId: interaction.guildId,
+      targetDiscordId: user?.id,
+      steamId: steamId ?? undefined,
+      reason,
+    });
+
+    const label = user ? user.tag : `Steam ${steamId}`;
+    await interaction.reply({
+      content: `Blacklisted **${label}**.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (sub === "remove") {
+    const user = interaction.options.getUser("user");
+    const steamId = interaction.options.getString("steam_id");
+
+    if (!user && !steamId) {
+      await interaction.reply({
+        content: "Provide a Discord user and/or Steam ID to remove.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const result = await internalPost<{ removed: boolean }>(
+      "/internal/blacklist/remove",
+      interaction.user.id,
+      {
+        guildId: interaction.guildId,
+        targetDiscordId: user?.id,
+        steamId: steamId ?? undefined,
+      },
+    );
+
+    await interaction.reply({
+      content: result.removed
+        ? "Removed from blacklist."
+        : "No matching blacklist entry found.",
       ephemeral: true,
     });
   }
@@ -388,6 +487,9 @@ async function main() {
           break;
         case "channel":
           await handleChannel(interaction);
+          break;
+        case "blacklist":
+          await handleBlacklist(interaction);
           break;
         default:
           await interaction.reply({ content: "Unknown command", ephemeral: true });

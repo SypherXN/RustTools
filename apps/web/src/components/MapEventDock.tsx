@@ -66,6 +66,20 @@ function buildEvents(status: WorldEventsStatus, nowSec: number): TrackableEvent[
     `Active @ ${status.vendor.grid ?? "?"}`,
     "Last seen {since} ago",
   );
+  push(
+    "bradley",
+    "Bradley APC",
+    status.bradley,
+    `Active @ ${status.bradley.grid ?? "?"}`,
+    "Last seen {since} ago",
+  );
+  push(
+    "convoy",
+    "Convoy",
+    status.convoy,
+    `Active @ ${status.convoy.grid ?? "?"}`,
+    "Last seen {since} ago",
+  );
 
   return items;
 }

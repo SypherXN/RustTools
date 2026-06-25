@@ -18,9 +18,9 @@ import {
   configuredWorldEventEntities,
   eventDiscordEnabled,
   eventTeamChatEnabled,
-  mapEventAlertsEnabled,
   worldEventAnnouncementEnabled,
 } from "../lib/map-events.js";
+import { mapEventAlertsEnabled } from "@rusttools/shared";
 import {
   formatAnnouncementsForChat,
   worldEventTracker,
@@ -43,9 +43,12 @@ import { recycleFromEntityInfo } from "../lib/vending.js";
 import { buildStorageChangeDiscordPayload } from "../lib/storage-discord-embed.js";
 import { evaluateSwitchAutoModes } from "../lib/switch-auto-modes.js";
 import { evaluateTcDecayAlerts } from "../lib/tc-decay-monitor.js";
+import { dispatchAlarmEscalation } from "../lib/alarm-escalation.js";
+import { broadcastWebPush } from "../lib/web-push.js";
 import {
   dispatchAutomationEvent,
   evaluateIntervalAutomationRules,
+  evaluateScheduleWindowAutomationRules,
   evaluateTeamPresenceAutomationRules,
   evaluateTimeOfDayAutomationRules,
 } from "../lib/automation-engine.js";
@@ -98,7 +101,9 @@ export function startPhase2Listeners(
           await notifications.discord({
             channelId: channel,
             embed: payload.embed,
-            components: payload.components,
+            components: payload.components as Parameters<
+              NotificationService["discord"]
+            >[0]["components"],
           });
         }
         notifications.webSocket({
@@ -125,12 +130,20 @@ export function startPhase2Listeners(
   });
 
   rustPlus.eventBus.on("fcmAlarm", async (event) => {
-    notifications.webSocket({ event: "fcmAlarm", payload: event });
-
     const activeServer = await getActiveServer(db);
-    if (!activeServer) return;
+    if (!activeServer) {
+      notifications.webSocket({ event: "fcmAlarm", payload: event });
+      return;
+    }
 
     const settings = await getServerNotificationSettings(db, activeServer.id);
+    notifications.webSocket({
+      event: "fcmAlarm",
+      payload: {
+        ...event,
+        browserSiren: settings.smartAlarm.browserSiren,
+      },
+    });
 
     const bodyEntityId = Number(
       (event.body?.entityId as string | number | undefined) ??
@@ -193,6 +206,25 @@ export function startPhase2Listeners(
       } catch (err) {
         console.error("[SmartAlarm] Failed to send team chat:", err);
       }
+    }
+
+    if (settings.smartAlarm.webPush) {
+      void broadcastWebPush(db, {
+        title: alarmTitle,
+        body: alarmText,
+        url: "/",
+      }).catch((err) => {
+        console.error("[SmartAlarm] Web push failed:", err);
+      });
+    }
+
+    if (settings.smartAlarm.escalation.enabled) {
+      void dispatchAlarmEscalation(
+        settings.smartAlarm.escalation.smsNumbers,
+        settings.smartAlarm.escalation.emailAddresses,
+        alarmTitle,
+        alarmText,
+      );
     }
 
     if (matchedEntity) {
@@ -267,16 +299,20 @@ export function startPhase2Listeners(
 
         notifications.webSocket({ event: "worldEventsChanged", payload: worldEvents });
 
-        if (mapEventAlertsEnabled()) {
-          const enabledEntities = configuredWorldEventEntities();
+        const mapEventSettings = notificationSettings.legacyAutomations.mapEvents;
+        if (mapEventAlertsEnabled(mapEventSettings)) {
+          const enabledEntities = configuredWorldEventEntities(mapEventSettings);
           const discordChannel = await resolveDefaultGuildChannelId(db, "events");
-          const sendDiscord = eventDiscordEnabled() && Boolean(discordChannel);
-          const sendTeamChat = eventTeamChatEnabled();
+          const sendDiscord = eventDiscordEnabled(mapEventSettings) && Boolean(discordChannel);
+          const sendTeamChat = eventTeamChatEnabled(mapEventSettings);
           const filtered = announcements.filter((item) =>
             worldEventAnnouncementEnabled(item, enabledEntities),
           );
-          const chatMessages = formatAnnouncementsForChat(filtered, worldSize);
-          const chatPrefix = process.env.AUTOMATION_EVENT_TEAM_CHAT_PREFIX?.trim() || "RustTools";
+          const chatMessages = formatAnnouncementsForChat(
+            filtered,
+            worldSize,
+            mapEventSettings.prefix,
+          );
 
           for (const announcement of filtered) {
             if (sendDiscord) {
@@ -287,7 +323,7 @@ export function startPhase2Listeners(
                   description: formatWorldEventAnnouncement(
                     announcement,
                     worldSize,
-                    chatPrefix,
+                    mapEventSettings.prefix,
                   ),
                   color: announcement.kind === "heli_down" ? 0xe85d2a : 0x3dd68c,
                 },
@@ -405,15 +441,16 @@ const lastAllOfflineByServer = new Map<string, boolean>();
     id: "night-lights",
     intervalMs: 120_000,
     run: async () => {
-      if (process.env.AUTOMATION_NIGHT_LIGHTS !== "true") return;
       try {
+        const activeServer = await getActiveServer(db);
+        if (!activeServer) return;
+        const settings = await getServerNotificationSettings(db, activeServer.id);
+        const nl = settings.legacyAutomations.nightLights;
+        if (!nl.enabled || nl.entityIds.length === 0) return;
+
         const time = (await rustPlus.getTime()) as { isDay?: boolean };
         const turnOn = time.isDay === false;
-        const ids = (process.env.AUTOMATION_NIGHT_LIGHT_ENTITY_IDS ?? "")
-          .split(",")
-          .map((s) => Number(s.trim()))
-          .filter((n) => !Number.isNaN(n));
-        for (const id of ids) {
+        for (const id of nl.entityIds) {
           await rustPlus.toggleSwitch(id, turnOn);
         }
       } catch {
@@ -426,18 +463,41 @@ const lastAllOfflineByServer = new Map<string, boolean>();
     id: "team-offline-sam",
     intervalMs: 180_000,
     run: async () => {
-      if (process.env.AUTOMATION_TEAM_OFFLINE_SAM !== "true") return;
       try {
+        const activeServer = await getActiveServer(db);
+        if (!activeServer) return;
+        const settings = await getServerNotificationSettings(db, activeServer.id);
+        const sam = settings.legacyAutomations.teamOfflineSam;
+        if (!sam.enabled || sam.switchEntityId == null) return;
+
         const team = (await rustPlus.getTeamInfo()) as {
           members?: Array<{ isOnline?: boolean }>;
         };
         const allOffline = (team.members ?? []).every((m) => !m.isOnline);
-        const samId = Number(process.env.AUTOMATION_SAM_SWITCH_ENTITY_ID);
-        if (!Number.isNaN(samId) && allOffline) {
-          await rustPlus.toggleSwitch(samId, true);
+        if (allOffline) {
+          await rustPlus.toggleSwitch(sam.switchEntityId, true);
         }
       } catch {
         // ignore
+      }
+    },
+  });
+
+  rustPlus.jobScheduler.register({
+    id: "schedule-window-automation",
+    intervalMs: 60_000,
+    run: async () => {
+      const activeServer = await getActiveServer(db);
+      if (!activeServer) return;
+      try {
+        await evaluateScheduleWindowAutomationRules(
+          db,
+          rustPlus,
+          notifications,
+          activeServer.id,
+        );
+      } catch (err) {
+        console.error("[ScheduleWindow] Failed:", err);
       }
     },
   });
