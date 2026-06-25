@@ -5,6 +5,7 @@ import type { RustPlusManager, NotificationService } from "@rusttools/rustplus-c
 import { generateId } from "../lib/ids.js";
 import { getWorldSize, parseTeamRoster, getActiveServer } from "../lib/rust-data.js";
 import { processTeamRoster, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import { handleTeamRosterEvents } from "../lib/team-event-store.js";
 import { recordTeamChatMessage } from "../lib/team-chat-buffer.js";
 import {
   configuredMapEventTypes,
@@ -26,7 +27,10 @@ import {
   formatDeepSeaDiscordDescription,
   formatDeepSeaTeamChatMessage,
   formatSmartAlarmTeamChatMessage,
+  formatRosterCommandResponse,
   parseDeepSeaTeamChatCommand,
+  parseLeaderTeamChatCommand,
+  parseRosterTeamChatCommand,
 } from "@rusttools/shared";
 
 export function startPhase2Listeners(
@@ -212,6 +216,56 @@ export function startPhase2Listeners(
       }
     }
 
+    const rosterCommand = parseRosterTeamChatCommand(event.message);
+    if (rosterCommand) {
+      try {
+        const [team, info] = await Promise.all([
+          rustPlus.getTeamInfo(),
+          rustPlus.getServerInfo(),
+        ]);
+        const worldSize = getWorldSize(info);
+        const parsed = parseTeamRoster(team, worldSize);
+        const { team: tracked } = processTeamRoster(event.serverId, parsed, worldSize);
+        await rustPlus.sendTeamMessage(formatRosterCommandResponse(rosterCommand, tracked));
+      } catch (err) {
+        console.error("[TeamRoster] Failed to answer team chat command:", err);
+      }
+    }
+
+    if (parseLeaderTeamChatCommand(event.message)) {
+      try {
+        const activeServer = await getActiveServer(db);
+        if (!activeServer || activeServer.id !== event.serverId) return;
+
+        const [team, info] = await Promise.all([
+          rustPlus.getTeamInfo(),
+          rustPlus.getServerInfo(),
+        ]);
+        const worldSize = getWorldSize(info);
+        const parsed = parseTeamRoster(team, worldSize);
+
+        if (!parsed.leaderSteamId || parsed.leaderSteamId !== activeServer.playerId) {
+          await rustPlus.sendTeamMessage(
+            "RustTools: !leader is only available when RustTools is paired with the current team leader.",
+          );
+          return;
+        }
+
+        const sender = parsed.members.find((m) => m.steamId === event.steamId);
+        if (!sender) return;
+
+        if (sender.isLeader) {
+          await rustPlus.sendTeamMessage("RustTools: You are already team leader.");
+          return;
+        }
+
+        await rustPlus.promoteToLeader(sender.steamId);
+        await rustPlus.sendTeamMessage(`RustTools: ${sender.name} is now team leader.`);
+      } catch (err) {
+        console.error("[TeamLeader] Failed to process !leader command:", err);
+      }
+    }
+
     const channel = await resolveDefaultGuildChannelId(db, "team_chat");
     if (!channel) return;
 
@@ -233,7 +287,12 @@ export function startPhase2Listeners(
       ]);
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(event.teamInfo, worldSize);
-      const { team, deaths } = processTeamRoster(event.serverId, parsed, worldSize);
+      const { team, deaths, newDeaths, newConnections } = processTeamRoster(
+        event.serverId,
+        parsed,
+        worldSize,
+      );
+      await handleTeamRosterEvents(db, notifications, event.serverId, newDeaths, newConnections);
       notifications.webSocket({
         event: "teamChanged",
         payload: enrichTeamApiResponse(activeServer?.playerId ?? null, team, deaths),

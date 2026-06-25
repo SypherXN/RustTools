@@ -514,6 +514,27 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/team") return demoTeamResponse as T;
 
+  if (path === "/servers/active/team/deaths") return { deaths: demoTeamDeaths } as T;
+
+  if (path === "/servers/active/team/connections") {
+    return {
+      connections: [
+        {
+          steamId: "76561198000000002",
+          name: "Teammate Two",
+          event: "connected",
+          occurredAt: demoNow - 900,
+        },
+        {
+          steamId: "76561198000000003",
+          name: "Teammate Three",
+          event: "disconnected",
+          occurredAt: demoNow - 1800,
+        },
+      ],
+    } as T;
+  }
+
   if (path === "/servers/active/team/chat") return { messages: demoTeamChat } as T;
 
   if (path === "/servers/active/team/promote" && method === "POST") {

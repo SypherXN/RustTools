@@ -1,6 +1,7 @@
 import {
   type ParsedTeamInfo,
   type TeamApiResponse,
+  type TeamConnectionEvent,
   type TeamDeathEvent,
   type TeamMemberStatus,
   type TeamRosterMember,
@@ -16,6 +17,8 @@ interface MemberTrackState {
   lastDeathTime: number | null;
   lastPosition?: { x: number; y: number; changedAt: number };
   wasOnline: boolean;
+  /** False until the member has been observed once (avoids false connect on first poll). */
+  seen: boolean;
 }
 
 interface ServerTeamState {
@@ -49,6 +52,7 @@ function recordDeath(
   const track = state.members.get(member.steamId) ?? {
     lastDeathTime: null,
     wasOnline: false,
+    seen: false,
   };
 
   const prev = track.lastDeathTime;
@@ -127,20 +131,65 @@ function inferStatus(
   return { status: "online", afkSince: null };
 }
 
+function inferOnlineTransition(
+  member: TeamRosterMember,
+  track: MemberTrackState,
+): TeamConnectionEvent | null {
+  if (!track.seen) {
+    track.seen = true;
+    track.wasOnline = member.isOnline;
+    return null;
+  }
+
+  const isOnline = member.isOnline;
+  const wasOnline = track.wasOnline;
+
+  if (isOnline && !wasOnline) {
+    return {
+      steamId: member.steamId,
+      name: member.name,
+      event: "connected",
+      occurredAt: Math.floor(Date.now() / 1000),
+    };
+  }
+
+  if (!isOnline && wasOnline) {
+    return {
+      steamId: member.steamId,
+      name: member.name,
+      event: "disconnected",
+      occurredAt: Math.floor(Date.now() / 1000),
+    };
+  }
+
+  return null;
+}
+
 export function processTeamRoster(
   serverId: string,
   team: ParsedTeamInfo,
   worldSize?: number,
   nowSec = Math.floor(Date.now() / 1000),
-): { team: ParsedTeamInfo; deaths: TeamDeathEvent[]; newDeaths: TeamDeathEvent[] } {
+): {
+  team: ParsedTeamInfo;
+  deaths: TeamDeathEvent[];
+  newDeaths: TeamDeathEvent[];
+  newConnections: TeamConnectionEvent[];
+} {
   const state = getServerState(serverId);
   const newDeaths: TeamDeathEvent[] = [];
+  const newConnections: TeamConnectionEvent[] = [];
 
   const members = team.members.map((member) => {
     let track = state.members.get(member.steamId);
     if (!track) {
-      track = { lastDeathTime: null, wasOnline: false };
+      track = { lastDeathTime: null, wasOnline: false, seen: false };
       state.members.set(member.steamId, track);
+    }
+
+    const connection = inferOnlineTransition(member, track);
+    if (connection) {
+      newConnections.push(connection);
     }
 
     if (member.deathTime && member.deathTime > 0) {
@@ -162,6 +211,7 @@ export function processTeamRoster(
     team: { ...team, members },
     deaths: [...state.deaths],
     newDeaths,
+    newConnections,
   };
 }
 
@@ -169,7 +219,12 @@ export function applyTeamTracking(
   serverId: string | null,
   team: ParsedTeamInfo,
   worldSize?: number,
-): { team: ParsedTeamInfo; deaths: TeamDeathEvent[] } {
+): {
+  team: ParsedTeamInfo;
+  deaths: TeamDeathEvent[];
+  newDeaths: TeamDeathEvent[];
+  newConnections: TeamConnectionEvent[];
+} {
   if (!serverId) {
     return {
       team: {
@@ -181,11 +236,18 @@ export function applyTeamTracking(
         })),
       },
       deaths: [],
+      newDeaths: [],
+      newConnections: [],
     };
   }
 
   const result = processTeamRoster(serverId, team, worldSize);
-  return { team: result.team, deaths: result.deaths };
+  return {
+    team: result.team,
+    deaths: result.deaths,
+    newDeaths: result.newDeaths,
+    newConnections: result.newConnections,
+  };
 }
 
 export function enrichTeamApiResponse(

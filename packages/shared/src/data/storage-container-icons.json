@@ -1,0 +1,45 @@
+{
+    "tool_cupboard": [
+        { "shortname": "cupboard.tool", "name": "Tool Cupboard" },
+        { "shortname": "cupboard.tool.retro", "name": "Retro Tool Cupboard" },
+        { "shortname": "cupboard.tool.shockbyte", "name": "Shockbyte Tool Cupboard" }
+    ],
+    "large_box": [
+        { "shortname": "box.wooden.large", "name": "Large Wood Box" },
+        { "shortname": "medieval.box.wooden.large", "name": "Medieval Large Wood Box" },
+        { "shortname": "component.box.wood.large", "name": "Wood Storage Box" },
+        { "shortname": "component.box.stone.large", "name": "Stone Storage Box" },
+        { "shortname": "component.box.metal.large", "name": "Metal Storage Box" },
+        { "shortname": "component.box.sulfur.large", "name": "Sulfur Storage Box" },
+        { "shortname": "component.box.scrap.large", "name": "Scrap Storage Box" },
+        { "shortname": "component.box.ore.large", "name": "Ore Storage Box" },
+        { "shortname": "component.box.charcoal.large", "name": "Charcoal Storage Box" },
+        { "shortname": "component.box.food.large", "name": "Food Storage Box" },
+        { "shortname": "component.box.meds.large", "name": "Meds Storage Box" },
+        { "shortname": "component.box.guns.large", "name": "Guns Storage Box" },
+        { "shortname": "component.box.ammo.large", "name": "Ammo Storage Box" },
+        { "shortname": "component.box.tools.large", "name": "Tools Storage Box" },
+        { "shortname": "component.box.clothing.large", "name": "Clothing Storage Box" },
+        { "shortname": "component.box.comps.large", "name": "Comps Storage Box" },
+        { "shortname": "component.box.explosives.large", "name": "Explosives Storage Box" },
+        { "shortname": "component.box.armor.large", "name": "Armor Storage Box" }
+    ],
+    "barrel": [
+        { "shortname": "storage_barrel_b", "name": "Storage Barrel Vertical" },
+        { "shortname": "storage_barrel_c", "name": "Storage Barrel Horizontal" },
+        { "shortname": "industrial.storage.vertical", "name": "Industrial Storage Vertical Barrel" },
+        { "shortname": "industrial.storage.horizontal", "name": "Industrial Storage Horizontal Barrel" },
+        { "shortname": "krieg.storage.vertical", "name": "Krieg Storage Barrel" },
+        { "shortname": "krieg.storage.horizontal", "name": "Krieg Storage Crates" },
+        { "shortname": "abyss.barrel.vertical", "name": "Abyss Vertical Storage Tank" },
+        { "shortname": "abyss.barrel.horizontal", "name": "Abyss Horizontal Storage Tank" },
+        { "shortname": "wicker.barrel", "name": "Wicker Barrel" },
+        { "shortname": "bamboo.barrel", "name": "Bamboo Barrel" },
+        { "shortname": "water.barrel", "name": "Water Barrel" }
+    ],
+    "small_box": [
+        { "shortname": "box.wooden", "name": "Wood Storage Box" },
+        { "shortname": "pilot.hazmat.box.wooden", "name": "Flight Recorder Box" }
+    ],
+    "vending": [{ "shortname": "vending.machine", "name": "Vending Machine" }]
+}

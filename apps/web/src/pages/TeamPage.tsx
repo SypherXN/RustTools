@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { ParsedTeamInfo, TeamApiResponse, TeamChatMessage, TeamDeathEvent, TeamRosterMember } from "@rusttools/shared";
+import type { ParsedTeamInfo, TeamApiResponse, TeamChatMessage, TeamConnectionEvent, TeamDeathEvent, TeamRosterMember } from "@rusttools/shared";
 import {
   appendTeamChatMessage,
   formatTeamAfkDuration,
+  formatTeamConnectionAgo,
+  formatTeamConnectionLabel,
   formatTeamDeathAgo,
   formatTeamSession,
   sortTeamRoster,
@@ -17,6 +19,8 @@ import { useCan } from "../hooks/usePermissions";
 export function TeamPage() {
   const [teamInfo, setTeamInfo] = useState<ParsedTeamInfo | null>(null);
   const [deaths, setDeaths] = useState<TeamDeathEvent[]>([]);
+  const [deathHistory, setDeathHistory] = useState<TeamDeathEvent[]>([]);
+  const [connections, setConnections] = useState<TeamConnectionEvent[]>([]);
   const [canPromote, setCanPromote] = useState(false);
   const [pairedPlayerId, setPairedPlayerId] = useState<string | null>(null);
   const [promotingId, setPromotingId] = useState<string | null>(null);
@@ -38,6 +42,22 @@ export function TeamPage() {
     setError(null);
   }, []);
 
+  const loadDeathHistory = useCallback(() => {
+    void apiFetch<{ deaths: TeamDeathEvent[] }>("/servers/active/team/deaths")
+      .then((data) => setDeathHistory(data.deaths))
+      .catch(() => {
+        /* history optional when DB is empty or API unavailable */
+      });
+  }, []);
+
+  const loadConnections = useCallback(() => {
+    void apiFetch<{ connections: TeamConnectionEvent[] }>("/servers/active/team/connections")
+      .then((data) => setConnections(data.connections))
+      .catch(() => {
+        /* connection log optional */
+      });
+  }, []);
+
   const loadChat = useCallback(() => {
     void apiFetch<{ messages: TeamChatMessage[] }>("/servers/active/team/chat")
       .then((data) => setMessages(data.messages))
@@ -52,7 +72,9 @@ export function TeamPage() {
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
     loadChat();
-  }, [applyTeamPayload, loadChat]);
+    loadDeathHistory();
+    loadConnections();
+  }, [applyTeamPayload, loadChat, loadDeathHistory, loadConnections]);
 
   useEffect(() => {
     setLoading(true);
@@ -94,11 +116,24 @@ export function TeamPage() {
       );
       return;
     }
+    if (event === "teamConnection") {
+      const entry = payload as TeamConnectionEvent;
+      if (!entry?.steamId || !entry.occurredAt) return;
+      setConnections((prev) => {
+        const key = `${entry.steamId}-${entry.occurredAt}-${entry.event}`;
+        if (prev.some((c) => `${c.steamId}-${c.occurredAt}-${c.event}` === key)) {
+          return prev;
+        }
+        return [entry, ...prev].slice(0, 50);
+      });
+      return;
+    }
     if (event === "teamChanged") {
       const p = payload as TeamApiResponse | null;
       if (p?.team?.members) {
         applyTeamPayload(p);
         setLoading(false);
+        loadDeathHistory();
       } else {
         loadTeam();
       }
@@ -188,7 +223,9 @@ export function TeamPage() {
         <section className="card team-chat-panel">
           <h2>Team Chat</h2>
           <p className="muted" style={{ marginTop: 0 }}>
-            Type <code>!deepsea</code> or <code>!ds</code> for Deep Sea timer status.
+            Type <code>!deepsea</code> or <code>!ds</code> for Deep Sea timer status. Roster commands:{" "}
+            <code>!online</code>, <code>!offline</code>, <code>!afk</code>, <code>!alive</code>. Team members can
+            type <code>!leader</code> when RustTools is paired with the current leader.
           </p>
           <div className="chat-feed team-chat-feed" ref={chatFeedRef}>
             {messages.length === 0 && <p className="muted">No messages yet.</p>}
@@ -218,12 +255,32 @@ export function TeamPage() {
       </div>
 
       <section className="card" style={{ marginTop: "1rem" }}>
-        <h2>Recent deaths</h2>
-        {deaths.length === 0 ? (
-          <p className="muted">No deaths recorded yet this session.</p>
+        <h2>Connection log</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Join and disconnect events are logged to Discord and this page (no in-game reply).
+        </p>
+        {connections.length === 0 ? (
+          <p className="muted">No connection events recorded yet.</p>
         ) : (
           <ul className="team-death-list">
-            {deaths.map((death) => (
+            {connections.map((entry) => (
+              <TeamConnectionRow key={`${entry.steamId}-${entry.occurredAt}-${entry.event}`} entry={entry} now={now} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h2>Death history</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Persisted across sessions. Session tracker also shows {deaths.length} recent death
+          {deaths.length === 1 ? "" : "s"} this run.
+        </p>
+        {deathHistory.length === 0 ? (
+          <p className="muted">No deaths recorded yet.</p>
+        ) : (
+          <ul className="team-death-list">
+            {deathHistory.map((death) => (
               <TeamDeathRow key={`${death.steamId}-${death.deathTime}`} death={death} now={now} />
             ))}
           </ul>
@@ -246,6 +303,21 @@ function TeamDeathRow({ death, now }: { death: TeamDeathEvent; now: number }) {
         {ago && <span className="muted">{ago}</span>}
       </div>
       {location && <span className="team-death-location muted">{location}</span>}
+    </li>
+  );
+}
+
+function TeamConnectionRow({ entry, now }: { entry: TeamConnectionEvent; now: number }) {
+  const ago = formatTeamConnectionAgo(entry.occurredAt, now);
+  const verb = entry.event === "connected" ? "Connected" : "Disconnected";
+
+  return (
+    <li className="team-death-row">
+      <div className="team-death-main">
+        <strong>{formatTeamConnectionLabel(entry)}</strong>
+        {ago && <span className="muted">{ago}</span>}
+      </div>
+      <span className="team-death-location muted">{verb}</span>
     </li>
   );
 }

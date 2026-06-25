@@ -9,6 +9,7 @@ import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
 import { parseInGameTime, parseTeamRoster, parseWipeCountdown, getWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { applyTeamTracking, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import { persistTeamRosterEvents, listTeamConnectionHistory, listTeamDeathHistory } from "../lib/team-event-store.js";
 import { mergeTeamChatHistory } from "../lib/team-chat-buffer.js";
 import {
   getActiveNotificationSettings,
@@ -68,6 +69,14 @@ export async function registerServerRoutes(
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
       const tracked = applyTeamTracking(activeServer?.id ?? null, parsed, worldSize);
+      if (activeServer?.id) {
+        await persistTeamRosterEvents(
+          deps.db,
+          activeServer.id,
+          tracked.newDeaths,
+          tracked.newConnections,
+        );
+      }
       return enrichTeamApiResponse(activeServer?.playerId ?? null, tracked.team, tracked.deaths);
     } catch (err) {
       return reply.status(503).send({
@@ -138,6 +147,12 @@ export async function registerServerRoutes(
 
       const refreshed = parseTeamRoster(await deps.rustPlus.getTeamInfo(), worldSize);
       const tracked = applyTeamTracking(activeServer.id, refreshed, worldSize);
+      await persistTeamRosterEvents(
+        deps.db,
+        activeServer.id,
+        tracked.newDeaths,
+        tracked.newConnections,
+      );
 
       await logAudit(deps.db, {
         userId: user.id,
@@ -153,6 +168,40 @@ export async function registerServerRoutes(
         error: err instanceof Error ? err.message : "Failed to promote team leader",
       });
     }
+  });
+
+  app.get("/servers/active/team/deaths", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const activeServer = await getActiveServer(deps.db);
+    if (!activeServer) {
+      return reply.status(503).send({ error: "No active server configured" });
+    }
+
+    const query = request.query as { limit?: string; offset?: string };
+    const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 500);
+    const offset = Math.max(Number(query.offset) || 0, 0);
+
+    const deaths = await listTeamDeathHistory(deps.db, activeServer.id, limit, offset);
+    return { deaths };
+  });
+
+  app.get("/servers/active/team/connections", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const activeServer = await getActiveServer(deps.db);
+    if (!activeServer) {
+      return reply.status(503).send({ error: "No active server configured" });
+    }
+
+    const query = request.query as { limit?: string; offset?: string };
+    const limit = Math.min(Math.max(Number(query.limit) || 50, 1), 200);
+    const offset = Math.max(Number(query.offset) || 0, 0);
+
+    const connections = await listTeamConnectionHistory(deps.db, activeServer.id, limit, offset);
+    return { connections };
   });
 
   app.get("/servers/active/time", async (request, reply) => {

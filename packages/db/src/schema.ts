@@ -79,3 +79,29 @@ export const discordGuildChannels = sqliteTable(
     pk: primaryKey({ columns: [table.guildId, table.purpose] }),
   }),
 );
+
+export const teamDeathLog = sqliteTable("team_death_log", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  steamId: text("steam_id").notNull(),
+  name: text("name").notNull(),
+  deathTime: integer("death_time").notNull(),
+  x: integer("x"),
+  y: integer("y"),
+  grid: text("grid"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+export const teamConnectionLog = sqliteTable("team_connection_log", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  steamId: text("steam_id").notNull(),
+  name: text("name").notNull(),
+  event: text("event").notNull(),
+  occurredAt: integer("occurred_at").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});

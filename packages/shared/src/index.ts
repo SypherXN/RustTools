@@ -9,6 +9,7 @@ export * from "./map-coords.js";
 export * from "./map-grid.js";
 export * from "./rust-items.js";
 export * from "./team.js";
+export * from "./team-roster-commands.js";
 export * from "./monument-info.js";
 export * from "./devices.js";
 export * from "./team-chat.js";

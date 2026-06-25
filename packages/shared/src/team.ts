@@ -28,6 +28,13 @@ export interface TeamDeathEvent {
   grid?: string;
 }
 
+export interface TeamConnectionEvent {
+  steamId: string;
+  name: string;
+  event: "connected" | "disconnected";
+  occurredAt: number;
+}
+
 export interface ParsedTeamInfo {
   leaderSteamId: string | null;
   members: TeamRosterMember[];
@@ -87,6 +94,20 @@ export function formatTeamSession(
   const elapsed = nowSec - spawnTime;
   if (elapsed < 0) return null;
   return `~${formatDuration(elapsed)}`;
+}
+
+export function formatTeamConnectionLabel(connection: TeamConnectionEvent): string {
+  const verb = connection.event === "connected" ? "joined" : "left";
+  return `${connection.name} ${verb}`;
+}
+
+export function formatTeamConnectionAgo(
+  occurredAt: number,
+  nowSec = Math.floor(Date.now() / 1000),
+): string | null {
+  const ago = nowSec - occurredAt;
+  if (ago < 0) return null;
+  return `${formatDuration(ago)} ago`;
 }
 
 export function sortTeamRoster(members: TeamRosterMember[]): TeamRosterMember[] {
