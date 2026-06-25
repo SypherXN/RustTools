@@ -1145,3 +1145,80 @@ legend {
     padding: 1.25rem;
   }
 }
+
+/* ── Procgen map & 3D ── */
+.map-procgen-overlay {
+  position: absolute;
+  pointer-events: none;
+  object-fit: fill;
+}
+
+.map-paths-overlay,
+.map-prefab-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.map-prefab-overlay .map-marker-hit {
+  pointer-events: all;
+  cursor: pointer;
+}
+
+.map-prefab-label {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  pointer-events: none;
+}
+
+.map-team-heading {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.map-view-mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.map-view-mode-toggle .btn-secondary.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.map-3d-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.map-3d-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.map-3d-canvas {
+  flex: none;
+  height: var(--map-viewport-height, min(72vh, 820px));
+  min-height: 420px;
+}
+
+.procgen-upload-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.procgen-upload-label {
+  cursor: pointer;
+}
+
+.procgen-status-dl .procgen-warn dd,
+.procgen-status-dl .procgen-error dd {
+  color: var(--danger, #ef4444);
+}

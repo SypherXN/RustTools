@@ -5,14 +5,21 @@ export interface MapCoordinateTransform {
   worldSize: number;
 }
 
+const RUST_MAP_PADDING_WORLD = 2000;
+
 export function buildMapTransform(
   map: { width?: number; height?: number; oceanMargin?: number },
   info: { mapSize?: number },
 ): MapCoordinateTransform {
   const imageWidth = map.width ?? 0;
   const imageHeight = map.height ?? imageWidth;
-  const oceanMargin = map.oceanMargin ?? 0;
   const worldSize = info.mapSize ?? imageWidth;
+  const oceanMargin =
+    map.oceanMargin ??
+    (worldSize > 0 && imageWidth > 0
+      ? (Math.min(imageWidth, imageHeight) * (RUST_MAP_PADDING_WORLD / 2)) /
+        (worldSize + RUST_MAP_PADDING_WORLD)
+      : 0);
 
   return { imageWidth, imageHeight, oceanMargin, worldSize };
 }

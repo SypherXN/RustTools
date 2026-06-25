@@ -16,6 +16,9 @@ const MAX_DEATHS_PER_SERVER = 100;
 interface MemberTrackState {
   lastDeathTime: number | null;
   lastPosition?: { x: number; y: number; changedAt: number };
+  /** Previous sampled position for movement heading. */
+  prevPosition?: { x: number; y: number };
+  heading: number | null;
   wasOnline: boolean;
   /** False until the member has been observed once (avoids false connect on first poll). */
   seen: boolean;
@@ -53,6 +56,7 @@ function recordDeath(
     lastDeathTime: null,
     wasOnline: false,
     seen: false,
+    heading: null,
   };
 
   const prev = track.lastDeathTime;
@@ -90,15 +94,15 @@ function inferStatus(
   member: TeamRosterMember,
   track: MemberTrackState,
   nowSec: number,
-): { status: TeamMemberStatus; afkSince: number | null } {
+): { status: TeamMemberStatus; afkSince: number | null; heading: number | null } {
   if (!member.isOnline) {
     track.wasOnline = false;
-    return { status: "offline", afkSince: null };
+    return { status: "offline", afkSince: null, heading: track.heading };
   }
 
   if (!member.isAlive) {
     track.wasOnline = true;
-    return { status: "dead", afkSince: null };
+    return { status: "dead", afkSince: null, heading: track.heading };
   }
 
   const hasPosition =
@@ -106,7 +110,7 @@ function inferStatus(
 
   if (!hasPosition) {
     track.wasOnline = true;
-    return { status: "online", afkSince: null };
+    return { status: "online", afkSince: null, heading: track.heading };
   }
 
   const x = member.x!;
@@ -115,20 +119,28 @@ function inferStatus(
   if (!track.wasOnline || !track.lastPosition) {
     track.wasOnline = true;
     track.lastPosition = { x, y, changedAt: nowSec };
-    return { status: "online", afkSince: null };
+    return { status: "online", afkSince: null, heading: track.heading };
   }
 
   if (track.lastPosition.x !== x || track.lastPosition.y !== y) {
+    if (track.prevPosition) {
+      const dx = x - track.prevPosition.x;
+      const dy = y - track.prevPosition.y;
+      if (Math.hypot(dx, dy) > 0.5) {
+        track.heading = (Math.atan2(dy, dx) * 180) / Math.PI;
+      }
+    }
+    track.prevPosition = { x: track.lastPosition.x, y: track.lastPosition.y };
     track.lastPosition = { x, y, changedAt: nowSec };
-    return { status: "online", afkSince: null };
+    return { status: "online", afkSince: null, heading: track.heading };
   }
 
   const idleSec = nowSec - track.lastPosition.changedAt;
   if (idleSec >= TEAM_AFK_THRESHOLD_SEC) {
-    return { status: "afk", afkSince: track.lastPosition.changedAt };
+    return { status: "afk", afkSince: track.lastPosition.changedAt, heading: track.heading };
   }
 
-  return { status: "online", afkSince: null };
+  return { status: "online", afkSince: null, heading: track.heading };
 }
 
 function inferOnlineTransition(
@@ -183,7 +195,7 @@ export function processTeamRoster(
   const members = team.members.map((member) => {
     let track = state.members.get(member.steamId);
     if (!track) {
-      track = { lastDeathTime: null, wasOnline: false, seen: false };
+      track = { lastDeathTime: null, wasOnline: false, seen: false, heading: null };
       state.members.set(member.steamId, track);
     }
 
@@ -197,13 +209,14 @@ export function processTeamRoster(
       if (death) newDeaths.push(death);
     }
 
-    const { status, afkSince } = inferStatus(member, track, nowSec);
+    const { status, afkSince, heading } = inferStatus(member, track, nowSec);
     state.members.set(member.steamId, track);
 
     return {
       ...member,
       status,
       afkSince,
+      heading,
     };
   });
 
@@ -233,6 +246,7 @@ export function applyTeamTracking(
           ...member,
           status: defaultStatus(member),
           afkSince: null,
+          heading: null,
         })),
       },
       deaths: [],

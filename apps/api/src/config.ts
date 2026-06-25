@@ -38,6 +38,9 @@ export const env = {
     .filter(Boolean),
   frontendUrl: optional("FRONTEND_URL", ""),
   databaseUrl: optional("DATABASE_URL", "file:./data/rusttools.db"),
+  get dataDir(): string {
+    return resolveRepoPath(optional("DATA_DIR", "./data"));
+  },
   discord: {
     clientId: optional("DISCORD_CLIENT_ID"),
     clientSecret: optional("DISCORD_CLIENT_SECRET"),

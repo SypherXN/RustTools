@@ -8,6 +8,7 @@ import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
+import { ProcgenMapUpload } from "../components/ProcgenMapUpload";
 
 type SettingsTab =
   | "server"
@@ -303,6 +304,8 @@ export function SettingsPage() {
           </p>
         )}
       </section>
+
+      <ProcgenMapUpload />
         </>
       )}
 

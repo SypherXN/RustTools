@@ -10,6 +10,7 @@ import type {
   WorldEventsStatus,
 } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
+import { DEFAULT_PROCGEN_LAYERS, type MapProcgenLayers, type ProcgenMapStatus, type ProcgenPath, type ProcgenPrefabPoint } from "@rusttools/shared";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
 import type {
@@ -27,6 +28,10 @@ import {
 import { MapLayersPanel } from "../components/MapLayersPanel";
 import { MapViewport, type MapFocusTarget } from "../components/MapViewport";
 import { MapDrawingLayer, type MapAnnotateTool } from "../components/MapDrawingLayer";
+import { MapProcgenOverlays } from "../components/MapProcgenOverlays";
+import { MapPathsOverlay } from "../components/MapPathsOverlay";
+import { MapPrefabOverlay } from "../components/MapPrefabOverlay";
+import { Map3DView } from "../components/Map3DView";
 import { VendingTradeRow } from "../components/VendingTradeRow";
 import type { MapTrackableEvent } from "../components/MapEventDock";
 import { useMapImageSrc } from "../hooks/useMapImageSrc";
@@ -89,6 +94,11 @@ export function MapPage() {
     isDemoMode() ? demoMapTransform : null,
   );
   const [layers, setLayers] = useState<MapLayers>(DEFAULT_LAYERS);
+  const [procgenLayers, setProcgenLayers] = useState<MapProcgenLayers>(DEFAULT_PROCGEN_LAYERS);
+  const [procgenStatus, setProcgenStatus] = useState<ProcgenMapStatus | null>(null);
+  const [procgenPaths, setProcgenPaths] = useState<ProcgenPath[]>([]);
+  const [procgenPrefabs, setProcgenPrefabs] = useState<ProcgenPrefabPoint[]>([]);
+  const [mapViewMode, setMapViewMode] = useState<"2d" | "3d">("2d");
   const [showTeamOverlays, setShowTeamOverlays] = useState(true);
   const [annotateMode, setAnnotateMode] = useState(false);
   const [annotateTool, setAnnotateTool] = useState<MapAnnotateTool>("pen");
@@ -166,13 +176,35 @@ export function MapPage() {
       .finally(() => setLoading(false));
   }, [epoch]);
 
+  const procgenReady = procgenStatus?.parseStatus === "ready";
+
+  useEffect(() => {
+    void apiFetch<ProcgenMapStatus>("/servers/active/map/procgen/status")
+      .then(setProcgenStatus)
+      .catch(() => setProcgenStatus(null));
+  }, [epoch]);
+
+  useEffect(() => {
+    if (!procgenReady) {
+      setProcgenPaths([]);
+      setProcgenPrefabs([]);
+      return;
+    }
+    void apiFetch<{ paths: ProcgenPath[] }>("/servers/active/map/procgen/paths")
+      .then((res) => setProcgenPaths(res.paths))
+      .catch(() => setProcgenPaths([]));
+    void apiFetch<{ prefabs: ProcgenPrefabPoint[] }>("/servers/active/map/procgen/prefabs")
+      .then((res) => setProcgenPrefabs(res.prefabs))
+      .catch(() => setProcgenPrefabs([]));
+  }, [procgenReady, epoch]);
+
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
       void refreshLive().catch(() => {
         // Keep showing the last good map if a live refresh fails.
       });
-    }, 30_000);
+    }, 60_000);
     return () => clearInterval(interval);
   }, [loading, refreshLive]);
 
@@ -233,6 +265,10 @@ export function MapPage() {
 
   const toggleLayer = (key: keyof Omit<MapLayers, "eventTypes">) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleProcgenLayer = (key: keyof MapProcgenLayers) => {
+    setProcgenLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const toggleEventType = (key: MapEventTypeKey) => {
@@ -498,6 +534,8 @@ export function MapPage() {
       <div className="map-layout" ref={mapLayoutRef}>
         <MapLayersPanel
           layers={layers}
+          procgenLayers={procgenLayers}
+          procgenReady={procgenReady}
           onlineCount={onlineCount}
           teamOnMapCount={teamOnMap.length}
           vendingCount={vendingCount}
@@ -509,6 +547,7 @@ export function MapPage() {
           pins={pins}
           canSwitch={canSwitch}
           onToggleLayer={toggleLayer}
+          onToggleProcgenLayer={toggleProcgenLayer}
           onToggleEventType={toggleEventType}
           onToggleAllEventTypes={toggleAllEventTypes}
           onShowTeamOverlaysChange={setShowTeamOverlays}
@@ -522,6 +561,32 @@ export function MapPage() {
           onTrackEvent={handleTrackEvent}
         />
         <div className="map-layout-main">
+          {mapViewMode === "3d" && procgenReady ? (
+            <Map3DView
+              worldSize={worldSize}
+              mapImageSrc={mapImageSrc}
+              transform={mapTransform}
+              team={teamOnMap}
+              markers={markerList}
+              monuments={monumentList}
+              layers={layers}
+              drawings={drawings}
+              pins={pins}
+              showTeamOverlays={showTeamOverlays}
+              procgenLayers={procgenLayers}
+              procgenPaths={procgenPaths}
+              procgenPrefabs={procgenPrefabs}
+              eventTrails={eventTrails}
+              selection={selection}
+              focusTarget={focusTarget}
+              trackTarget={trackTarget}
+              onUserPan={() => {
+                setFollowSteamId(null);
+                setTrackEventId(null);
+              }}
+              onSelect={setSelection}
+            />
+          ) : (
           <MapViewport
             width={mapW}
             height={mapH}
@@ -537,9 +602,31 @@ export function MapPage() {
               setTrackEventId(null);
             }}
           >
+            <MapProcgenOverlays
+              width={mapW}
+              height={mapH}
+              transform={mapTransform}
+              layers={procgenLayers}
+              procgenReady={procgenReady}
+            />
             {layers.grid && (
               <MapGridOverlay width={mapW} height={mapH} transform={mapTransform} />
             )}
+            <MapPathsOverlay
+              width={mapW}
+              height={mapH}
+              transform={mapTransform}
+              paths={procgenPaths}
+              visible={procgenLayers.paths}
+            />
+            <MapPrefabOverlay
+              width={mapW}
+              height={mapH}
+              transform={mapTransform}
+              prefabs={procgenPrefabs}
+              showCaves={procgenLayers.caves}
+              showIcebergs={procgenLayers.icebergs}
+            />
             <MapOverlay
               width={mapW}
               height={mapH}
@@ -582,6 +669,7 @@ export function MapPage() {
               onSelectDrawing={(drawing) => setSelection({ kind: "drawing", drawingId: drawing.id })}
             />
           </MapViewport>
+          )}
         </div>
         <MapDetailPanel
           selection={selection}
@@ -639,6 +727,24 @@ export function MapPage() {
       <header className="page-header">
         <h1>Map</h1>
         <p>Live team positions, vending machines, monuments, and world events.</p>
+        <div className="map-view-mode-toggle">
+          <button
+            type="button"
+            className={`btn-secondary${mapViewMode === "2d" ? " active" : ""}`}
+            onClick={() => setMapViewMode("2d")}
+          >
+            2D map
+          </button>
+          <button
+            type="button"
+            className={`btn-secondary${mapViewMode === "3d" ? " active" : ""}`}
+            disabled={!procgenReady}
+            title={procgenReady ? undefined : "Upload a .map file in Settings to enable 3D view"}
+            onClick={() => setMapViewMode("3d")}
+          >
+            3D terrain
+          </button>
+        </div>
         {lastUpdated && (
           <p className="muted map-updated">Updated {lastUpdated.toLocaleTimeString()}</p>
         )}

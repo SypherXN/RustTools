@@ -697,6 +697,27 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { drawings: [], pins: [] } as T;
   }
 
+  if (path === "/servers/active/map/procgen/status") {
+    return {
+      uploaded: false,
+      uploadedAt: null,
+      parsedAt: null,
+      parseStatus: null,
+      parseError: null,
+      mapSeed: null,
+      mapWorldSize: null,
+      serverSeed: 123456789,
+      serverMapSize: demoMapTransform.worldSize,
+      seedMatch: null,
+      sizeMatch: null,
+      overlays: [],
+    } as T;
+  }
+
+  if (path.startsWith("/servers/active/map/procgen/") || path.startsWith("/servers/active/map/footprints")) {
+    throw new Error("Procgen map features require a .map upload (disabled in demo mode)");
+  }
+
   if (path.startsWith("/vending/search")) {
     const params = new URLSearchParams(path.split("?")[1] ?? "");
     const q = params.get("q") ?? undefined;

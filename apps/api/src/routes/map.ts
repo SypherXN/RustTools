@@ -11,30 +11,34 @@ import { searchVending } from "../lib/vending.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { registerServerRoutes as registerServerCoreRoutes } from "./servers.js";
 import { registerMapOverlayRoutes } from "./map-overlays.js";
+import { registerProcgenMapRoutes } from "./procgen-map.js";
 
 export async function registerServerRoutes(
   app: FastifyInstance,
   deps: { db: Database; rustPlus: RustPlusManager },
 ): Promise<void> {
   await app.register(multipart, {
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 256 * 1024 * 1024 },
   });
 
   await registerServerCoreRoutes(app, deps);
   await registerMapOverlayRoutes(app, deps);
+  await registerProcgenMapRoutes(app, deps);
 
   app.get("/servers/active/map", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
     try {
-      const [map, team, markersRaw, info] = await Promise.all([
+      const [map, info] = await Promise.all([
         deps.rustPlus.getMap(),
-        deps.rustPlus.getTeamInfo(),
-        deps.rustPlus.getMapMarkers(),
         deps.rustPlus.getServerInfo(),
       ]);
       const worldSize = getWorldSize(info);
+      const [team, markersRaw] = await Promise.all([
+        deps.rustPlus.getTeamInfo(),
+        deps.rustPlus.getMapMarkers(),
+      ]);
       const transform = buildMapTransform(map, info as { mapSize?: number });
       const parsed = parseTeamRoster(team, worldSize);
       const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
@@ -61,17 +65,19 @@ export async function registerServerRoutes(
     if (!user) return;
 
     try {
-      const [team, markersRaw, info] = await Promise.all([
+      const info = await deps.rustPlus.getServerInfo();
+      const worldSize = getWorldSize(info);
+      const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),
-        deps.rustPlus.getServerInfo(),
       ]);
-      const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
       const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
       const activeServer = await getActiveServer(deps.db);
       const worldEvents = activeServer
-        ? await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id).catch(() => null)
+        ? await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id, worldSize).catch(
+            () => null,
+          )
         : null;
       return {
         team: tracked.team.members,

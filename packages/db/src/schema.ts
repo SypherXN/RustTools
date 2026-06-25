@@ -31,6 +31,13 @@ export const rustServers = sqliteTable("rust_servers", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
   notificationSettingsJson: text("notification_settings_json"),
   worldEventStateJson: text("world_event_state_json"),
+  mapFilePath: text("map_file_path"),
+  mapUploadedAt: integer("map_uploaded_at", { mode: "timestamp" }),
+  mapSeed: integer("map_seed"),
+  mapWorldSize: integer("map_world_size"),
+  mapParseStatus: text("map_parse_status"),
+  mapParseError: text("map_parse_error"),
+  mapParsedAt: integer("map_parsed_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -265,6 +272,18 @@ export const discordLiveEmbeds = sqliteTable(
     pk: primaryKey({ columns: [table.guildId, table.purpose] }),
   }),
 );
+
+export const mapFootprints = sqliteTable("map_footprints", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  piecesJson: text("pieces_json").notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
 
 export const pushSubscriptions = sqliteTable("push_subscriptions", {
   id: text("id").primaryKey(),

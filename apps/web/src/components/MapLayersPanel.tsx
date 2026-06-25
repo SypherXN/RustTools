@@ -1,5 +1,6 @@
 import type { MapDrawingStroke, MapPin, WorldEventsStatus } from "@rusttools/shared";
 import type { MapEventTypeKey, MapLayers } from "./MapOverlay";
+import type { MapProcgenLayers } from "@rusttools/shared";
 import { buildTrackableEvents, isTrackableLayerKey, type TrackableEvent } from "./MapEventDock";
 
 const EVENT_TYPE_LABELS: Record<MapEventTypeKey, string> = {
@@ -15,6 +16,8 @@ const EVENT_TYPE_LABELS: Record<MapEventTypeKey, string> = {
 
 interface MapLayersPanelProps {
   layers: MapLayers;
+  procgenLayers: MapProcgenLayers;
+  procgenReady: boolean;
   onlineCount: number;
   teamOnMapCount: number;
   vendingCount: number;
@@ -26,6 +29,7 @@ interface MapLayersPanelProps {
   pins: MapPin[];
   canSwitch: boolean;
   onToggleLayer: (key: keyof Omit<MapLayers, "eventTypes">) => void;
+  onToggleProcgenLayer: (key: keyof MapProcgenLayers) => void;
   onToggleEventType: (key: MapEventTypeKey) => void;
   onToggleAllEventTypes: (enabled: boolean) => void;
   onShowTeamOverlaysChange: (value: boolean) => void;
@@ -58,6 +62,8 @@ function LayerCheckbox({
 
 export function MapLayersPanel({
   layers,
+  procgenLayers,
+  procgenReady,
   onlineCount,
   teamOnMapCount,
   vendingCount,
@@ -69,6 +75,7 @@ export function MapLayersPanel({
   pins,
   canSwitch,
   onToggleLayer,
+  onToggleProcgenLayer,
   onToggleEventType,
   onToggleAllEventTypes,
   onShowTeamOverlaysChange,
@@ -169,6 +176,49 @@ export function MapLayersPanel({
           })}
         </div>
       </details>
+
+      {procgenReady && (
+        <details className="map-layer-group">
+          <summary>Procgen (.map)</summary>
+          <div className="map-layer-group-body">
+            <LayerCheckbox
+              checked={procgenLayers.buildingBlocked}
+              onChange={() => onToggleProcgenLayer("buildingBlocked")}
+              label="Building blocked"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.heatmapOres}
+              onChange={() => onToggleProcgenLayer("heatmapOres")}
+              label="Ore heatmap"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.heatmapStones}
+              onChange={() => onToggleProcgenLayer("heatmapStones")}
+              label="Stone heatmap"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.heatmapSulfur}
+              onChange={() => onToggleProcgenLayer("heatmapSulfur")}
+              label="Sulfur heatmap"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.paths}
+              onChange={() => onToggleProcgenLayer("paths")}
+              label="Roads / rivers / rails"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.caves}
+              onChange={() => onToggleProcgenLayer("caves")}
+              label="Cave entrances"
+            />
+            <LayerCheckbox
+              checked={procgenLayers.icebergs}
+              onChange={() => onToggleProcgenLayer("icebergs")}
+              label="Icebergs"
+            />
+          </div>
+        </details>
+      )}
 
       <details className="map-layer-group">
         <summary>Overlays</summary>

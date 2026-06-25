@@ -240,7 +240,10 @@ export function startPhase2Listeners(
         const activeServer = await getActiveServer(db);
         if (!activeServer) return;
 
-        const [info, map] = await Promise.all([rustPlus.getServerInfo(), rustPlus.getMap()]);
+        const cachedInfo = rustPlus.getCachedServerInfo();
+        const cachedMap = rustPlus.getCachedMap();
+        const info = cachedInfo ?? (await rustPlus.getServerInfo());
+        const map = cachedMap ?? (await rustPlus.getMap());
         const worldSize = getWorldSize(info) || 4000;
         const { status, transition } = deepSeaTracker.process(activeServer.id, {
           markersRaw: event.markers,
@@ -435,7 +438,7 @@ const lastAllOfflineByServer = new Map<string, boolean>();
     }
   });
 
-  rustPlus.startMapMarkerPolling(60_000);
+  rustPlus.startMapMarkerPolling(90_000);
 
   rustPlus.jobScheduler.register({
     id: "night-lights",

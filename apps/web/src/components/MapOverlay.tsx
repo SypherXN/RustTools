@@ -30,6 +30,7 @@ export interface MapTeamMember {
   status?: "online" | "afk" | "offline" | "dead";
   x?: number;
   y?: number;
+  heading?: number | null;
 }
 
 export interface MapMarkerPoint {
@@ -374,6 +375,16 @@ export function MapOverlay({
               className={`map-marker map-marker-team map-marker-team-${statusClass}${selected ? " selected" : ""}${onSelect ? " interactive" : ""}`}
             >
               <circle cx={x} cy={y} r={10} className={`map-dot ${statusClass}`} pointerEvents="none" />
+              {m.heading != null && Number.isFinite(m.heading) && (
+                <line
+                  x1={x}
+                  y1={y}
+                  x2={x + Math.cos((m.heading * Math.PI) / 180) * 16}
+                  y2={y - Math.sin((m.heading * Math.PI) / 180) * 16}
+                  className="map-team-heading"
+                  pointerEvents="none"
+                />
+              )}
               <circle cx={x} cy={y} r={14} className="map-team-ring" pointerEvents="none" />
               {onSelect && (
                 <HitArea

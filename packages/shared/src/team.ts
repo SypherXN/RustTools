@@ -15,6 +15,8 @@ export interface TeamRosterMember {
   deathTime: number | null;
   /** Derived presence state (online, afk, offline, dead). */
   status?: TeamMemberStatus;
+  /** Degrees — movement bearing when last position update included movement (map rotation). */
+  heading?: number | null;
   /** Unix seconds — when position last changed (AFK inference). */
   afkSince?: number | null;
 }

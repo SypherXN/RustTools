@@ -33,3 +33,4 @@ export * from "./device-groups.js";
 export * from "./team-proximity.js";
 export * from "./admin.js";
 export * from "./legacy-automations.js";
+export * from "./procgen-map.js";

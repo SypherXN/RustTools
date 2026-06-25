@@ -11,14 +11,11 @@ export async function fetchDeepSeaStatus(
 ): Promise<DeepSeaStatus> {
   void db;
   try {
-    const [info, markers, map] = await Promise.all([
-      rustPlus.getServerInfo(),
-      rustPlus.getMapMarkers(),
-      rustPlus.getMap(),
-    ]);
+    const [info, map] = await Promise.all([rustPlus.getServerInfo(), rustPlus.getMap()]);
+    const markersRaw = rustPlus.getLastMapMarkers() ?? (await rustPlus.getMapMarkers());
     const mapSize = getWorldSize(info) || 4000;
     const { status } = deepSeaTracker.process(serverId, {
-      markersRaw: markers,
+      markersRaw,
       monuments: monumentsFromMap(map),
       mapSize,
     });

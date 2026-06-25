@@ -9,9 +9,11 @@ export async function fetchWorldEventsStatus(
   db: Database,
   rustPlus: RustPlusManager,
   serverId: string,
+  worldSize?: number,
 ): Promise<WorldEventsStatus> {
   await worldEventTracker.ensureLoaded(db, serverId);
-  const info = await rustPlus.getServerInfo();
+  const resolvedWorldSize =
+    worldSize ?? (getWorldSize(await rustPlus.getServerInfo()) || 4000);
   const settings = await getServerNotificationSettings(db, serverId);
-  return worldEventTracker.getStatus(serverId, getWorldSize(info) || 4000, settings.eventTimers);
+  return worldEventTracker.getStatus(serverId, resolvedWorldSize, settings.eventTimers);
 }
