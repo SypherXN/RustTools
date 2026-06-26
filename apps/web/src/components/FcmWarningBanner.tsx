@@ -23,9 +23,9 @@ export function FcmWarningBanner() {
 
   const severity = !status.configured || status.expired ? "critical" : "warning";
   const message = !status.configured
-    ? "FCM credentials are missing. Pairing and smart alarms will not work until you run fcm-register."
+    ? "FCM credentials are missing. Upload fcm-config.json in Settings → Admin or run fcm-register."
     : status.expired
-      ? "FCM credentials have expired. Re-run fcm-register and restart the API."
+      ? "FCM credentials have expired. Upload a new fcm-config.json in Settings → Admin or re-run fcm-register."
       : `FCM credentials expire in ${status.daysRemaining ?? 0} day(s) (${status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : "unknown"}). Re-register soon to avoid losing pairing.`;
 
   return (

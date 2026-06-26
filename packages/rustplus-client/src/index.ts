@@ -6,6 +6,9 @@ export { FcmListener, parseFcmData } from "./fcm-listener.js";
 export type { ParsedFcmNotification, FcmConfig } from "./fcm-listener.js";
 export {
   getFcmCredentialStatus,
+  validateFcmConfigPayload,
+  prepareFcmConfigForSave,
+  writeFcmConfigFile,
   FCM_CREDENTIAL_LIFETIME_DAYS,
   FCM_WARNING_DAYS_BEFORE,
 } from "./fcm-status.js";

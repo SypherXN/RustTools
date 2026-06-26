@@ -66,7 +66,7 @@ async function main() {
   await app.register(cors, { origin: env.corsOrigins, credentials: true });
   await app.register(cookie, { secret: env.sessionSecret });
   await app.register(rateLimit, {
-    max: 120,
+    max: env.apiRateLimitMax,
     timeWindow: "1 minute",
   });
   await app.register(websocket);

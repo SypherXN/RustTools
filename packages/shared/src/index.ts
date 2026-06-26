@@ -29,6 +29,7 @@ export * from "./device-settings.js";
 export * from "./switch-commands.js";
 export * from "./help-commands.js";
 export * from "./automation.js";
+export * from "./automation-base.js";
 export * from "./device-groups.js";
 export * from "./team-proximity.js";
 export * from "./admin.js";

@@ -73,6 +73,8 @@ export const env = {
       return resolveRepoPath(optional("RUSTPLUS_FCM_CONFIG_PATH", "./data/fcm-config.json"));
     },
   },
+  /** Max HTTP requests per client IP per minute (Fastify @fastify/rate-limit). */
+  apiRateLimitMax: Number(optional("API_RATE_LIMIT_MAX", "600")),
   get discordOAuthConfigured(): boolean {
     return Boolean(this.discord.clientId && this.discord.clientSecret);
   },

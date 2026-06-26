@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import RustPlus from "@liamcottle/rustplus.js";
 import type { EntityType, RustPlusEvent } from "@rusttools/shared";
 import { EventBus } from "./event-bus.js";
@@ -96,6 +97,20 @@ function normalizeRustPlusError(err: unknown, fallback: string): Error {
 
 /** Turn Rust+ camera subscribe errors into actionable UI text. */
 export function formatCameraSubscribeError(err: unknown): string {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "object" && err != null && "error" in err
+        ? String((err as { error?: unknown }).error ?? "")
+        : "";
+
+  if (/timeout/i.test(message)) {
+    return (
+      "Camera subscribe timed out. Check the camera ID, confirm the server owner ran " +
+      "`cctvrender.enabled true` in the server console, and make sure no one else is viewing that camera in-game."
+    );
+  }
+
   const code = extractRustPlusErrorCode(err)?.toLowerCase() ?? "";
 
   if (code === "not_found") {
@@ -116,10 +131,10 @@ export function formatCameraSubscribeError(err: unknown): string {
     );
   }
 
-  const message = normalizeRustPlusError(err, "Camera subscribe failed").message;
-  return message === "Camera subscribe failed"
-    ? `${message} (no details from server — CCTV may be disabled; try \`cctvrender.enabled true\` on the server).`
-    : message;
+  const fallback = normalizeRustPlusError(err, "Camera subscribe failed").message;
+  return fallback === "Camera subscribe failed"
+    ? `${fallback} (no details from server — CCTV may be disabled; try \`cctvrender.enabled true\` on the server).`
+    : fallback;
 }
 
 function withRustTimeout<T>(
@@ -152,6 +167,7 @@ export class RustPlusManager {
   private connections = new Map<string, ActiveConnection>();
   private fcmListener: FcmListener | null = null;
   private fcmListening = false;
+  private fcmNotificationHandler: ((notification: ParsedFcmNotification) => void) | null = null;
   private activeServerId: string | null = null;
   private lastMapMarkers: unknown = null;
   private readCache = new Map<ReadCacheKey, { at: number; value: unknown }>();
@@ -617,15 +633,30 @@ export class RustPlusManager {
       return;
     }
 
-    const handler = this.options.onFcmNotification ?? onNotification;
-    this.fcmListener = new FcmListener(this.options.fcmConfigPath, handler);
-
-    void this.fcmListener.start().then(() => {
-      this.fcmListening = true;
-    }).catch((err) => {
+    this.fcmNotificationHandler = this.options.onFcmNotification ?? onNotification;
+    void this.ensureFcmStarted().catch((err) => {
       console.error("[RustPlusManager] FCM listener failed:", err);
-      this.fcmListening = false;
     });
+  }
+
+  async reloadFcmListener(): Promise<void> {
+    this.stopFcmListener();
+    await this.ensureFcmStarted();
+  }
+
+  private async ensureFcmStarted(): Promise<void> {
+    const configPath = this.options.fcmConfigPath;
+    if (!configPath || !this.fcmNotificationHandler) return;
+    if (!fs.existsSync(configPath)) return;
+
+    this.fcmListener = new FcmListener(configPath, this.fcmNotificationHandler);
+    try {
+      await this.fcmListener.start();
+      this.fcmListening = true;
+    } catch (err) {
+      this.fcmListening = false;
+      throw err;
+    }
   }
 
   stopFcmListener(): void {

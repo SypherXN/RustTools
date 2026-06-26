@@ -8,6 +8,7 @@ import type {
   ProcgenHeightData,
   ProcgenPath,
   ProcgenPrefabPoint,
+  ResolvedAutomationBase,
 } from "@rusttools/shared";
 import { gridCellCount, gridColumnLabel, MAP_GRID_CELL_SIZE, mapCoordinateScale } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
@@ -186,6 +187,7 @@ interface Map3DViewProps {
     cargo: Array<{ x: number; y: number }>;
     heli: Array<{ x: number; y: number }>;
   };
+  automationBase?: ResolvedAutomationBase | null;
   selection?: MapSelection | null;
   focusTarget?: MapFocusTarget | null;
   trackTarget?: MapTrackTarget | null;
@@ -559,6 +561,68 @@ function addPins3D(parent: THREE.Object3D, terrain: ProcgenHeightData, pins: Map
   return objects;
 }
 
+function addAutomationBase3D(
+  parent: THREE.Object3D,
+  terrain: ProcgenHeightData,
+  base: ResolvedAutomationBase,
+): Array<THREE.Line | THREE.Mesh | THREE.Sprite> {
+  const objects: Array<THREE.Line | THREE.Mesh | THREE.Sprite> = [];
+  const radius = base.radiusMeters;
+  const center = worldPoint3D(terrain, base.x, base.y, 8);
+
+  if (radius > 0) {
+    const segments = 72;
+    const ringPoints: THREE.Vector3[] = [];
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      ringPoints.push(
+        worldPoint3D(
+          terrain,
+          base.x + Math.cos(angle) * radius,
+          base.y + Math.sin(angle) * radius,
+          12,
+        ),
+      );
+    }
+    const ring = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(ringPoints),
+      new THREE.LineBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.9,
+        depthTest: false,
+      }),
+    );
+    ring.renderOrder = 36;
+    parent.add(ring);
+    objects.push(ring);
+
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(radius, 64),
+      new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    disc.rotation.x = -Math.PI / 2;
+    disc.position.set(center.x, center.y + 2, center.z);
+    disc.renderOrder = 34;
+    parent.add(disc);
+    objects.push(disc);
+  }
+
+  const sprite = makeMapMarkerSprite(base.label, "#38bdf8");
+  sprite.scale.set(200, 100, 1);
+  sprite.position.set(center.x, center.y + 95, center.z);
+  parent.add(sprite);
+  objects.push(sprite);
+
+  return objects;
+}
+
 function addEventTrails3D(
   parent: THREE.Object3D,
   terrain: ProcgenHeightData,
@@ -731,6 +795,7 @@ export function Map3DView({
   procgenPaths,
   procgenPrefabs,
   eventTrails,
+  automationBase = null,
   selection = null,
   focusTarget = null,
   trackTarget = null,
@@ -1120,6 +1185,9 @@ export function Map3DView({
     clearGroup(runtime.dynamicGroup);
 
     addMapGrid3D(runtime.dynamicGroup, heightData, layers.grid);
+    if (layers.base && automationBase) {
+      addAutomationBase3D(runtime.dynamicGroup, heightData, automationBase);
+    }
     addProcgenPaths3D(runtime.dynamicGroup, heightData, procgenPaths, procgenLayers.paths);
     addProcgenPrefabs3D(runtime.dynamicGroup, heightData, procgenPrefabs, procgenLayers);
     addEventTrails3D(runtime.dynamicGroup, heightData, eventTrails, layers);
@@ -1148,6 +1216,7 @@ export function Map3DView({
     markers,
     monuments,
     layers,
+    automationBase,
     drawings,
     pins,
     showTeamOverlays,

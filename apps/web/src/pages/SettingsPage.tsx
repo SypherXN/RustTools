@@ -9,6 +9,7 @@ import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
 import { ProcgenMapUpload } from "../components/ProcgenMapUpload";
+import { FcmConfigUpload } from "../components/FcmConfigUpload";
 
 type SettingsTab =
   | "server"
@@ -912,14 +913,16 @@ export function SettingsPage() {
           <DataResetPanel disabled={notificationsSaving || linking} />
         </section>
 
+        <FcmConfigUpload />
+
       <section className="card">
         <h2>Pairing Setup</h2>
         <ol className="setup-steps">
           <li>
-            Run <code>npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json</code>
+            Run <code>npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json</code>{" "}
+            (or upload the generated file above)
           </li>
-          <li>Restart the API so FCM listener picks up the config</li>
-          <li>Click <strong>Link Rust+ Account</strong> or <strong>Re-pair Server</strong> above</li>
+          <li>Click <strong>Link Rust+ Account</strong> or <strong>Re-pair Server</strong> in the Server tab</li>
           <li>In Rust, open Rust+ menu → Pair with Server</li>
           <li>Pair smart devices with the wire tool</li>
         </ol>

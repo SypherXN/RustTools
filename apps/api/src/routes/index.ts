@@ -16,7 +16,7 @@ export async function registerRoutes(
   app: FastifyInstance,
   deps: { db: Database; rustPlus: RustPlusManager },
 ): Promise<void> {
-  app.get("/health", async () => {
+  app.get("/health", { config: { rateLimit: false } }, async () => {
     const rustStatus = deps.rustPlus.getStatus();
     const fcmStatus = getFcmCredentialStatus(
       env.rustplus.resolvedFcmConfigPath,

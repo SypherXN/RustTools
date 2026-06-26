@@ -112,9 +112,12 @@ Do this once in the [Discord Developer Portal](https://discord.com/developers/ap
 You can configure channels in **two ways**:
 
 1. **Discord commands (recommended)** — in your server, run `/channel set` inside the target channel:
+   - `information` — auto-updating live server info embed (updated every 60s)
    - `alarms` — smart alarm notifications
    - `team_chat` — in-game team chat mirror
-   - `events` — cargo, chinook, patrol heli spawns
+   - `commands` — run in-game `!` commands from Discord
+   - `events` — cargo, chinook, patrol heli, and other map events
+   - `deep_sea` — Deep Sea open/close alerts
    - `storage` — storage monitor change alerts
    - `default` — general fallback
 
@@ -166,6 +169,12 @@ Pushes to `main` run `.github/workflows/deploy-pages.yml` and publish the web UI
 | `VITE_API_URL` | `https://rusttools.yourdomain.com` |
 
 No trailing slash. This is baked into the frontend at build time.
+
+Optional GitHub Actions variable:
+
+| Name | Value | Purpose |
+|------|-------|---------|
+| `VITE_LIVE_CAMERAS` | `false` | Hide the Cameras nav page in production (enabled by default) |
 
 ### 4.3 Confirm the Pages base path
 
@@ -310,6 +319,9 @@ DISCORD_TEAM_CHAT_CHANNEL_ID=2222222222222222222
 
 RUSTPLUS_FCM_CONFIG_PATH=./data/fcm-config.json
 DATABASE_URL=file:./data/rusttools.db
+
+# Optional — default 600 req/min per IP; /health is exempt
+# API_RATE_LIMIT_MAX=600
 ```
 
 ### Optional automations
@@ -415,7 +427,17 @@ docker compose restart api
 
 **Option B — register on a machine with a desktop, then scp** (same as above).
 
-### 9.3 Confirm FCM is listening
+### 9.3 Upload via web UI (alternative)
+
+If the API is already running and you have **Admin** permission:
+
+1. Run `fcm-register` locally to produce `fcm-config.json` (section 9.1)
+2. Open the web UI → **Settings → Admin → FCM credentials**
+3. Upload the JSON file — the API saves it to `data/fcm-config.json` and restarts the FCM listener
+
+Use this instead of `scp` when shell access to the VM is inconvenient. You can also **replace** credentials here when they expire (~90 days; warning banner appears within 14 days of expiry).
+
+### 9.4 Confirm FCM is listening
 
 ```bash
 curl -s https://rusttools.yourdomain.com/health | jq '.fcm'
@@ -449,10 +471,43 @@ docker compose exec api ls -la /app/data/
 
 In-game, use the **wire tool** on smart switches, alarms, and storage monitors while connected to the paired server. They appear under **Devices** in the web UI.
 
-### 10.4 Discord pairing commands
+### 10.4 Server automation base (optional, admin)
 
-- `/link` — instructions for linking Rust+ from Discord
-- `/pair` — pairing status / reminder
+Used by **Automations** proximity rules (e.g. “all teammates away from base”) and shown on the map as a blue circle:
+
+1. **Automations → Logic rules → Server base location**
+   - Enter world **X/Y**, link a **map pin**, or click **Pick on map**
+   - Set **Radius (m)** — circular distance in world meters (default **150**, max **10,000**)
+2. **Map page** (admin): **Set server base** in the toolbar → click the map → label + radius → save  
+   Or open a team pin → **Set as server base**
+3. On the map, enable **Layers → Server base** to see the zone in **2D** and **3D** (3D requires procgen upload, section 10.5)
+4. **Layers panel** (admin): edit proximity radius inline; **Focus base** pans to the center
+
+Per-rule **Radius (m)** on proximity triggers/conditions overrides the server default when set.
+
+### 10.5 Procgen map upload (optional)
+
+Unlocks building-blocked overlays, resource heatmaps, roads/caves, and the **3D map** (not available from Rust+ alone):
+
+1. Join your Rust server on the same machine you use for RustTools admin
+2. Get the `.map` file:
+   - **In-game:** F1 console → `Download map file` (usually saves to Downloads), or
+   - **Client cache:** after joining, find the file under your Rust `maps` folder (OS-specific path)
+3. Web UI → **Settings → Server & Map** → **Upload .map file**
+4. Open **Map** → enable procgen layers in the layers panel; switch to **3D** when parse status is `ready`
+5. Toggle **Server base** in layers to verify the automation base circle on terrain (if configured in 10.4)
+
+Seed/world-size mismatches are shown if the uploaded map does not match the active server.
+
+### 10.6 Live cameras (optional)
+
+The **Cameras** page is on by default. To use it:
+
+1. Server owner runs `cctvrender.enabled true` in the **server console** (off on most public servers)
+2. Web UI → **Cameras** → enter a CCTV ID (e.g. `DOME1`) or pick a saved bookmark from Automations
+3. Requires **Switch** permission to connect and control PTZ / auto turrets
+
+To hide Cameras in a GitHub Pages build, set Actions variable `VITE_LIVE_CAMERAS=false` and redeploy.
 
 ---
 
@@ -478,7 +533,7 @@ docker compose run --rm -e DISCORD_BOT_TOKEN -e DISCORD_CLIENT_ID -e DISCORD_GUI
 
 The npm script on a dev machine is the easiest path. After registration, commands appear in your Discord server within a few seconds.
 
-Available commands: `/status`, `/devices`, `/switch`, `/alarm`, `/storage`, `/team`, `/time`, `/chat`, `/map`, `/pair`, `/link`.
+Available commands include: `/help`, `/status`, `/devices`, `/switch`, `/alarm`, `/storage`, `/team`, `/time`, `/deepsea`, `/chat`, `/map`, `/pair`, `/link`, and `/channel` / `/blacklist` (admin).
 
 ---
 
@@ -491,12 +546,17 @@ Use this checklist after deploy:
 | API HTTPS | `curl https://YOUR_DOMAIN/health` returns 200 |
 | GitHub Pages | UI loads at `https://USER.github.io/RustTools/` |
 | Discord login | Log in on the web UI; redirects back to Pages logged in |
-| FCM | `/health` shows `"fcm": { "listening": true }` |
+| FCM | `/health` shows `"fcm": { "listening": true, "configured": true }` |
+| FCM expiry | **Settings → Admin** shows registered/expiry dates |
 | Rust+ | Dashboard shows server name and player count |
 | Devices | Toggling a switch in the UI changes it in-game |
 | WebSocket | Team page shows live chat when someone talks in team chat |
+| Procgen map | Upload `.map` in Settings; Map page shows parse status `ready` and 3D toggle |
+| Server base | **Automations** or **Map → Set server base**; **Server base** layer shows circle on 2D/3D |
+| Automations | Create a proximity rule; radius inherits server default or set **Radius (m)** per rule |
 | Discord bot | `/status` responds in your server |
 | Notifications | Trigger an alarm in-game → message in notification channel |
+| Live info board | `/channel set purpose:information` → embed updates within ~60s |
 
 ---
 
@@ -553,8 +613,27 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 
 ### FCM not listening
 
-- `fcm-config.json` missing or wrong path — copy into `/app/data/` in the container
+- `fcm-config.json` missing or wrong path — copy into `/app/data/` in the container, or upload via **Settings → Admin**
 - Restart API after adding config: `docker compose restart api`
+- Check **Settings → Admin** for configured/listening status and expiry
+
+### HTTP 429 / “Too Many Requests” on the web UI
+
+- Default API limit is 600 requests/minute per IP (`API_RATE_LIMIT_MAX` in `.env`)
+- Common with multiple tabs or heavy map/procgen overlay use — raise the limit or reduce open tabs
+- `/health` is exempt from rate limiting
+
+### Rust+ “rate limit” on map or team data
+
+- Facepunch limits Rust+ API calls; RustTools caches reads and staggers background polls
+- Wait a few seconds and refresh; avoid hammering the map refresh button
+
+### Cameras time out or show no feed
+
+- Server owner must run `cctvrender.enabled true` in the server console
+- Verify camera ID (e.g. `DOME1`, not `DOMELAND`)
+- Only one remote viewer per camera at a time
+- Public servers often have CCTV rendering disabled entirely
 
 ### Discord bot online but commands fail
 
@@ -587,14 +666,19 @@ cd RustTools
 npm install
 npm run db:migrate
 
-npm run dev          # API http://localhost:3000
+npm run dev          # API http://localhost:3000 (4 GB heap for procgen parsing)
 npm run dev:web      # UI http://localhost:5173 (proxies /api)
 npm run dev:bot      # Discord bot
 
 npm run register-commands --workspace=@rusttools/discord-bot
+npm run test:smoke     # API smoke tests (health, routes; live Rust+ optional)
 ```
 
 Local OAuth redirect: `http://localhost:5173/api/auth/discord/callback`
+
+Optional: `npm run dev:web:demo` for UI-only demo mode (`?demo=1`).
+
+After FCM register, upload `fcm-config.json` in **Settings → Admin** instead of copying into `data/` manually.
 
 ---
 

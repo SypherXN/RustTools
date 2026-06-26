@@ -95,7 +95,7 @@ async function evaluateProximityCondition(
     point.x,
     point.y,
     ctx.worldSize,
-    point.radiusGrid,
+    point.radiusMeters,
   );
 }
 
@@ -306,7 +306,7 @@ export async function evaluateTeamPresenceAutomationRules(
       point.x,
       point.y,
       ctx.worldSize,
-      point.radiusGrid,
+      point.radiusMeters,
     );
 
     const allMet =

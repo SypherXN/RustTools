@@ -30,6 +30,7 @@ jobs:
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
           VITE_BASE_PATH: /RustTools/
+          VITE_LIVE_CAMERAS: ${{ vars.VITE_LIVE_CAMERAS }}
 
       - uses: actions/upload-pages-artifact@v3
         with:

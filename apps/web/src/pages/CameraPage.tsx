@@ -3,6 +3,7 @@ import { listStaticCctvCodes } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
+import { CameraFeedPlaceholder } from "../components/CameraFeedPlaceholder";
 
 interface SavedCamera {
   id: string;
@@ -18,6 +19,8 @@ export function CameraPage() {
   const [isAutoTurret, setIsAutoTurret] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [hasFrame, setHasFrame] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
   const cctvCodes = useMemo(() => listStaticCctvCodes(), []);
@@ -40,12 +43,19 @@ export function CameraPage() {
       const p = payload as { frame?: string; cameraId?: string };
       if (p.frame) {
         imgRef.current.src = `data:image/png;base64,${p.frame}`;
+        setHasFrame(true);
+        setConnecting(false);
       }
     }
   });
 
   const subscribe = useCallback(async (cameraId: string) => {
     setError(null);
+    setConnecting(true);
+    setHasFrame(false);
+    if (imgRef.current) {
+      imgRef.current.removeAttribute("src");
+    }
     try {
       await apiFetch(`/cameras/unsubscribe`, { method: "POST", body: "{}" });
       const result = await apiFetch<{ ok: boolean; info?: { controlFlags?: number } }>(
@@ -58,6 +68,7 @@ export function CameraPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Subscribe failed");
       setConnected(false);
+      setConnecting(false);
     }
   }, []);
 
@@ -65,6 +76,11 @@ export function CameraPage() {
     await apiFetch("/cameras/unsubscribe", { method: "POST", body: "{}" });
     setActiveCameraId(null);
     setConnected(false);
+    setConnecting(false);
+    setHasFrame(false);
+    if (imgRef.current) {
+      imgRef.current.removeAttribute("src");
+    }
   };
 
   const sendInput = async (dx: number, dy: number, buttons = 0) => {
@@ -133,8 +149,28 @@ export function CameraPage() {
       </section>
 
       <section className="card camera-viewer-wrap">
-        <img ref={imgRef} className="camera-viewer" alt={activeCameraId ? `Camera ${activeCameraId}` : "No feed"} />
-        {!connected && <p className="muted camera-viewer-placeholder">Connect to a camera to view the live feed.</p>}
+        <div className="camera-viewer-stage">
+          <img
+            ref={imgRef}
+            className={`camera-viewer${hasFrame ? " camera-viewer--live" : ""}`}
+            alt={activeCameraId ? `Camera ${activeCameraId}` : "Camera feed"}
+          />
+          {!hasFrame && (
+            <CameraFeedPlaceholder
+              mode={connecting || connected ? "connecting" : "idle"}
+              cameraId={activeCameraId}
+            />
+          )}
+        </div>
+        {connected && hasFrame && activeCameraId && (
+          <div className="camera-viewer-label">
+            <span className="camera-viewer-label__rec">
+              <span className="camera-viewer-label__rec-dot" />
+              LIVE
+            </span>
+            <code>{activeCameraId}</code>
+          </div>
+        )}
       </section>
 
       {connected && canSwitch && (

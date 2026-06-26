@@ -24,6 +24,10 @@ interface MapDrawingLayerProps {
   onPendingDrawing?: (points: MapDrawingPoint[]) => void;
   onSelectPin?: (pin: MapPin) => void;
   onSelectDrawing?: (drawing: MapDrawingStroke) => void;
+  /** Click map to pick server automation base (admin). */
+  basePickMode?: boolean;
+  pendingBasePoint?: { x: number; y: number } | null;
+  onBasePick?: (point: MapDrawingPoint) => void;
 }
 
 function pixelToWorld(
@@ -90,6 +94,9 @@ export function MapDrawingLayer({
   onPendingDrawing,
   onSelectPin,
   onSelectDrawing,
+  basePickMode = false,
+  pendingBasePoint,
+  onBasePick,
 }: MapDrawingLayerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [draft, setDraft] = useState<MapDrawingPoint[]>([]);
@@ -97,6 +104,7 @@ export function MapDrawingLayer({
   const canInteract = editMode && canEdit;
   const penActive = canInteract && tool === "pen" && !hasPendingDrawing;
   const pinActive = canInteract && tool === "pin" && !hasPendingPin;
+  const baseActive = basePickMode && !pendingBasePoint;
 
   useEffect(() => {
     if (!editMode || tool !== "pen") {
@@ -140,26 +148,31 @@ export function MapDrawingLayer({
 
   const handleMapClick = useCallback(
     (e: React.PointerEvent) => {
-      if (!pinActive) return;
+      if (!pinActive && !baseActive) return;
       e.stopPropagation();
       const svg = svgRef.current;
       if (!svg) return;
-      onPendingPin?.(eventToWorld(e, svg, width, height, transform));
+      const point = eventToWorld(e, svg, width, height, transform);
+      if (baseActive) {
+        onBasePick?.(point);
+        return;
+      }
+      onPendingPin?.(point);
     },
-    [pinActive, width, height, transform, onPendingPin],
+    [pinActive, baseActive, width, height, transform, onPendingPin, onBasePick],
   );
 
-  if (!visible) return null;
+  if (!visible && !basePickMode) return null;
 
   return (
     <div className="map-drawing-wrap">
       <svg
         ref={svgRef}
-        className={`map-drawing-layer${penActive || pinActive ? " editable" : ""}`}
+        className={`map-drawing-layer${penActive || pinActive || baseActive ? " editable" : ""}`}
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
-        onPointerDown={penActive ? handlePointerDown : pinActive ? handleMapClick : undefined}
+        onPointerDown={penActive ? handlePointerDown : pinActive || baseActive ? handleMapClick : undefined}
         onPointerMove={penActive ? handlePointerMove : undefined}
         onPointerUp={penActive ? finishStroke : undefined}
         onPointerLeave={penActive ? finishStroke : undefined}
@@ -231,18 +244,32 @@ export function MapDrawingLayer({
             })()}
           </g>
         )}
-        {pins.map((pin) => {
+        {pendingBasePoint && (
+          <g className="map-automation-base-pending" pointerEvents="none">
+            {(() => {
+              const { x, y } = worldToMapPixel(pendingBasePoint.x, pendingBasePoint.y, transform);
+              return (
+                <>
+                  <circle cx={x} cy={y} r={10} fill="none" stroke="#38bdf8" strokeWidth={2} opacity={0.9} />
+                  <circle cx={x} cy={y} r={4} fill="#38bdf8" stroke="#fff" strokeWidth={1.5} />
+                </>
+              );
+            })()}
+          </g>
+        )}
+        {(visible || basePickMode) &&
+          pins.map((pin) => {
           const { x, y } = worldToMapPixel(pin.x, pin.y, transform);
           return (
             <g
               key={pin.id}
               className="map-pin-marker"
               onPointerDown={(e) => {
-                if (pinActive) return;
+                if (pinActive || baseActive) return;
                 e.stopPropagation();
                 onSelectPin?.(pin);
               }}
-              style={{ cursor: pinActive ? "crosshair" : "pointer", pointerEvents: "auto" }}
+              style={{ cursor: pinActive || baseActive ? "crosshair" : "pointer", pointerEvents: "auto" }}
             >
               <circle cx={x} cy={y} r={8} fill="#eab308" stroke="#fff" strokeWidth={2} />
               <text x={x + 10} y={y + 4} fontSize={11} fill="#fff" pointerEvents="none">

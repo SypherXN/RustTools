@@ -1,4 +1,5 @@
-import type { MapDrawingStroke, MapPin, WorldEventsStatus } from "@rusttools/shared";
+import type { MapDrawingStroke, MapPin, ResolvedAutomationBase, WorldEventsStatus } from "@rusttools/shared";
+import { formatProximityRadiusMeters } from "@rusttools/shared";
 import type { MapEventTypeKey, MapLayers } from "./MapOverlay";
 import type { MapProcgenLayers } from "@rusttools/shared";
 import { buildTrackableEvents, isTrackableLayerKey, type TrackableEvent } from "./MapEventDock";
@@ -41,6 +42,11 @@ interface MapLayersPanelProps {
   worldEvents: WorldEventsStatus | null;
   trackingId: string | null;
   onTrackEvent: (event: TrackableEvent) => void;
+  resolvedAutomationBase?: ResolvedAutomationBase | null;
+  onFocusAutomationBase?: () => void;
+  canEditAutomationBase?: boolean;
+  automationBaseRadiusMeters?: number;
+  onAutomationBaseRadiusChange?: (meters: number) => void;
 }
 
 function LayerCheckbox({
@@ -87,6 +93,11 @@ export function MapLayersPanel({
   worldEvents,
   trackingId,
   onTrackEvent,
+  resolvedAutomationBase,
+  onFocusAutomationBase,
+  canEditAutomationBase,
+  automationBaseRadiusMeters = 150,
+  onAutomationBaseRadiusChange,
 }: MapLayersPanelProps) {
   const allEventTypesOn = (Object.keys(layers.eventTypes) as MapEventTypeKey[]).every(
     (key) => layers.eventTypes[key],
@@ -229,6 +240,42 @@ export function MapLayersPanel({
             label="Grid"
           />
           <LayerCheckbox
+            checked={layers.base}
+            onChange={() => onToggleLayer("base")}
+            label={
+              resolvedAutomationBase
+                ? `Server base (${resolvedAutomationBase.label})`
+                : "Server base (not set)"
+            }
+          />
+          {resolvedAutomationBase && onFocusAutomationBase && (
+            <button type="button" className="btn-secondary map-base-focus" onClick={onFocusAutomationBase}>
+              Focus base
+            </button>
+          )}
+          {canEditAutomationBase && resolvedAutomationBase && onAutomationBaseRadiusChange && (
+            <label className="map-base-radius-edit">
+              Proximity radius (m)
+              <input
+                type="number"
+                min={0}
+                max={10000}
+                step={1}
+                defaultValue={automationBaseRadiusMeters}
+                key={automationBaseRadiusMeters}
+                onBlur={(e) => {
+                  const meters = Math.max(0, Number(e.target.value) || 0);
+                  if (meters !== automationBaseRadiusMeters) {
+                    onAutomationBaseRadiusChange(meters);
+                  }
+                }}
+              />
+              <span className="muted">
+                {formatProximityRadiusMeters(automationBaseRadiusMeters)} circle on map
+              </span>
+            </label>
+          )}
+          <LayerCheckbox
             checked={showTeamOverlays}
             onChange={() => onShowTeamOverlaysChange(!showTeamOverlays)}
             label={`Team annotations (${drawings.length} drawings, ${pins.length} pins)`}
@@ -304,6 +351,7 @@ export function MapLayersPanel({
         <li><span className="legend-swatch monument" /> Monument</li>
         <li><span className="legend-swatch events" /> Events</li>
         <li><span className="legend-swatch grid" /> Grid (150m cells)</li>
+        <li><span className="legend-swatch automation-base" /> Server base zone</li>
         <li><span className="legend-swatch monument" style={{ background: "#eab308" }} /> Team pin</li>
       </ul>
 

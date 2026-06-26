@@ -11,7 +11,7 @@ import type {
   TeamMemberFilter,
   TeamProximityCheck,
 } from "@rusttools/shared";
-import { activeAllAwayFromBaseCondition } from "@rusttools/shared";
+import { activeAllAwayFromBaseCondition, formatProximityRadiusMeters, proximityRadiusPatch, resolveProximityRadiusMeters } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { DeviceMemberPicker } from "../components/DeviceMemberPicker";
 import { LIVE_CAMERAS_ENABLED } from "../lib/features";
@@ -359,7 +359,8 @@ function ActionFields({
 function ProximityFields({
   memberFilter,
   proximityCheck,
-  radiusGrid,
+  radiusMeters,
+  defaultRadiusMeters,
   useServerBase,
   mapPinId,
   pins,
@@ -367,18 +368,22 @@ function ProximityFields({
 }: {
   memberFilter: TeamMemberFilter;
   proximityCheck: TeamProximityCheck;
-  radiusGrid: number;
+  radiusMeters?: number;
+  defaultRadiusMeters: number;
   useServerBase: boolean;
   mapPinId?: string;
   pins: MapPinOption[];
   onChange: (patch: {
     memberFilter?: TeamMemberFilter;
     proximityCheck?: TeamProximityCheck;
+    radiusMeters?: number;
     radiusGrid?: number;
     useServerBase?: boolean;
     mapPinId?: string;
   }) => void;
 }) {
+  const displayedMeters = radiusMeters ?? defaultRadiusMeters;
+
   return (
     <>
       <label>
@@ -408,14 +413,24 @@ function ProximityFields({
         </select>
       </label>
       <label>
-        Base radius (grid cells)
+        Radius (m)
         <input
           type="number"
           min={0}
-          max={10}
-          value={radiusGrid}
-          onChange={(e) => onChange({ radiusGrid: Math.max(0, Number(e.target.value) || 1) })}
+          max={10000}
+          step={1}
+          value={displayedMeters}
+          onChange={(e) => {
+            const meters = Math.max(0, Number(e.target.value) || 0);
+            onChange(proximityRadiusPatch(meters));
+          }}
         />
+        <span className="muted device-card-hint">
+          Circular distance ({formatProximityRadiusMeters(displayedMeters)}).
+          {useServerBase && radiusMeters == null
+            ? " Using server base default until you change this."
+            : null}
+        </span>
       </label>
       <label>
         Base location
@@ -450,6 +465,7 @@ function AutomationRuleEditor({
   devices,
   groups,
   pins,
+  serverBaseRadiusMeters,
   onSave,
   onDelete,
   onCancel,
@@ -467,6 +483,7 @@ function AutomationRuleEditor({
   devices: Device[];
   groups: SwitchGroup[];
   pins: MapPinOption[];
+  serverBaseRadiusMeters: number;
   onSave: (patch: {
     name: string;
     enabled: boolean;
@@ -708,7 +725,8 @@ function AutomationRuleEditor({
         <ProximityFields
           memberFilter={trigger.memberFilter ?? "active"}
           proximityCheck={trigger.proximityCheck ?? "none_near"}
-          radiusGrid={trigger.radiusGrid ?? 1}
+          radiusMeters={trigger.radiusMeters}
+          defaultRadiusMeters={serverBaseRadiusMeters}
           useServerBase={trigger.useServerBase !== false}
           mapPinId={trigger.mapPinId}
           pins={pins}
@@ -821,7 +839,8 @@ function AutomationRuleEditor({
                   condition.proximityCheck ??
                   (condition.type === "team_near_point" ? "any_near" : "none_near")
                 }
-                radiusGrid={condition.radiusGrid ?? 1}
+                radiusMeters={condition.radiusMeters}
+                defaultRadiusMeters={serverBaseRadiusMeters}
                 useServerBase={condition.useServerBase !== false}
                 mapPinId={condition.mapPinId}
                 pins={pins}
@@ -1111,6 +1130,8 @@ export function AutomationsPage() {
     setAutomationBase(res.automationBase);
   };
 
+  const serverBaseRadiusMeters = resolveProximityRadiusMeters(automationBase ?? undefined);
+
   return (
     <div>
       <header className="page-header">
@@ -1159,10 +1180,15 @@ export function AutomationsPage() {
           </p>
           {canAdmin && automationBase && (
             <div className="automation-base-card">
-              <h3>Server base location</h3>
+              <div className="automation-base-card-header">
+                <h3>Server base location</h3>
+                <Link to="/map?setBase=1" className="btn-secondary">
+                  Pick on map
+                </Link>
+              </div>
               <p className="muted device-card-hint">
-                Used by proximity rules unless a rule picks a specific map pin. Place a “Base” pin on the map or enter
-                world coordinates from the map detail panel.
+                Used by proximity rules unless a rule picks a specific map pin. Set coordinates here, pick a
+                point on the map, or link an existing pin.
               </p>
               <div className="automation-base-grid">
                 <label>
@@ -1200,22 +1226,29 @@ export function AutomationsPage() {
                   />
                 </label>
                 <label>
-                  Radius (grid)
+                  Radius (m)
                   <input
                     type="number"
                     min={0}
-                    max={10}
-                    value={automationBase.radiusGrid}
-                    onChange={(e) =>
+                    max={10000}
+                    step={1}
+                    value={resolveProximityRadiusMeters(automationBase)}
+                    onChange={(e) => {
+                      const meters = Math.max(0, Number(e.target.value) || 0);
                       setAutomationBase({
                         ...automationBase,
-                        radiusGrid: Math.max(0, Number(e.target.value) || 1),
-                      })
-                    }
+                        ...proximityRadiusPatch(meters),
+                      });
+                    }}
                     onBlur={() =>
-                      void saveAutomationBase({ radiusGrid: automationBase.radiusGrid }).catch(() => load())
+                      void saveAutomationBase(
+                        proximityRadiusPatch(resolveProximityRadiusMeters(automationBase)),
+                      ).catch(() => load())
                     }
                   />
+                  <span className="muted device-card-hint">
+                    Circular distance from base ({formatProximityRadiusMeters(resolveProximityRadiusMeters(automationBase))}).
+                  </span>
                 </label>
                 <label>
                   Or map pin
@@ -1305,6 +1338,7 @@ export function AutomationsPage() {
                 devices={devices}
                 groups={groups}
                 pins={mapPins}
+                serverBaseRadiusMeters={serverBaseRadiusMeters}
                 isCreate
                 onSave={createRule}
                 onSaveAsTemplate={saveTemplate}
@@ -1322,6 +1356,7 @@ export function AutomationsPage() {
                   devices={devices}
                   groups={groups}
                   pins={mapPins}
+                  serverBaseRadiusMeters={serverBaseRadiusMeters}
                   onSave={(patch) => updateRule(rule.id, patch)}
                   onSaveAsTemplate={saveTemplate}
                   onDelete={async () => {

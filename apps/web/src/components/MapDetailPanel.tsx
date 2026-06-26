@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { formatMonumentRecyclers, getCctvForMonument, getMonumentInfo, worldToGridLabel } from "@rusttools/shared";
+import { formatMonumentRecyclers, formatProximityRadiusMeters, getCctvForMonument, getMonumentInfo, worldToGridLabel } from "@rusttools/shared";
 import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
@@ -44,6 +44,13 @@ interface MapDetailPanelProps {
   onPendingPinDiscard?: () => void;
   onPendingDrawingSave?: (label: string, color: string) => void;
   onPendingDrawingDiscard?: () => void;
+  canSetServerBase?: boolean;
+  serverBasePinId?: string | null;
+  onSetServerBaseFromPin?: (pin: MapPin) => void;
+  pendingBasePoint?: { x: number; y: number } | null;
+  serverBaseRadiusMeters?: number;
+  onConfirmPendingBase?: (label: string, radiusMeters: number) => void;
+  onDiscardPendingBase?: () => void;
 }
 
 function formatCoords(x: number, y: number, worldSize: number): string {
@@ -205,17 +212,24 @@ function PinDetails({
   canEdit,
   onUpdated,
   onDeleted,
+  isServerBase,
+  canSetServerBase,
+  onSetAsServerBase,
 }: {
   pin: MapPin;
   worldSize: number;
   canEdit?: boolean;
   onUpdated?: (pin: MapPin) => void;
   onDeleted?: (pinId: string) => void;
+  isServerBase?: boolean;
+  canSetServerBase?: boolean;
+  onSetAsServerBase?: (pin: MapPin) => void;
 }) {
   const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
   return (
     <>
       <p className="map-detail-meta">{formatCoords(pin.x, pin.y, worldSize)}</p>
+      {isServerBase && <p className="map-detail-badge">Server automation base</p>}
       {pin.notes && <p>{pin.notes}</p>}
       {pin.screenshotUrl && (
         <img
@@ -249,6 +263,11 @@ function PinDetails({
             }}
           />
         </label>
+      )}
+      {canSetServerBase && onSetAsServerBase && !isServerBase && (
+        <button type="button" className="btn-primary" onClick={() => onSetAsServerBase(pin)}>
+          Set as server base
+        </button>
       )}
       {canEdit && onDeleted && (
         <button
@@ -293,6 +312,59 @@ function DrawingColorPicker({
         ))}
       </div>
     </fieldset>
+  );
+}
+
+function PendingBaseConfirm({
+  point,
+  worldSize,
+  defaultRadiusMeters,
+  onSave,
+  onDiscard,
+}: {
+  point: { x: number; y: number };
+  worldSize: number;
+  defaultRadiusMeters: number;
+  onSave: (label: string, radiusMeters: number) => void;
+  onDiscard: () => void;
+}) {
+  const [label, setLabel] = useState("Base");
+  const [radiusMeters, setRadiusMeters] = useState(defaultRadiusMeters);
+
+  return (
+    <>
+      <p className="map-detail-meta">{formatCoords(point.x, point.y, worldSize)}</p>
+      <label>
+        Label
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Base" />
+      </label>
+      <label>
+        Proximity radius (m)
+        <input
+          type="number"
+          min={0}
+          max={10000}
+          step={1}
+          value={radiusMeters}
+          onChange={(e) => setRadiusMeters(Math.max(0, Number(e.target.value) || 0))}
+        />
+        <span className="muted">
+          Circular distance for automation rules ({formatProximityRadiusMeters(radiusMeters)}).
+        </span>
+      </label>
+      <div className="map-detail-actions">
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={() => onSave(label.trim() || "Base", radiusMeters)}
+        >
+          Save server base
+        </button>
+        <button type="button" className="btn-secondary" onClick={onDiscard}>
+          Cancel
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -538,6 +610,13 @@ export function MapDetailPanel({
   onPendingPinDiscard,
   onPendingDrawingSave,
   onPendingDrawingDiscard,
+  canSetServerBase,
+  serverBasePinId,
+  onSetServerBaseFromPin,
+  pendingBasePoint,
+  serverBaseRadiusMeters = 150,
+  onConfirmPendingBase,
+  onDiscardPendingBase,
 }: MapDetailPanelProps) {
   if (!selection) {
     return (
@@ -546,6 +625,13 @@ export function MapDetailPanel({
         <p className="muted">
           Click a vending machine, monument, event, teammate, or team pin on the map. Use{" "}
           <strong>Annotate</strong> to draw or place pins — name and color them in this panel.
+          {canSetServerBase && (
+            <>
+              {" "}
+              Admins can use <strong>Set server base</strong> to link automation proximity rules to a map
+              location.
+            </>
+          )}
         </p>
       </aside>
     );
@@ -599,7 +685,18 @@ export function MapDetailPanel({
       body = <p className="muted">Pin not found.</p>;
     } else {
       title = pin.label;
-      body = <PinDetails pin={pin} worldSize={worldSize} canEdit={canEditPins} onUpdated={onPinUpdated} onDeleted={onPinDeleted} />;
+      body = (
+        <PinDetails
+          pin={pin}
+          worldSize={worldSize}
+          canEdit={canEditPins}
+          onUpdated={onPinUpdated}
+          onDeleted={onPinDeleted}
+          isServerBase={serverBasePinId === pin.id}
+          canSetServerBase={canSetServerBase}
+          onSetAsServerBase={onSetServerBaseFromPin}
+        />
+      );
     }
   } else if (selection.kind === "drawing") {
     const drawing = drawings.find((d) => d.id === selection.drawingId);
@@ -644,6 +741,21 @@ export function MapDetailPanel({
           onColorChange={(color) => onPendingDrawingColorChange?.(color)}
           onSave={(label, color) => onPendingDrawingSave?.(label, color)}
           onDiscard={() => onPendingDrawingDiscard?.()}
+        />
+      );
+    }
+  } else if (selection.kind === "pendingBase") {
+    if (!pendingBasePoint) {
+      body = <p className="muted">Base placement cancelled.</p>;
+    } else {
+      title = "Server base";
+      body = (
+        <PendingBaseConfirm
+          point={pendingBasePoint}
+          worldSize={worldSize}
+          defaultRadiusMeters={serverBaseRadiusMeters}
+          onSave={(label, radiusMeters) => onConfirmPendingBase?.(label, radiusMeters)}
+          onDiscard={() => onDiscardPendingBase?.()}
         />
       );
     }

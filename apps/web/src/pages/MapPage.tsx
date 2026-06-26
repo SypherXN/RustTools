@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import type {
+  AutomationBaseSettings,
   MapCoordinateTransform,
   MapDrawingPoint,
   MapDrawingStroke,
@@ -9,8 +10,9 @@ import type {
   VendingSearchResult,
   WorldEventsStatus,
 } from "@rusttools/shared";
-import { MAP_DRAWING_COLORS } from "@rusttools/shared";
+import { MAP_DRAWING_COLORS, formatProximityRadiusMeters, proximityRadiusPatch, resolveAutomationBaseCoords, resolveProximityRadiusMeters } from "@rusttools/shared";
 import { DEFAULT_PROCGEN_LAYERS, type MapProcgenLayers, type ProcgenMapStatus, type ProcgenPath, type ProcgenPrefabPoint } from "@rusttools/shared";
+import { MapAutomationBaseOverlay } from "../components/MapAutomationBaseOverlay";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
 import type {
@@ -78,13 +80,15 @@ const DEFAULT_LAYERS: MapLayers = {
   monuments: true,
   events: true,
   grid: true,
+  base: true,
   eventTypes: { ...DEFAULT_EVENT_TYPE_LAYERS },
 };
 
 export function MapPage() {
   const canSwitch = useCan("switch");
+  const canAdmin = useCan("admin");
   const { epoch } = useActiveServer();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const memberParam = searchParams.get("member");
   const [mapImage, setMapImage] = useState<MapData["map"] | null>(null);
   const [team, setTeam] = useState<MapTeamMember[]>([]);
@@ -126,6 +130,76 @@ export function MapPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [automationBase, setAutomationBase] = useState<AutomationBaseSettings | null>(null);
+  const [setBaseMode, setSetBaseMode] = useState(() => searchParams.get("setBase") === "1");
+  const [pendingBasePoint, setPendingBasePoint] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    void apiFetch<{ automationBase: AutomationBaseSettings }>("/automation-settings")
+      .then((res) => setAutomationBase(res.automationBase))
+      .catch(() => setAutomationBase(null));
+  }, [epoch]);
+
+  const saveAutomationBase = useCallback(async (patch: Partial<AutomationBaseSettings>) => {
+    try {
+      const res = await apiFetch<{ automationBase: AutomationBaseSettings }>("/automation-settings", {
+        method: "PATCH",
+        body: JSON.stringify({ automationBase: patch }),
+      });
+      setAutomationBase(res.automationBase);
+      setLayers((prev) => ({ ...prev, base: true }));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save server base");
+    }
+  }, []);
+
+  const exitSetBaseMode = useCallback(() => {
+    setSetBaseMode(false);
+    setPendingBasePoint(null);
+    setSelection((sel) => (sel?.kind === "pendingBase" ? null : sel));
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("setBase");
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const enterSetBaseMode = useCallback(() => {
+    setSetBaseMode(true);
+    setAnnotateMode(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("setBase", "1");
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const setServerBaseFromPin = useCallback(
+    (pin: MapPin) => {
+      void saveAutomationBase({
+        mapPinId: pin.id,
+        label: pin.label,
+        x: pin.x,
+        y: pin.y,
+      }).then(() => exitSetBaseMode());
+    },
+    [saveAutomationBase, exitSetBaseMode],
+  );
+
+  const confirmPendingBase = useCallback(
+    (label: string, radiusMeters: number) => {
+      if (!pendingBasePoint) return;
+      void saveAutomationBase({
+        x: pendingBasePoint.x,
+        y: pendingBasePoint.y,
+        mapPinId: null,
+        label,
+        ...proximityRadiusPatch(radiusMeters),
+      }).then(() => exitSetBaseMode());
+    },
+    [pendingBasePoint, saveAutomationBase, exitSetBaseMode],
+  );
 
   const refreshLive = useCallback(async () => {
     if (isDemoMode()) {
@@ -387,6 +461,25 @@ export function MapPage() {
     }
   }, [annotateTool, discardPendingDrawing]);
 
+  useEffect(() => {
+    if (!setBaseMode) return;
+    setAnnotateMode(false);
+  }, [setBaseMode]);
+
+  useEffect(() => {
+    if (annotateMode) {
+      setSetBaseMode(false);
+      setPendingBasePoint(null);
+      setSelection((sel) => (sel?.kind === "pendingBase" ? null : sel));
+    }
+  }, [annotateMode]);
+
+  useEffect(() => {
+    if (!canAdmin && setBaseMode) {
+      exitSetBaseMode();
+    }
+  }, [canAdmin, setBaseMode, exitSetBaseMode]);
+
   const mapW = mapImage?.width ?? demoMapSize.width;
   const mapH = mapImage?.height ?? demoMapSize.height;
   const teamOnMap = team.length > 0 ? team : isDemoMode() ? demoTeam : [];
@@ -425,6 +518,25 @@ export function MapPage() {
   const mapTransform = transform ?? demoMapTransform;
   const worldSize = mapTransform.worldSize;
   const mapReady = Boolean(mapImage?.imageBase64 || showDemoMap);
+
+  const resolvedAutomationBase = useMemo(() => {
+    if (!automationBase) return null;
+    return resolveAutomationBaseCoords(
+      automationBase,
+      pins.map((p) => ({ id: p.id, x: p.x, y: p.y, label: p.label })),
+    );
+  }, [automationBase, pins]);
+
+  const setBaseToolbar =
+    canAdmin && mapReady ? (
+      <button
+        type="button"
+        className={`btn-secondary${setBaseMode ? " active" : ""}`}
+        onClick={() => (setBaseMode ? exitSetBaseMode() : enterSetBaseMode())}
+      >
+        {setBaseMode ? "Cancel base" : "Set server base"}
+      </button>
+    ) : null;
 
   const annotateToolbar =
     canSwitch && mapReady ? (
@@ -559,6 +671,21 @@ export function MapPage() {
           worldEvents={worldEvents}
           trackingId={trackEventId}
           onTrackEvent={handleTrackEvent}
+          resolvedAutomationBase={resolvedAutomationBase}
+          onFocusAutomationBase={() => {
+            if (!resolvedAutomationBase) return;
+            setLayers((prev) => ({ ...prev, base: true }));
+            setFocusTarget({
+              worldX: resolvedAutomationBase.x,
+              worldY: resolvedAutomationBase.y,
+              nonce: Date.now(),
+            });
+          }}
+          canEditAutomationBase={canAdmin}
+          automationBaseRadiusMeters={resolveProximityRadiusMeters(automationBase ?? undefined)}
+          onAutomationBaseRadiusChange={(meters) =>
+            void saveAutomationBase(proximityRadiusPatch(meters))
+          }
         />
         <div className="map-layout-main">
           {mapViewMode === "3d" && procgenReady ? (
@@ -577,6 +704,7 @@ export function MapPage() {
               procgenPaths={procgenPaths}
               procgenPrefabs={procgenPrefabs}
               eventTrails={eventTrails}
+              automationBase={resolvedAutomationBase}
               selection={selection}
               focusTarget={focusTarget}
               trackTarget={trackTarget}
@@ -595,8 +723,13 @@ export function MapPage() {
             transform={mapTransform}
             focusTarget={focusTarget}
             trackTarget={trackTarget}
-            disablePan={annotateMode && canSwitch}
-            toolbarExtra={annotateToolbar}
+            disablePan={(annotateMode && canSwitch) || (setBaseMode && canAdmin)}
+            toolbarExtra={
+              <>
+                {setBaseToolbar}
+                {annotateToolbar}
+              </>
+            }
             onUserPan={() => {
               setFollowSteamId(null);
               setTrackEventId(null);
@@ -611,6 +744,14 @@ export function MapPage() {
             />
             {layers.grid && (
               <MapGridOverlay width={mapW} height={mapH} transform={mapTransform} />
+            )}
+            {layers.base && resolvedAutomationBase && (
+              <MapAutomationBaseOverlay
+                width={mapW}
+                height={mapH}
+                transform={mapTransform}
+                base={resolvedAutomationBase}
+              />
             )}
             <MapPathsOverlay
               width={mapW}
@@ -667,6 +808,12 @@ export function MapPage() {
               }}
               onSelectPin={(pin) => setSelection({ kind: "pin", pinId: pin.id })}
               onSelectDrawing={(drawing) => setSelection({ kind: "drawing", drawingId: drawing.id })}
+              basePickMode={setBaseMode && canAdmin}
+              pendingBasePoint={pendingBasePoint}
+              onBasePick={(point) => {
+                setPendingBasePoint({ x: point.x, y: point.y });
+                setSelection({ kind: "pendingBase" });
+              }}
             />
           </MapViewport>
           )}
@@ -686,6 +833,10 @@ export function MapPage() {
             }
             if (selection?.kind === "pendingDrawing") {
               discardPendingDrawing();
+              return;
+            }
+            if (selection?.kind === "pendingBase") {
+              exitSetBaseMode();
               return;
             }
             setSelection(null);
@@ -712,6 +863,13 @@ export function MapPage() {
           onPendingPinDiscard={discardPendingPin}
           onPendingDrawingSave={(label, color) => void savePendingDrawing(label, color)}
           onPendingDrawingDiscard={discardPendingDrawing}
+          canSetServerBase={canAdmin}
+          serverBasePinId={automationBase?.mapPinId ?? null}
+          onSetServerBaseFromPin={setServerBaseFromPin}
+          pendingBasePoint={pendingBasePoint}
+          serverBaseRadiusMeters={resolveProximityRadiusMeters(automationBase ?? undefined)}
+          onConfirmPendingBase={(label, radiusMeters) => confirmPendingBase(label, radiusMeters)}
+          onDiscardPendingBase={exitSetBaseMode}
         />
       </div>
     ) : loading ? (
@@ -751,6 +909,16 @@ export function MapPage() {
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
+
+      {setBaseMode && canAdmin && (
+        <div className="alert alert-info map-set-base-banner">
+          Click the map to place the server automation base. The blue zone shows the current proximity radius
+          {resolvedAutomationBase
+            ? ` (${formatProximityRadiusMeters(resolvedAutomationBase.radiusMeters)})`
+            : ""}.{" "}
+          <Link to="/automations">Adjust radius in Automations</Link>.
+        </div>
+      )}
 
       {mapContent}
 

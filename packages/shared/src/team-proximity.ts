@@ -1,5 +1,4 @@
 import type { TeamMemberFilter, TeamProximityCheck } from "./automation.js";
-import { worldToGridLabel } from "./map-grid.js";
 import type { TeamRosterMember } from "./team.js";
 
 /** Chebyshev distance between two grid labels (e.g. F12 → G13 = 1). */
@@ -47,13 +46,14 @@ export function isMemberNearPoint(
   member: TeamRosterMember,
   worldX: number,
   worldY: number,
-  worldSize: number,
-  radiusGrid: number,
+  _worldSize: number,
+  radiusMeters: number,
 ): boolean {
   if (member.x == null || member.y == null) return false;
-  const memberGrid = worldToGridLabel(member.x, member.y, worldSize);
-  const pointGrid = worldToGridLabel(worldX, worldY, worldSize);
-  return gridLabelDistance(memberGrid, pointGrid) <= radiusGrid;
+  if (radiusMeters <= 0) {
+    return Math.hypot(member.x - worldX, member.y - worldY) < 1;
+  }
+  return Math.hypot(member.x - worldX, member.y - worldY) <= radiusMeters;
 }
 
 export function evaluateTeamProximityCheck(
@@ -63,10 +63,10 @@ export function evaluateTeamProximityCheck(
   worldX: number,
   worldY: number,
   worldSize: number,
-  radiusGrid: number,
+  radiusMeters: number,
 ): boolean {
   const matching = members.filter((m) => memberMatchesTeamFilter(m, filter));
-  const near = matching.filter((m) => isMemberNearPoint(m, worldX, worldY, worldSize, radiusGrid));
+  const near = matching.filter((m) => isMemberNearPoint(m, worldX, worldY, worldSize, radiusMeters));
   const away = matching.length - near.length;
 
   switch (check) {

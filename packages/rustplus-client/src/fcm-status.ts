@@ -1,9 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  FCM_CREDENTIAL_LIFETIME_DAYS,
+  FCM_WARNING_DAYS_BEFORE,
+} from "@rusttools/shared";
 
-/** GCM push credentials from rustplus.js typically need refresh after ~90 days. */
-export const FCM_CREDENTIAL_LIFETIME_DAYS = 90;
-export const FCM_WARNING_DAYS_BEFORE = 14;
+export { FCM_CREDENTIAL_LIFETIME_DAYS, FCM_WARNING_DAYS_BEFORE };
 
 export interface FcmCredentialStatus {
   configured: boolean;
@@ -13,6 +15,51 @@ export interface FcmCredentialStatus {
   daysRemaining: number | null;
   warning: boolean;
   expired: boolean;
+}
+
+export function validateFcmConfigPayload(
+  data: unknown,
+): { ok: true; config: Record<string, unknown> } | { ok: false; error: string } {
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return { ok: false, error: "Config must be a JSON object" };
+  }
+
+  const config = data as Record<string, unknown>;
+  const creds = config.fcm_credentials as Record<string, unknown> | undefined;
+  if (!creds || typeof creds !== "object") {
+    return { ok: false, error: "Missing fcm_credentials object" };
+  }
+
+  const gcm = creds.gcm as Record<string, unknown> | undefined;
+  if (!gcm || typeof gcm !== "object") {
+    return { ok: false, error: "Missing fcm_credentials.gcm object" };
+  }
+
+  const androidId = gcm.androidId ?? gcm.android_id;
+  const securityToken = gcm.securityToken ?? gcm.security_token;
+  if (!androidId || !securityToken) {
+    return {
+      ok: false,
+      error: "Missing GCM androidId or securityToken — run fcm-register first",
+    };
+  }
+
+  return { ok: true, config };
+}
+
+export function prepareFcmConfigForSave(config: Record<string, unknown>): Record<string, unknown> {
+  const prepared = { ...config };
+  if (prepared.registered_at == null && prepared.registeredAt == null) {
+    prepared.registered_at = new Date().toISOString();
+  }
+  return prepared;
+}
+
+export function writeFcmConfigFile(configPath: string, config: Record<string, unknown>): void {
+  const resolved = path.resolve(configPath);
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  const prepared = prepareFcmConfigForSave(config);
+  fs.writeFileSync(resolved, `${JSON.stringify(prepared, null, 2)}\n`, "utf8");
 }
 
 export function getFcmCredentialStatus(

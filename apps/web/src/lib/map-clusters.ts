@@ -22,6 +22,7 @@ export type MapSelection =
   | { kind: "drawing"; drawingId: string }
   | { kind: "pendingPin" }
   | { kind: "pendingDrawing" }
+  | { kind: "pendingBase" }
   | { kind: "cluster"; x: number; y: number; items: ClusterEntry[] };
 
 export interface MapClusterContext {

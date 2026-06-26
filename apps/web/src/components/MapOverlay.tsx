@@ -81,6 +81,8 @@ export interface MapLayers {
   monuments: boolean;
   events: boolean;
   grid: boolean;
+  /** Server automation base zone (proximity rules). */
+  base: boolean;
   eventTypes: MapEventTypeLayers;
 }
 

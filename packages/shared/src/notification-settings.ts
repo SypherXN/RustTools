@@ -38,7 +38,9 @@ export interface DeepSeaNotificationSettings {
 export interface AutomationBaseSettings {
   x: number | null;
   y: number | null;
-  /** Grid cells (Chebyshev) from base — same as switch proximity mode. */
+  /** Circular proximity radius in world meters (preferred). */
+  radiusMeters?: number | null;
+  /** @deprecated Legacy radius in 150 m units — use {@link radiusMeters}. */
   radiusGrid: number;
   mapPinId: string | null;
   label?: string;
@@ -47,6 +49,7 @@ export interface AutomationBaseSettings {
 export const DEFAULT_AUTOMATION_BASE_SETTINGS: AutomationBaseSettings = {
   x: null,
   y: null,
+  radiusMeters: 150,
   radiusGrid: 1,
   mapPinId: null,
   label: "Base",

@@ -1,3 +1,31 @@
+diff --git a/node_modules/@liamcottle/rustplus.js/camera.js b/node_modules/@liamcottle/rustplus.js/camera.js
+index 85765d5..5a8e85d 100644
+--- a/node_modules/@liamcottle/rustplus.js/camera.js
++++ b/node_modules/@liamcottle/rustplus.js/camera.js
+@@ -268,12 +268,12 @@ class Camera extends EventEmitter {
+ 
+     async _subscribe() {
+ 
+-        // subscribe to camera
++        // subscribe to camera (CCTV can be slow on first connect; allow longer than default 10s)
+         const response = await this.rustplus.sendRequestAsync({
+             cameraSubscribe: {
+                 cameraId: this.identifier,
+             },
+-        });
++        }, 45_000);
+ 
+         // update camera subscribe info
+         this.cameraSubscribeInfo = response.cameraSubscribeInfo;
+@@ -320,7 +320,7 @@ class Camera extends EventEmitter {
+                     cameraUnsubscribe: {
+ 
+                     },
+-                });
++                }, 15_000);
+             } catch (error) {
+                 // ignore errors unsubscribing from camera
+             }
 diff --git a/node_modules/@liamcottle/rustplus.js/rustplus.js b/node_modules/@liamcottle/rustplus.js/rustplus.js
 index 4497096..73128f5 100644
 --- a/node_modules/@liamcottle/rustplus.js/rustplus.js
