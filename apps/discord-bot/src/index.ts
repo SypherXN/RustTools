@@ -6,8 +6,23 @@ import {
 } from "discord.js";
 import { internalFetch, internalPost, mapAttachment } from "./api.js";
 import { env } from "./config.js";
+import { BANG_MESSAGE_BY_SLASH, BANG_SLASH_COMMAND_NAMES } from "./commands.js";
 import type { DiscordChannelBinding } from "@rusttools/shared";
-import { DISCORD_CHANNEL_PURPOSE_LABELS, formatDiscordHelpSections } from "@rusttools/shared";
+import { DISCORD_CHANNEL_PURPOSE_LABELS, formatDeepSeaDiscordDescription, formatDiscordHelpSections } from "@rusttools/shared";
+import { buildAliasBangMessage, runBangCommand } from "./team-command.js";
+import { errorEmbed, replyEmbed, toApiEmbed } from "./reply-embeds.js";
+import {
+  alarmsEmbed,
+  blacklistEmbed,
+  channelSetEmbed,
+  chatSentEmbed,
+  devicesEmbed,
+  linkAccountEmbed,
+  storageEmbed,
+  switchResultEmbed,
+  teamRosterEmbed,
+  timeEmbed,
+} from "./ui-embeds.js";
 
 async function handleHelp(interaction: ChatInputCommandInteraction) {
   const sections = formatDiscordHelpSections();
@@ -16,7 +31,7 @@ async function handleHelp(interaction: ChatInputCommandInteraction) {
       {
         title: "RustTools commands",
         description:
-          "Use slash commands here. In a linked **commands** channel, `!` commands from in-game team chat also work (`!help` there too).",
+          "Use slash commands below — they mirror in-game team chat `!` commands (Switch permission required).",
         fields: sections.map((s) => ({ name: s.name, value: s.value })),
         color: 0x5865f2,
       },
@@ -49,11 +64,7 @@ async function handleDevices(interaction: ChatInputCommandInteraction) {
     devices: Array<{ name: string; entityType: string; entityId: number }>;
   }>("/internal/devices", interaction.user.id);
 
-  const lines = data.devices.map((d) => `• **${d.name}** (${d.entityType}) — ID ${d.entityId}`);
-  await interaction.reply({
-    content: lines.length ? lines.join("\n") : "No devices paired yet.",
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, devicesEmbed(data.devices), { ephemeral: true });
 }
 
 async function handleSwitch(interaction: ChatInputCommandInteraction) {
@@ -66,9 +77,7 @@ async function handleSwitch(interaction: ChatInputCommandInteraction) {
     { target, action },
   );
 
-  await interaction.reply({
-    content: `Switch **${result.device}** set to **${result.value ? "ON" : "OFF"}**`,
-  });
+  await replyEmbed(interaction, switchResultEmbed(result.device, result.value));
 }
 
 async function handleAlarm(interaction: ChatInputCommandInteraction) {
@@ -77,12 +86,7 @@ async function handleAlarm(interaction: ChatInputCommandInteraction) {
   }>("/internal/devices", interaction.user.id);
   const alarms = data.devices.filter((d) => d.entityType === "smart_alarm");
 
-  await interaction.reply({
-    content: alarms.length
-      ? alarms.map((a) => `• ${a.name} (ID ${a.entityId})`).join("\n")
-      : "No smart alarms paired.",
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, alarmsEmbed(alarms), { ephemeral: true });
 }
 
 async function handleStorage(interaction: ChatInputCommandInteraction) {
@@ -92,50 +96,42 @@ async function handleStorage(interaction: ChatInputCommandInteraction) {
     interaction.user.id,
   );
 
-  await interaction.reply({
-    content: `**${data.device.name}**\n\`\`\`json\n${JSON.stringify(data.info, null, 2).slice(0, 1800)}\n\`\`\``,
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, storageEmbed(data.device.name, data.info), { ephemeral: true });
 }
 
 async function handleTeam(interaction: ChatInputCommandInteraction) {
-  const data = await internalFetch<{ team: unknown }>("/internal/team", interaction.user.id);
-  await interaction.reply({
-    content: `\`\`\`json\n${JSON.stringify(data.team, null, 2).slice(0, 1900)}\n\`\`\``,
-  });
+  const data = await internalFetch<{ team: import("@rusttools/shared").ParsedTeamInfo; worldSize?: number }>(
+    "/internal/team",
+    interaction.user.id,
+  );
+  await replyEmbed(interaction, teamRosterEmbed(data.team, data.worldSize));
 }
 
 async function handleTime(interaction: ChatInputCommandInteraction) {
   const data = await internalFetch<{ time: unknown }>("/internal/time", interaction.user.id);
-  await interaction.reply({
-    content: `\`\`\`json\n${JSON.stringify(data.time, null, 2)}\n\`\`\``,
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, timeEmbed(data.time), { ephemeral: true });
 }
 
 async function handleDeepSea(interaction: ChatInputCommandInteraction) {
-  const data = await internalFetch<{ status: { label: string; isOpen: boolean; secondsRemaining: number | null } }>(
+  const data = await internalFetch<{ status: import("@rusttools/shared").DeepSeaStatus }>(
     "/internal/deepsea",
     interaction.user.id,
   );
 
-  await interaction.reply({
-    embeds: [
-      {
-        title: data.status.isOpen ? "Deep Sea — Open" : "Deep Sea — Closed",
-        description: data.status.label,
-        color: data.status.isOpen ? 0x3dd68c : 0x5865f2,
-      },
-    ],
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, {
+    title: data.status.isOpen ? "Deep Sea — Open" : "Deep Sea — Closed",
+    description: formatDeepSeaDiscordDescription(data.status),
+    color: data.status.isOpen ? 0x3dd68c : 0x5865f2,
+    footer: { text: "RustTools" },
+    timestamp: new Date().toISOString(),
+  }, { ephemeral: true });
 }
 
 async function handleChat(interaction: ChatInputCommandInteraction) {
   const message = interaction.options.getString("message", true);
   const discordUsername = interaction.user.globalName ?? interaction.user.username;
   await internalPost("/internal/chat", interaction.user.id, { message, discordUsername });
-  await interaction.reply({ content: "Team message sent.", ephemeral: true });
+  await replyEmbed(interaction, chatSentEmbed(), { ephemeral: true });
 }
 
 async function handleMap(interaction: ChatInputCommandInteraction) {
@@ -174,16 +170,7 @@ async function handlePair(interaction: ChatInputCommandInteraction) {
 }
 
 async function handleLink(interaction: ChatInputCommandInteraction) {
-  await interaction.reply({
-    content: [
-      "**Link your Rust+ account:**",
-      `1. Log in at ${env.webUrl}`,
-      "2. Go to Settings → click **Link Rust+ Account**",
-      "3. Pair your server in-game while FCM is listening",
-      "Your Steam ID links automatically on the next pairing notification.",
-    ].join("\n"),
-    ephemeral: true,
-  });
+  await replyEmbed(interaction, linkAccountEmbed(env.webUrl), { ephemeral: true });
 }
 
 function formatChannelBinding(binding: DiscordChannelBinding): string {
@@ -251,13 +238,11 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
 
     const label = DISCORD_CHANNEL_PURPOSE_LABELS[purpose as keyof typeof DISCORD_CHANNEL_PURPOSE_LABELS] ?? purpose;
 
-    await interaction.reply({
-      content:
-        purpose === "information"
-          ? `Linked <#${interaction.channelId}> for **${label}**. A live-updating information board was posted (refreshes every minute).`
-          : `Linked <#${interaction.channelId}> for **${label}**.`,
-      ephemeral: true,
-    });
+    await replyEmbed(
+      interaction,
+      channelSetEmbed(label, interaction.channelId, purpose === "information"),
+      { ephemeral: true },
+    );
     void result;
     return;
   }
@@ -275,12 +260,18 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
 
     const label = DISCORD_CHANNEL_PURPOSE_LABELS[purpose as keyof typeof DISCORD_CHANNEL_PURPOSE_LABELS] ?? purpose;
 
-    await interaction.reply({
-      content: result.cleared
-        ? `Cleared **${label}** channel binding. Notifications will use .env fallbacks if configured.`
-        : `No **${label}** binding was set via \`/channel\` (may still use .env).`,
-      ephemeral: true,
-    });
+    await replyEmbed(
+      interaction,
+      {
+        title: result.cleared ? "Channel unlinked" : "No binding found",
+        description: result.cleared
+          ? `Cleared **${label}** channel binding. Notifications will use .env fallbacks if configured.`
+          : `No **${label}** binding was set via \`/channel\` (may still use .env).`,
+        color: result.cleared ? 0x3dd68c : 0x5865f2,
+        footer: { text: "RustTools" },
+      },
+      { ephemeral: true },
+    );
   }
 }
 
@@ -301,22 +292,7 @@ async function handleBlacklist(interaction: ChatInputCommandInteraction) {
       interaction.user.id,
     );
 
-    const lines = data.entries.length
-      ? data.entries.map((entry) => {
-          const who = entry.discordId
-            ? `<@${entry.discordId}>`
-            : entry.steamId
-              ? `Steam \`${entry.steamId}\``
-              : "Unknown";
-          const reason = entry.reason ? ` — ${entry.reason}` : "";
-          return `• ${who}${reason}`;
-        })
-      : ["No blacklisted users."];
-
-    await interaction.reply({
-      content: lines.join("\n"),
-      ephemeral: true,
-    });
+    await replyEmbed(interaction, blacklistEmbed(data.entries), { ephemeral: true });
     return;
   }
 
@@ -341,10 +317,16 @@ async function handleBlacklist(interaction: ChatInputCommandInteraction) {
     });
 
     const label = user ? user.tag : `Steam ${steamId}`;
-    await interaction.reply({
-      content: `Blacklisted **${label}**.`,
-      ephemeral: true,
-    });
+    await replyEmbed(
+      interaction,
+      {
+        title: "User blacklisted",
+        description: `**${label}** has been added to the blacklist.`,
+        color: 0xe85d2a,
+        footer: { text: "RustTools" },
+      },
+      { ephemeral: true },
+    );
     return;
   }
 
@@ -370,12 +352,18 @@ async function handleBlacklist(interaction: ChatInputCommandInteraction) {
       },
     );
 
-    await interaction.reply({
-      content: result.removed
-        ? "Removed from blacklist."
-        : "No matching blacklist entry found.",
-      ephemeral: true,
-    });
+    await replyEmbed(
+      interaction,
+      {
+        title: result.removed ? "Removed from blacklist" : "Not found",
+        description: result.removed
+          ? "The user was removed from the blacklist."
+          : "No matching blacklist entry found.",
+        color: result.removed ? 0x3dd68c : 0x5865f2,
+        footer: { text: "RustTools" },
+      },
+      { ephemeral: true },
+    );
   }
 }
 
@@ -384,43 +372,11 @@ async function main() {
   if (!env.internalApiKey) throw new Error("INTERNAL_API_KEY is required");
 
   const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
+    intents: [GatewayIntentBits.Guilds],
   });
 
   client.once(Events.ClientReady, (c) => {
     console.log(`Discord bot logged in as ${c.user.tag}`);
-  });
-
-  client.on(Events.MessageCreate, async (message) => {
-    if (message.author.bot || !message.guildId || !message.channel.isTextBased()) return;
-
-    const text = message.content.trim();
-    if (!text.startsWith("!")) return;
-
-    try {
-      const result = await internalPost<{ replies: string[] }>(
-        "/internal/commands-channel/execute",
-        message.author.id,
-        {
-          guildId: message.guildId,
-          channelId: message.channelId,
-          message: text,
-        },
-      );
-
-      if (result.replies?.length) {
-        await message.reply(result.replies.join("\n"));
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Command failed";
-      await message.reply(msg).catch(() => {
-        /* channel may disallow replies */
-      });
-    }
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -458,6 +414,16 @@ async function main() {
         case "switch":
           await handleSwitch(interaction);
           break;
+        case "alias":
+          await runBangCommand(
+            interaction,
+            buildAliasBangMessage(
+              interaction.options.getString("name", true),
+              interaction.options.getString("action"),
+              interaction.options.getInteger("seconds"),
+            ),
+          );
+          break;
         case "alarm":
           await handleAlarm(interaction);
           break;
@@ -476,6 +442,16 @@ async function main() {
         case "chat":
           await handleChat(interaction);
           break;
+        case "send": {
+          const user = interaction.options.getUser("user", true);
+          const message = interaction.options.getString("message", true);
+          await runBangCommand(
+            interaction,
+            `!send ${user.username} ${message}`,
+            { ephemeral: true },
+          );
+          break;
+        }
         case "map":
           await handleMap(interaction);
           break;
@@ -492,14 +468,20 @@ async function main() {
           await handleBlacklist(interaction);
           break;
         default:
+          if (BANG_SLASH_COMMAND_NAMES.has(interaction.commandName)) {
+            const bang = BANG_MESSAGE_BY_SLASH[interaction.commandName] ?? `!${interaction.commandName}`;
+            const adminOnly = interaction.commandName === "mute" || interaction.commandName === "unmute";
+            await runBangCommand(interaction, bang, { ephemeral: adminOnly });
+            break;
+          }
           await interaction.reply({ content: "Unknown command", ephemeral: true });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Command failed";
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ content: message, ephemeral: true });
+        await interaction.followUp({ embeds: [toApiEmbed(errorEmbed(message))], ephemeral: true });
       } else {
-        await interaction.reply({ content: message, ephemeral: true });
+        await interaction.reply({ embeds: [toApiEmbed(errorEmbed(message))], ephemeral: true });
       }
     }
   });

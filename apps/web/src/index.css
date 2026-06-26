@@ -64,6 +64,42 @@
   flex-shrink: 0;
 }
 
+.device-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.switch-state-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.switch-state-badge-on {
+  background: rgba(61, 214, 140, 0.2);
+  color: var(--success);
+}
+
+.switch-state-badge-off {
+  background: rgba(148, 163, 184, 0.2);
+  color: var(--muted);
+}
+
+.switch-state-badge-unknown {
+  background: rgba(250, 166, 26, 0.15);
+  color: #f0b429;
+}
+
+.device-switch-actions {
+  margin-top: 0.35rem;
+}
+
 .device-card-main {
   display: flex;
   flex-direction: column;
@@ -1499,9 +1535,10 @@
 }
 
 .team-chat-panel .team-chat-feed {
-  flex: 1;
-  min-height: 280px;
-  max-height: none;
+  flex: 0 1 auto;
+  min-height: 200px;
+  max-height: min(360px, 45vh);
+  overflow-y: auto;
 }
 
 @media (max-width: 900px) {
@@ -1510,8 +1547,8 @@
   }
 
   .team-chat-panel .team-chat-feed {
-    min-height: 200px;
-    max-height: 280px;
+    min-height: 160px;
+    max-height: min(280px, 40vh);
   }
 }
 

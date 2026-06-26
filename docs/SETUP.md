@@ -97,7 +97,7 @@ Do this once in the [Discord Developer Portal](https://discord.com/developers/ap
 
 1. Go to **Bot** → **Add Bot**.
 2. Copy the **Token** → `DISCORD_BOT_TOKEN` (treat as a secret; never commit it).
-3. Under **Privileged Gateway Intents**, enable **Message Content Intent** only if you plan to extend the bot later (not required for slash commands).
+3. Under **Privileged Gateway Intents**, you do **not** need **Message Content Intent** — the bot uses slash commands only (no reading channel messages).
 
 ### 3.4 Invite the bot to your server
 
@@ -115,7 +115,7 @@ You can configure channels in **two ways**:
    - `information` — auto-updating live server info embed (updated every 60s)
    - `alarms` — smart alarm notifications
    - `team_chat` — in-game team chat mirror
-   - `commands` — run in-game `!` commands from Discord
+   - `commands` — optional legacy channel binding (bot commands are slash commands, not `!` in channel)
    - `events` — cargo, chinook, patrol heli, and other map events
    - `deep_sea` — Deep Sea open/close alerts
    - `storage` — storage monitor change alerts
@@ -140,9 +140,9 @@ To restrict who can use the web dashboard and Discord bot:
 
 | Role | Web UI | Discord bot |
 |------|--------|-------------|
-| **View** | Read dashboard, map, storage, team | `/status`, `/devices`, `/team`, `/map`, etc. |
-| **Switch** | Toggle switches, send team chat | `/switch`, `/chat` |
-| **Admin** | Settings, server activation, audit, renames | All of the above |
+| **View** | Read dashboard, map, storage, team | `/status`, `/devices`, `/team`, `/map`, `/online`, `/cargo`, `/events`, etc. |
+| **Switch** | Toggle switches, send team chat | `/switch`, `/alias`, `/chat`, `/send`, all team/world slash commands |
+| **Admin** | Settings, server activation, audit, renames | All of the above + `/channel`, `/blacklist`, `/mute`, `/unmute` |
 
 Higher roles include lower ones (Admin can do everything Switch and View can).
 
@@ -471,7 +471,24 @@ docker compose exec api ls -la /app/data/
 
 In-game, use the **wire tool** on smart switches, alarms, and storage monitors while connected to the paired server. They appear under **Devices** in the web UI.
 
-### 10.4 Server automation base (optional, admin)
+Each **smart switch** shows a live **ON** / **OFF** / **Unknown** badge (from Rust+). The badge updates when you toggle from the web UI, Discord, in-game chat, or when someone flips the switch manually in-game — as long as Rust+ is connected and you have the Devices page (or another tab with WebSocket) open.
+
+On the Devices page, **On** and **Off** force that state; **Toggle** flips the current value. The same applies to switch groups.
+
+Check switch state in-game: `!alias status` (alias configured under device Settings). In Discord: `/alias name:<alias> action:status`.
+
+### 10.4 Team chat (web)
+
+On the **Team** page (Switch permission to send):
+
+- Live feed of in-game team chat over WebSocket
+- The chat panel **scrolls inside a fixed area** — it does not grow the page as messages pile up
+- Messages you send from the web appear **immediately** (no page refresh)
+- Outbound web messages show in-game as `[YourDiscordName] your text`
+
+Discord `/chat` uses the same delivery path and also mirrors to the team-chat channel when configured.
+
+### 10.5 Server automation base (optional, admin)
 
 Used by **Automations** proximity rules (e.g. “all teammates away from base”) and shown on the map as a blue circle:
 
@@ -480,12 +497,12 @@ Used by **Automations** proximity rules (e.g. “all teammates away from base”
    - Set **Radius (m)** — circular distance in world meters (default **150**, max **10,000**)
 2. **Map page** (admin): **Set server base** in the toolbar → click the map → label + radius → save  
    Or open a team pin → **Set as server base**
-3. On the map, enable **Layers → Server base** to see the zone in **2D** and **3D** (3D requires procgen upload, section 10.5)
+3. On the map, enable **Layers → Server base** to see the zone in **2D** and **3D** (3D requires procgen upload, section 10.6)
 4. **Layers panel** (admin): edit proximity radius inline; **Focus base** pans to the center
 
 Per-rule **Radius (m)** on proximity triggers/conditions overrides the server default when set.
 
-### 10.5 Procgen map upload (optional)
+### 10.6 Procgen map upload (optional)
 
 Unlocks building-blocked overlays, resource heatmaps, roads/caves, and the **3D map** (not available from Rust+ alone):
 
@@ -495,11 +512,11 @@ Unlocks building-blocked overlays, resource heatmaps, roads/caves, and the **3D 
    - **Client cache:** after joining, find the file under your Rust `maps` folder (OS-specific path)
 3. Web UI → **Settings → Server & Map** → **Upload .map file**
 4. Open **Map** → enable procgen layers in the layers panel; switch to **3D** when parse status is `ready`
-5. Toggle **Server base** in layers to verify the automation base circle on terrain (if configured in 10.4)
+5. Toggle **Server base** in layers to verify the automation base circle on terrain (if configured in 10.5)
 
 Seed/world-size mismatches are shown if the uploaded map does not match the active server.
 
-### 10.6 Live cameras (optional)
+### 10.7 Live cameras (optional)
 
 The **Cameras** page is on by default. To use it:
 
@@ -533,7 +550,13 @@ docker compose run --rm -e DISCORD_BOT_TOKEN -e DISCORD_CLIENT_ID -e DISCORD_GUI
 
 The npm script on a dev machine is the easiest path. After registration, commands appear in your Discord server within a few seconds.
 
-Available commands include: `/help`, `/status`, `/devices`, `/switch`, `/alarm`, `/storage`, `/team`, `/time`, `/deepsea`, `/chat`, `/map`, `/pair`, `/link`, and `/channel` / `/blacklist` (admin).
+**Core:** `/help`, `/status`, `/devices`, `/switch`, `/alias`, `/alarm`, `/storage`, `/team`, `/time`, `/deepsea`, `/chat`, `/send`, `/map`, `/pair`, `/link`
+
+**Team & world (mirror in-game `!` commands):** `/online`, `/offline`, `/afk`, `/alive`, `/leader`, `/cargo`, `/heli`, `/chinook`, `/vendor`, `/bradley`, `/convoy`, `/large`, `/small`, `/events`, `/upkeep`
+
+**Admin:** `/channel show|set|clear`, `/blacklist add|remove|list`, `/mute`, `/unmute`
+
+Bot responses use **embeds** (not plain text). Re-register after changing `apps/discord-bot/src/commands.ts`.
 
 ---
 
@@ -549,7 +572,10 @@ Use this checklist after deploy:
 | FCM | `/health` shows `"fcm": { "listening": true, "configured": true }` |
 | FCM expiry | **Settings → Admin** shows registered/expiry dates |
 | Rust+ | Dashboard shows server name and player count |
-| Devices | Toggling a switch in the UI changes it in-game |
+| Devices | Each switch shows ON/OFF badge; **On**/**Off** set state; **Toggle** flips |
+| Switch live update | Flip a switch in-game → badge updates on open Devices page (Rust+ connected) |
+| Team chat | Send from Team page → message appears instantly; feed scrolls |
+| Discord slash | `/cargo`, `/online`, `/alias action:status` return embeds |
 | WebSocket | Team page shows live chat when someone talks in team chat |
 | Procgen map | Upload `.map` in Settings; Map page shows parse status `ready` and 3D toggle |
 | Server base | **Automations** or **Map → Set server base**; **Server base** layer shows circle on 2D/3D |
@@ -640,6 +666,13 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 - `INTERNAL_API_KEY` must match in API and bot (bot uses same `.env`)
 - Bot uses `http://api:3000` inside Docker (set in `docker-compose.yml`; do not override with public URL for the bot service)
 - Register commands: `npm run register-commands --workspace=@rusttools/discord-bot`
+- Restart API and bot after deploy so slash-command routes and embed payloads are current
+
+### Switch badge shows Unknown on Devices page
+
+- Rust+ must be connected (`/health` → `rustplus.connected: true`)
+- Device must be paired and subscribed (reconnect API after pairing new switches)
+- Badge updates live only while a web tab with WebSocket is open; refresh the page to re-fetch state
 
 ### Slash commands not visible
 
@@ -652,6 +685,7 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 - Live updates use WebSocket with a short-lived token from `/auth/ws-token`
 - You must be logged in; check browser console for WebSocket errors
 - API must be HTTPS (`wss://`)
+- If your own sent messages do not appear, restart the API after upgrading — older builds did not broadcast outbound web chat over WebSocket
 
 ---
 
@@ -669,6 +703,8 @@ npm run db:migrate
 npm run dev          # API http://localhost:3000 (4 GB heap for procgen parsing)
 npm run dev:web      # UI http://localhost:5173 (proxies /api)
 npm run dev:bot      # Discord bot
+
+# Stop: Ctrl+C in each terminal, or kill processes on ports 3000 / 5173
 
 npm run register-commands --workspace=@rusttools/discord-bot
 npm run test:smoke     # API smoke tests (health, routes; live Rust+ optional)

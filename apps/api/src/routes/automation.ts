@@ -15,6 +15,7 @@ import { parseRule } from "../lib/automation-engine.js";
 import { getEntitySettings, updateEntitySettings } from "../lib/entity-settings.js";
 import { generateId } from "../lib/ids.js";
 import { getActiveServerId } from "../lib/rust-data.js";
+import { resolveSwitchTargetValue } from "../lib/vending.js";
 
 async function requireActiveServerId(db: Database, reply: { status: (c: number) => { send: (b: unknown) => unknown } }) {
   const serverId = await getActiveServerId(db);
@@ -195,15 +196,10 @@ export async function registerAutomationRoutes(
     let toggled = 0;
     for (const { entity } of members) {
       try {
-        let newValue = value;
-        if (action === "toggle" || newValue === undefined) {
-          const info = (await deps.rustPlus.getEntityInfo(entity.entityId)) as {
-            payload?: { value?: boolean };
-            value?: boolean;
-          };
-          const current = info.payload?.value ?? info.value ?? null;
-          newValue = current === null ? true : !current;
-        }
+        const newValue = await resolveSwitchTargetValue(deps.rustPlus, entity.entityId, {
+          action,
+          value,
+        });
         await deps.rustPlus.toggleSwitch(entity.entityId, newValue);
         toggled += 1;
       } catch {

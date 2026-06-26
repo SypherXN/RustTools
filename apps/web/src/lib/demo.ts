@@ -765,7 +765,15 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { ok: true } as T;
   }
 
-  if (path === "/devices") return { devices: demoDevices } as T;
+  if (path === "/devices") {
+    return {
+      devices: demoDevices.map((device) =>
+        device.entityType === "smart_switch"
+          ? { ...device, switchValue: demoSwitchStates[device.id] ?? false }
+          : device,
+      ),
+    } as T;
+  }
 
   const toggleMatch = path.match(/^\/devices\/([^/]+)\/toggle$/);
   if (toggleMatch && method === "POST") {

@@ -12,7 +12,7 @@ import {
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { getActiveServerId } from "../lib/rust-data.js";
-import { getSwitchState, recycleFromEntityInfo } from "../lib/vending.js";
+import { getSwitchState, recycleFromEntityInfo, resolveSwitchTargetValue } from "../lib/vending.js";
 
 export async function registerDeviceRoutes(
   app: FastifyInstance,
@@ -23,9 +23,17 @@ export async function registerDeviceRoutes(
     if (!user) return;
 
     const serverId = await getActiveServerId(deps.db);
-    const devices = serverId
+    const rows = serverId
       ? await deps.db.select().from(rustEntities).where(eq(rustEntities.serverId, serverId))
       : await deps.db.select().from(rustEntities);
+
+    const devices = await Promise.all(
+      rows.map(async (device) => {
+        if (device.entityType !== "smart_switch") return device;
+        const switchValue = await getSwitchState(deps.rustPlus, device.entityId);
+        return { ...device, switchValue };
+      }),
+    );
 
     return { devices, activeServerId: serverId };
   });
@@ -120,11 +128,7 @@ export async function registerDeviceRoutes(
       return reply.status(400).send({ error: "Only smart switches can be toggled" });
     }
 
-    let newValue = value;
-    if (action === "toggle" || newValue === undefined) {
-      const current = await getSwitchState(deps.rustPlus, device.entityId);
-      newValue = current === null ? true : !current;
-    }
+    let newValue = await resolveSwitchTargetValue(deps.rustPlus, device.entityId, { action, value });
 
     try {
       await deps.rustPlus.toggleSwitch(device.entityId, newValue);
@@ -173,11 +177,7 @@ export async function registerDeviceRoutes(
     let toggled = 0;
     for (const sw of switches) {
       try {
-        let newValue = value;
-        if (action === "toggle" || newValue === undefined) {
-          const current = await getSwitchState(deps.rustPlus, sw.entityId);
-          newValue = current === null ? true : !current;
-        }
+        const newValue = await resolveSwitchTargetValue(deps.rustPlus, sw.entityId, { action, value });
         await deps.rustPlus.toggleSwitch(sw.entityId, newValue);
         toggled += 1;
       } catch {

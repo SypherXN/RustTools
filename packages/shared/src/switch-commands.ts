@@ -51,3 +51,12 @@ export function parseSwitchChatCommand(message: string): ParsedSwitchCommand | n
 
   return { alias, action, timedSeconds };
 }
+
+/** Read ON/OFF from Rust+ `getEntityInfo` or `entityChanged` payload. */
+export function parseSwitchEntityValue(info: unknown): boolean | null {
+  if (info == null || typeof info !== "object") return null;
+  const data = info as { value?: boolean; payload?: { value?: boolean } };
+  if (typeof data.value === "boolean") return data.value;
+  if (typeof data.payload?.value === "boolean") return data.payload.value;
+  return null;
+}

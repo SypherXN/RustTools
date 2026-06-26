@@ -21,10 +21,11 @@ import {
 } from "../lib/discord-channels.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { resolveDiscordChannelId } from "../lib/discord-channels.js";
-import { getActiveServerId } from "../lib/rust-data.js";
+import { getActiveServer, getActiveServerId, getWorldSize, parseTeamRoster } from "../lib/rust-data.js";
 import { getSwitchState } from "../lib/vending.js";
 import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
-import { isDiscordChannelPurpose, formatAttributedTeamChatMessage } from "@rusttools/shared";
+import { sendAndPublishTeamChat } from "../lib/team-chat-outbound.js";
+import { isDiscordChannelPurpose } from "@rusttools/shared";
 import {
   clearInformationEmbedBinding,
   ensureInformationEmbed,
@@ -80,8 +81,12 @@ export async function registerInternalRoutes(
   app.get("/internal/team", async (request, reply) => {
     if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
 
-    const team = await deps.rustPlus.getTeamInfo();
-    return { team };
+    const [teamRaw, info] = await Promise.all([
+      deps.rustPlus.getTeamInfo(),
+      deps.rustPlus.getServerInfo(),
+    ]);
+    const worldSize = getWorldSize(info);
+    return { team: parseTeamRoster(teamRaw, worldSize), worldSize };
   });
 
   app.get("/internal/time", async (request, reply) => {
@@ -231,12 +236,23 @@ export async function registerInternalRoutes(
       senderLabel = row?.discordUsername ?? discordUserId;
     }
 
-    const outbound = formatAttributedTeamChatMessage(senderLabel, message);
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(503).send({ error: "No active server" });
+    }
 
-    await deps.rustPlus.sendTeamMessage(outbound);
+    const activeServer = await getActiveServer(deps.db);
+
+    await sendAndPublishTeamChat(
+      deps.rustPlus,
+      serverId,
+      activeServer?.playerId ?? null,
+      senderLabel,
+      message,
+    );
     await logAudit(deps.db, {
       action: "discord_team_chat",
-      metadata: { discordUserId, message: message.trim(), outbound },
+      metadata: { discordUserId, message: message.trim() },
     });
     return { ok: true };
   });
@@ -347,14 +363,22 @@ export async function registerInternalRoutes(
   });
 
   app.post("/internal/commands-channel/execute", async (request, reply) => {
-    const { guildId, channelId, message } = request.body as {
+    const { guildId, channelId, message, discordUsername } = request.body as {
       discordUserId: string;
       guildId: string;
       channelId: string;
       message: string;
+      discordUsername?: string;
     };
 
-    if (!(await requireInternalBotAccess(deps.db, request, reply, "switch", guildId.trim()))) return;
+    const discordUserId = await requireInternalBotAccess(
+      deps.db,
+      request,
+      reply,
+      "switch",
+      guildId?.trim(),
+    );
+    if (!discordUserId) return;
 
     if (!guildId?.trim() || !channelId?.trim() || !message?.trim()) {
       return reply.status(400).send({ error: "guildId, channelId, and message are required" });
@@ -363,9 +387,17 @@ export async function registerInternalRoutes(
     const guildError = assertGuildAllowed(guildId.trim());
     if (guildError) return reply.status(403).send({ error: guildError });
 
-    const boundChannel = await resolveDiscordChannelId(deps.db, guildId.trim(), "commands");
-    if (!boundChannel || boundChannel !== channelId.trim()) {
-      return reply.status(403).send({ error: "Channel is not configured as the commands channel" });
+    const commandsChannel = await resolveDiscordChannelId(deps.db, guildId.trim(), "commands");
+    const teamChatChannel = await resolveDiscordChannelId(deps.db, guildId.trim(), "team_chat");
+    const trimmedChannel = channelId.trim();
+    if (
+      trimmedChannel !== commandsChannel &&
+      trimmedChannel !== teamChatChannel
+    ) {
+      return reply.status(403).send({
+        error:
+          "Use a channel linked with /channel set purpose:commands (or the team chat mirror channel)",
+      });
     }
 
     const serverId = await getActiveServerId(deps.db);
@@ -376,6 +408,8 @@ export async function registerInternalRoutes(
     const result = await executeTeamChatCommand(deps.db, deps.rustPlus, {
       serverId,
       message: message.trim(),
+      discordUserId,
+      discordUsername: discordUsername?.trim() || undefined,
     });
 
     const replies = result?.replies?.length
@@ -384,7 +418,54 @@ export async function registerInternalRoutes(
         ? [result.reply]
         : [];
 
-    return { replies };
+    return { replies, embeds: result?.embeds ?? [] };
+  });
+
+  app.post("/internal/slash-command/execute", async (request, reply) => {
+    const { guildId, message, discordUsername } = request.body as {
+      discordUserId: string;
+      guildId?: string;
+      message: string;
+      discordUsername?: string;
+    };
+
+    const discordUserId = await requireInternalBotAccess(
+      deps.db,
+      request,
+      reply,
+      "switch",
+      guildId?.trim(),
+    );
+    if (!discordUserId) return;
+
+    if (!message?.trim()) {
+      return reply.status(400).send({ error: "message is required" });
+    }
+
+    if (guildId?.trim()) {
+      const guildError = assertGuildAllowed(guildId.trim());
+      if (guildError) return reply.status(403).send({ error: guildError });
+    }
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(503).send({ error: "No active server" });
+    }
+
+    const result = await executeTeamChatCommand(deps.db, deps.rustPlus, {
+      serverId,
+      message: message.trim(),
+      discordUserId,
+      discordUsername: discordUsername?.trim() || undefined,
+    });
+
+    const replies = result?.replies?.length
+      ? result.replies
+      : result?.reply
+        ? [result.reply]
+        : [];
+
+    return { replies, embeds: result?.embeds ?? [] };
   });
 
   app.get("/internal/blacklist", async (request, reply) => {

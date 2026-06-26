@@ -4,6 +4,7 @@ import {
   formatDeepSeaTeamChatMessage,
   formatRosterCommandResponse,
   formatEventChatCommandResponse,
+  formatUpkeepDetailReport,
   parseEventTeamChatCommand,
   formatTeamChatHelpReplies,
   parseDeepSeaTeamChatCommand,
@@ -16,6 +17,7 @@ import {
   parseUpkeepDetailTeamChatCommand,
 } from "@rusttools/shared";
 import { configuredGuildId } from "./discord-channels.js";
+import { hasDiscordCapability } from "./discord-permissions.js";
 import { isDiscordBlacklisted } from "./discord-blacklist.js";
 import { fetchDeepSeaStatus } from "./deep-sea.js";
 import { sendDiscordDirectMessage } from "./discord-dm.js";
@@ -25,23 +27,46 @@ import {
   getServerNotificationSettings,
   updateTeamChatBotSettings,
 } from "./server-notification-settings.js";
-import { hasSteamAdminCapability } from "./steam-admin.js";
+import { hasSteamAdminCapability, steamIdForDiscordUser } from "./steam-admin.js";
 import { processTeamRoster } from "./team-tracker.js";
-import { buildUpkeepDetailTeamChatReplies } from "./tc-upkeep-report.js";
+import { fetchTcUpkeepReportEntries } from "./tc-upkeep-report.js";
 import { fetchWorldEventsStatus } from "./world-events-status.js";
 import { executeSwitchChatCommand } from "./switch-command-handler.js";
+import {
+  buildDeepSeaEmbed,
+  buildEventEmbed,
+  buildHelpTeamChatEmbed,
+  buildNoticeEmbed,
+  buildRosterEmbed,
+  buildSwitchReplyEmbed,
+  buildUpkeepEmbed,
+} from "./team-chat-discord-embeds.js";
+
+function forDiscord(
+  ctx: TeamChatCommandContext,
+  result: TeamChatCommandResult,
+  embeds: import("./discord-messages.js").DiscordEmbedPayload[],
+): TeamChatCommandResult {
+  if (!ctx.discordUserId) return result;
+  return { ...result, embeds };
+}
 
 export interface TeamChatCommandContext {
   serverId: string;
+  message: string;
   senderSteamId?: string;
   senderName?: string;
-  message: string;
+  /** Discord user running a `!` command from the commands channel. */
+  discordUserId?: string;
+  discordUsername?: string;
 }
 
 export interface TeamChatCommandResult {
   reply?: string;
   /** When set, each string is sent as its own team chat message (order preserved). */
   replies?: string[];
+  /** Rich Discord embeds for slash-command callers. */
+  embeds?: import("./discord-messages.js").DiscordEmbedPayload[];
 }
 
 const lastCommandAtMs = new Map<string, number>();
@@ -52,6 +77,30 @@ function isControlCommand(message: string): boolean {
     parseUnmuteTeamChatCommand(message) ||
     parseHelpTeamChatCommand(message)
   );
+}
+
+async function isCommandAdmin(
+  db: Database,
+  ctx: TeamChatCommandContext,
+): Promise<boolean> {
+  if (ctx.discordUserId) {
+    return hasDiscordCapability(ctx.discordUserId, "admin");
+  }
+  if (ctx.senderSteamId) {
+    return hasSteamAdminCapability(db, ctx.senderSteamId);
+  }
+  return false;
+}
+
+async function resolveSenderSteamId(
+  db: Database,
+  ctx: TeamChatCommandContext,
+): Promise<string | null> {
+  if (ctx.senderSteamId) return ctx.senderSteamId;
+  if (ctx.discordUserId) {
+    return steamIdForDiscordUser(db, ctx.discordUserId);
+  }
+  return null;
 }
 
 export function shouldThrottleTeamChatCommand(
@@ -80,74 +129,98 @@ export async function executeTeamChatCommand(
   const settings = await getServerNotificationSettings(db, ctx.serverId);
 
   if (parseMuteTeamChatCommand(message)) {
-    if (!ctx.senderSteamId) {
-      return { reply: "RustTools: !mute is only available from in-game team chat." };
-    }
-    if (!(await hasSteamAdminCapability(db, ctx.senderSteamId))) {
-      return { reply: "RustTools: Only admins can mute the bot." };
+    if (!(await isCommandAdmin(db, ctx))) {
+      const reply = "RustTools: Only admins can mute the bot.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Mute bot", kind: "error" })]);
     }
     await updateTeamChatBotSettings(db, ctx.serverId, { muted: true });
-    return { reply: "RustTools: Bot muted in team chat." };
+    const reply = "RustTools: Bot muted in team chat.";
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Bot muted", kind: "warning" })]);
   }
 
   if (parseUnmuteTeamChatCommand(message)) {
-    if (!ctx.senderSteamId) {
-      return { reply: "RustTools: !unmute is only available from in-game team chat." };
-    }
-    if (!(await hasSteamAdminCapability(db, ctx.senderSteamId))) {
-      return { reply: "RustTools: Only admins can unmute the bot." };
+    if (!(await isCommandAdmin(db, ctx))) {
+      const reply = "RustTools: Only admins can unmute the bot.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Unmute bot", kind: "error" })]);
     }
     await updateTeamChatBotSettings(db, ctx.serverId, { muted: false });
-    return { reply: "RustTools: Bot unmuted in team chat." };
+    const reply = "RustTools: Bot unmuted in team chat.";
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Bot unmuted", kind: "success" })]);
   }
 
   if (parseHelpTeamChatCommand(message)) {
-    return { replies: formatTeamChatHelpReplies() };
+    const replies = formatTeamChatHelpReplies(ctx.discordUserId != null);
+    return forDiscord(ctx, { replies }, [buildHelpTeamChatEmbed()]);
   }
 
-  if (ctx.senderSteamId) {
-    const guildId = configuredGuildId();
-    if (guildId) {
+  const guildId = configuredGuildId();
+  if (guildId) {
+    if (ctx.senderSteamId) {
       const blocked = await isDiscordBlacklisted(db, guildId, { steamId: ctx.senderSteamId });
-      if (blocked) return null;
+      if (blocked) {
+        const reply = "RustTools: You are blocked from bot commands.";
+        return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "error" })]);
+      }
+    }
+    if (ctx.discordUserId) {
+      const blocked = await isDiscordBlacklisted(db, guildId, { discordId: ctx.discordUserId });
+      if (blocked) {
+        const reply = "RustTools: You are blocked from bot commands.";
+        return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "error" })]);
+      }
     }
   }
 
   if (settings.teamChatBot.muted) {
+    if (ctx.discordUserId) {
+      const reply = "RustTools: Bot is muted in team chat. Admins: !unmute or Settings → Team Chat.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Bot muted", kind: "warning" })]);
+    }
     return null;
   }
 
   if (shouldThrottleTeamChatCommand(ctx.serverId, message, settings.teamChatBot.commandDelayMs)) {
+    if (ctx.discordUserId) {
+      const reply = "RustTools: Slow down — try again in a moment.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "warning" })]);
+    }
     return null;
   }
 
   const send = parseSendTeamChatCommand(message);
   if (send) {
-    if (!ctx.senderSteamId) {
-      return { reply: "RustTools: !send is only available from in-game team chat." };
-    }
     const recipient = await findDiscordUserIdForSendTarget(db, send.target);
     if (!recipient) {
-      return {
-        reply: `RustTools: No linked Discord user matches "${send.target}". They must log in to the web dashboard first.`,
-      };
+      const reply = `RustTools: No linked Discord user matches "${send.target}". They must log in to the web dashboard first.`;
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Send failed", kind: "error" })]);
     }
-    const from = ctx.senderName?.trim() || "Teammate";
+    const from =
+      ctx.senderName?.trim() ||
+      ctx.discordUsername?.trim() ||
+      "Teammate";
     await sendDiscordDirectMessage(
       recipient.discordId,
       `**${from}** (via RustTools): ${send.text}`,
     );
-    return { reply: `RustTools: Message sent to ${recipient.discordUsername} on Discord.` };
+    const reply = `RustTools: Message sent to ${recipient.discordUsername} on Discord.`;
+    return forDiscord(ctx, { reply }, [
+      buildNoticeEmbed(`Message sent to **${recipient.discordUsername}** on Discord.`, {
+        title: "Discord DM sent",
+        kind: "success",
+      }),
+    ]);
   }
 
   if (parseDeepSeaTeamChatCommand(message)) {
     const status = await fetchDeepSeaStatus(db, rustPlus, ctx.serverId);
-    return { reply: formatDeepSeaTeamChatMessage(status) };
+    const reply = formatDeepSeaTeamChatMessage(status);
+    return forDiscord(ctx, { reply }, [buildDeepSeaEmbed(status)]);
   }
 
   if (parseUpkeepDetailTeamChatCommand(message)) {
-    const replies = await buildUpkeepDetailTeamChatReplies(db, rustPlus, ctx.serverId);
-    return { replies };
+    const entries = await fetchTcUpkeepReportEntries(db, rustPlus, ctx.serverId);
+    const replies = formatUpkeepDetailReport(entries);
+    return forDiscord(ctx, { replies }, [buildUpkeepEmbed(entries)]);
   }
 
   const eventCommand = parseEventTeamChatCommand(message);
@@ -155,9 +228,9 @@ export async function executeTeamChatCommand(
     const status = await fetchWorldEventsStatus(db, rustPlus, ctx.serverId);
     const response = formatEventChatCommandResponse(eventCommand, status);
     if (eventCommand === "events") {
-      return { replies: response.split("\n") };
+      return forDiscord(ctx, { replies: response.split("\n") }, [buildEventEmbed(eventCommand, status)]);
     }
-    return { reply: response };
+    return forDiscord(ctx, { reply: response }, [buildEventEmbed(eventCommand, status)]);
   }
 
   const rosterCommand = parseRosterTeamChatCommand(message);
@@ -166,17 +239,22 @@ export async function executeTeamChatCommand(
     const worldSize = getWorldSize(info);
     const parsed = parseTeamRoster(team, worldSize);
     const { team: tracked } = processTeamRoster(ctx.serverId, parsed, worldSize);
-    return { reply: formatRosterCommandResponse(rosterCommand, tracked) };
+    const reply = formatRosterCommandResponse(rosterCommand, tracked);
+    return forDiscord(ctx, { reply }, [buildRosterEmbed(rosterCommand, tracked, worldSize)]);
   }
 
   if (parseLeaderTeamChatCommand(message)) {
-    if (!ctx.senderSteamId) {
-      return { reply: "RustTools: !leader is only available from in-game team chat." };
+    const senderSteamId = await resolveSenderSteamId(db, ctx);
+    if (!senderSteamId) {
+      const reply =
+        "RustTools: Link your Rust+ account in the web dashboard (Settings → Account) to use !leader.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" })]);
     }
 
     const activeServer = await getActiveServer(db);
     if (!activeServer || activeServer.id !== ctx.serverId) {
-      return { reply: "RustTools: No active server." };
+      const reply = "RustTools: No active server.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "error" })]);
     }
 
     const [team, info] = await Promise.all([rustPlus.getTeamInfo(), rustPlus.getServerInfo()]);
@@ -184,28 +262,41 @@ export async function executeTeamChatCommand(
     const parsed = parseTeamRoster(team, worldSize);
 
     if (!parsed.leaderSteamId || parsed.leaderSteamId !== activeServer.playerId) {
-      return {
-        reply:
-          "RustTools: !leader is only available when RustTools is paired with the current team leader.",
-      };
+      const reply =
+        "RustTools: !leader is only available when RustTools is paired with the current team leader.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" })]);
     }
 
-    const sender = parsed.members.find((m) => m.steamId === ctx.senderSteamId);
-    if (!sender) return null;
+    const sender = parsed.members.find((m) => m.steamId === senderSteamId);
+    if (!sender) {
+      const reply = "RustTools: You must be on the team to use !leader.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" })]);
+    }
 
     if (sender.isLeader) {
-      return { reply: "RustTools: You are already team leader." };
+      const reply = "RustTools: You are already team leader.";
+      return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "info" })]);
     }
 
     await rustPlus.promoteToLeader(sender.steamId);
-    return { reply: `RustTools: ${sender.name} is now team leader.` };
+    const reply = `RustTools: ${sender.name} is now team leader.`;
+    return forDiscord(ctx, { reply }, [
+      buildNoticeEmbed(`**${sender.name}** is now team leader.`, {
+        title: "Team leader updated",
+        kind: "success",
+      }),
+    ]);
   }
 
   const switchResult = await executeSwitchChatCommand(db, rustPlus, ctx.serverId, message);
   if (switchResult) {
-    return { reply: switchResult.reply };
+    return forDiscord(ctx, { reply: switchResult.reply }, [buildSwitchReplyEmbed(switchResult.reply)]);
   }
 
+  if (ctx.discordUserId) {
+    const reply = "RustTools: Unknown command. Type !help for the list.";
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "error" })]);
+  }
   return null;
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   groupDevicesByType,
+  parseSwitchEntityValue,
   type EntityDeviceSettings,
   type SwitchAutoMode,
   type SwitchGroupRecord,
@@ -18,6 +19,17 @@ interface Device {
   entityType: string;
   name: string;
   displayName: string | null;
+  switchValue?: boolean | null;
+}
+
+function SwitchStateBadge({ value }: { value: boolean | null | undefined }) {
+  if (value === true) {
+    return <span className="switch-state-badge switch-state-badge-on">ON</span>;
+  }
+  if (value === false) {
+    return <span className="switch-state-badge switch-state-badge-off">OFF</span>;
+  }
+  return <span className="switch-state-badge switch-state-badge-unknown">Unknown</span>;
 }
 
 const AUTO_MODES: Array<{ value: SwitchAutoMode | ""; label: string }> = [
@@ -37,7 +49,6 @@ export function DevicesPage() {
   const [activeTab, setActiveTab] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [liveEvent, setLiveEvent] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [expandedSettings, setExpandedSettings] = useState<string | null>(null);
@@ -46,8 +57,8 @@ export function DevicesPage() {
   const canAdmin = useCan("admin");
   const { epoch } = useActiveServer();
 
-  const load = async () => {
-    setLoading(true);
+  const load = async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     try {
       const [deviceData, groupData] = await Promise.all([
         apiFetch<{ devices: Device[] }>("/devices"),
@@ -59,7 +70,7 @@ export function DevicesPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load devices");
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   };
 
@@ -68,10 +79,22 @@ export function DevicesPage() {
   }, [epoch]);
 
   useWebSocket((event, payload) => {
-    if (event === "entityChanged") {
-      setLiveEvent(`Device update: entity ${(payload as { entityId?: number }).entityId}`);
-      void load();
+    if (event !== "entityChanged") return;
+
+    const data = payload as { entityId?: number; payload?: unknown };
+    const switchValue = parseSwitchEntityValue(data.payload);
+    if (data.entityId != null && switchValue !== null) {
+      setDevices((prev) =>
+        prev.map((device) =>
+          device.entityId === data.entityId && device.entityType === "smart_switch"
+            ? { ...device, switchValue }
+            : device,
+        ),
+      );
+      return;
     }
+
+    void load({ silent: true });
   });
 
   const groupedDevices = useMemo(() => groupDevicesByType(devices), [devices]);
@@ -88,11 +111,13 @@ export function DevicesPage() {
 
   const toggle = async (device: Device, action: "on" | "off" | "toggle") => {
     try {
-      await apiFetch(`/devices/${device.id}/toggle`, {
+      const result = await apiFetch<{ ok: boolean; value: boolean }>(`/devices/${device.id}/toggle`, {
         method: "POST",
         body: JSON.stringify({ action }),
       });
-      await load();
+      setDevices((prev) =>
+        prev.map((d) => (d.id === device.id ? { ...d, switchValue: result.value } : d)),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Toggle failed");
     }
@@ -105,7 +130,7 @@ export function DevicesPage() {
         method: "POST",
         body: JSON.stringify({ name: groupName, value }),
       });
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Group toggle failed");
     }
@@ -120,7 +145,7 @@ export function DevicesPage() {
         method: "POST",
         body: JSON.stringify({ action }),
       });
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Switch group toggle failed");
     }
@@ -165,7 +190,6 @@ export function DevicesPage() {
         )}
       </header>
 
-      {liveEvent && <div className="alert">{liveEvent}</div>}
       {error && <div className="alert alert-error">{error}</div>}
 
       {canSwitch && switchGroups.length > 0 && (
@@ -270,7 +294,12 @@ export function DevicesPage() {
                           </div>
                         ) : (
                           <>
-                            <strong>{device.displayName ?? device.name}</strong>
+                            <div className="device-card-title-row">
+                              <strong>{device.displayName ?? device.name}</strong>
+                              {device.entityType === "smart_switch" && (
+                                <SwitchStateBadge value={device.switchValue} />
+                              )}
+                            </div>
                             {device.displayName && device.displayName !== device.name && (
                               <div className="muted device-card-ingame">{device.name}</div>
                             )}
@@ -291,7 +320,7 @@ export function DevicesPage() {
                       </div>
                     </div>
                     {device.entityType === "smart_switch" && canSwitch && (
-                      <div className="btn-row">
+                      <div className="btn-row device-switch-actions">
                         <button type="button" onClick={() => void toggle(device, "on")}>
                           On
                         </button>

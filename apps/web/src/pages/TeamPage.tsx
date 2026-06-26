@@ -166,13 +166,20 @@ export function TeamPage() {
   };
 
   const sendChat = async () => {
-    if (!chatMessage.trim()) return;
+    const text = chatMessage.trim();
+    if (!text) return;
     try {
-      await apiFetch("/servers/active/chat", {
-        method: "POST",
-        body: JSON.stringify({ message: chatMessage }),
-      });
+      const result = await apiFetch<{ ok: boolean; message?: TeamChatMessage }>(
+        "/servers/active/chat",
+        {
+          method: "POST",
+          body: JSON.stringify({ message: text }),
+        },
+      );
       setChatMessage("");
+      if (result.message) {
+        setMessages((prev) => appendTeamChatMessage(prev, result.message!));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
     }

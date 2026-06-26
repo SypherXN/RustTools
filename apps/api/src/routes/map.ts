@@ -2,9 +2,10 @@ import type { FastifyInstance } from "fastify";
 import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import multipart from "@fastify/multipart";
-import { buildMapTransform, formatAttributedTeamChatMessage, hasVendingSearchInput } from "@rusttools/shared";
+import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
+import { sendAndPublishTeamChat } from "../lib/team-chat-outbound.js";
 import { applyTeamTracking } from "../lib/team-tracker.js";
 import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
 import { searchVending } from "../lib/vending.js";
@@ -172,9 +173,19 @@ export async function registerServerRoutes(
     }
 
     try {
-      const outbound = formatAttributedTeamChatMessage(user.discordUsername, message);
-      await deps.rustPlus.sendTeamMessage(outbound);
-      return { ok: true };
+      const activeServer = await getActiveServer(deps.db);
+      if (!activeServer) {
+        return reply.status(503).send({ error: "No active server" });
+      }
+
+      const published = await sendAndPublishTeamChat(
+        deps.rustPlus,
+        activeServer.id,
+        activeServer.playerId,
+        user.discordUsername,
+        message,
+      );
+      return { ok: true, message: published };
     } catch (err) {
       return reply.status(502).send({
         error: err instanceof Error ? err.message : "Failed to send team message",

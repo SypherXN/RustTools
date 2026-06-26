@@ -8,7 +8,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 
 - **Frontend** — React SPA on GitHub Pages (or Vite dev server locally)
 - **Backend** — Node.js API on your VM (Rust+ WebSocket, FCM pairing, auth)
-- **Discord bot** — slash commands calling the API via internal auth
+- **Discord bot** — slash commands (embed responses) calling the API via internal auth
 
 ```
 GitHub Pages (UI)  ──HTTPS──►  Oracle VM (Caddy → API + Discord bot)
@@ -42,6 +42,8 @@ npm run dev          # API http://localhost:3000
 npm run dev:web      # UI http://localhost:5173 (proxies /api)
 npm run dev:bot      # Discord bot
 
+# Stop: Ctrl+C in each terminal, or kill processes on ports 3000 / 5173
+
 npm run register-commands --workspace=@rusttools/discord-bot
 npm run test:smoke     # optional API smoke tests (see FEATURES.md)
 ```
@@ -53,7 +55,7 @@ The API dev script sets `NODE_OPTIONS='--max-old-space-size=4096'` for procgen m
 1. Create application → OAuth2 redirect: `http://localhost:5173/api/auth/discord/callback` (via Vite proxy — **not** port 3000)
 2. Copy Client ID + Secret to `.env`
 3. Create bot → copy token to `DISCORD_BOT_TOKEN`
-4. Invite bot with `bot` + `applications.commands` scopes
+4. Invite bot with `bot` + `applications.commands` scopes (Message Content Intent is **not** required)
 5. Set `DISCORD_GUILD_ID`, `INTERNAL_API_KEY` (same value in API and bot `.env`)
 6. Register slash commands (see above)
 
@@ -109,10 +111,10 @@ docker compose up -d --build
 | Area | What you get |
 |------|----------------|
 | **Rust+** | FCM pairing, switches/alarms/storage, map/team/markers, reconnect + read caching |
-| **Web UI** | Dashboard, devices, storage, 2D/3D map, server base zone, team chat, automations, cameras, audit, settings |
+| **Web UI** | Dashboard, devices (live ON/OFF badges, explicit On/Off controls), storage, 2D/3D map, server base zone, live team chat, automations, cameras, audit, settings |
 | **Map** | Live Rust+ map, server base overlay, optional procgen `.map` layers (heatmaps, no-build zones, 3D terrain) |
 | **Automations** | IFTTT rules, switch groups, server base + configurable proximity radius (meters) |
-| **Discord** | Slash commands, live info board, channel bindings, team chat mirror, `!` commands |
+| **Discord** | Slash commands with embeds, live info board, channel bindings, team chat mirror |
 | **Alerts** | Raids, TC decay, Deep Sea, world events, storage changes — Discord, team chat, push, SMS/email |
 
 Demo the UI without a backend: `npm run dev:web:demo` or open the app with `?demo=1`.

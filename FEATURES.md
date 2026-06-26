@@ -15,7 +15,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
   - **Admin** — settings, automations, audit log, data reset, notification config
 - **Multi-server support** — pair multiple Rust servers; activate one at a time
 - **Demo mode** — try the UI without a live Rust+ connection (`?demo=1`)
-- **Live updates** — WebSocket pushes team, devices, storage, alarms, map events, camera frames, and chat to open tabs
+- **Live updates** — WebSocket pushes team, devices (including smart switch ON/OFF), storage, alarms, map events, camera frames, and chat to open tabs
 - **PWA-ready** — web app manifest + service worker for installable mobile/desktop experience
 - **API rate limiting** — configurable per-IP limit (default 600 req/min via `API_RATE_LIMIT_MAX`); `/health` is exempt
 
@@ -38,12 +38,12 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 | Page | What you get |
 |------|----------------|
 | **Dashboard** | Server info, population, wipe countdown, in-game time, Deep Sea status, world event summary |
-| **Devices** | All paired switches, alarms, and monitors; live state; per-device settings |
+| **Devices** | Paired switches, alarms, monitors; **ON/OFF badges**; **On** / **Off** / **Toggle** controls (explicit state); per-device settings |
 | **Automations** | IFTTT-style rules, switch groups, device library, server base location + proximity radius |
 | **Cameras** | Live CCTV / auto-turret view, PTZ controls, saved camera bookmarks (on by default; set `VITE_LIVE_CAMERAS=false` to hide) |
 | **Storage** | All storage monitors, contents, upkeep/decay, cross-monitor item search |
 | **Map** | 2D and 3D map, server base zone, team, monuments, markers, vending search, event dock, procgen overlays, drawings, pins |
-| **Team** | Roster, online/AFK/dead status, positions, death history, connection log, team chat |
+| **Team** | Roster, online/AFK/dead status, positions, death/connection logs, **live scrollable team chat** |
 | **Audit** | Admin action log (device toggles, settings changes, etc.) |
 | **Settings** | Rust+ link, notifications (tabbed), procgen `.map` upload, legacy automations, FCM upload (admin) |
 
@@ -54,7 +54,10 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 ### Smart switches
 
 - Toggle on/off from web UI, Discord, or in-game chat
-- **Per-device chat commands** — custom `!alias` for toggle, on, off, status
+- **Devices page controls** — **On** and **Off** set the switch to that state; **Toggle** flips the current value (same for switch groups)
+- **Live state on Devices page** — each switch shows an **ON** / **OFF** / **Unknown** badge (read from Rust+ via `getEntityInfo`)
+- **In-game toggles push to the web UI** — Rust+ `entityChanged` broadcasts update open dashboard tabs over WebSocket (requires Rust+ connected and the device paired/subscribed)
+- **Per-device chat commands** — custom `!alias` for toggle, on, off, **status**
 - **Timed actions** — `!alias on 60s` auto-reverts after a delay
 - **Auto modes** — on at night, on at day, always on/off, on when any teammate online, proximity-based
 - **Switch groups** — control multiple switches together; group-level chat aliases
@@ -209,17 +212,21 @@ Automated spawn/despawn alerts to Discord and optional team chat (grid + coordin
 - Oil rig crate unlock offset and reminder intervals
 - Oil rig proximity detection radius
 
-### On-demand event queries (team chat & Discord commands channel)
+### On-demand event queries (team chat & Discord slash commands)
 
-`!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!large` · `!small` · `!events`
+In-game: `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!large` · `!small` · `!events`
+
+Discord: matching slash commands (`/cargo`, `/events`, etc.) — see [Discord bot](#discord-bot) below.
 
 ---
 
 ## Team & social
 
 - **Live roster** — online, AFK, dead, alive; grid position when available
-- **Team chat** — send/receive in web UI; mirrored to Discord team-chat channel
-- **Discord → in-game** — `/chat` slash command; team chat prefixed with Discord username
+- **Team chat (web)** — send and receive on the Team page; feed has a **fixed height and scrolls** as messages accumulate
+- **Instant send feedback** — messages you post from the web UI (or Discord `/chat`) appear immediately via WebSocket, without refreshing
+- **Team chat mirror** — in-game messages mirrored to Discord team-chat channel
+- **Web → in-game** — Team page or Discord `/chat`; outbound text is prefixed with sender name in-game (`[DiscordUser] message`)
 - **Death log** — recent deaths with grid and timestamp on Team page
 - **Connection log** — join/disconnect history (Discord + web; no `!connections` command)
 - **Promote leader** — web UI or `!leader` in team chat when RustTools holds current leader
@@ -258,32 +265,43 @@ Automated spawn/despawn alerts to Discord and optional team chat (grid + coordin
 
 ## Discord bot
 
-Slash commands (role-gated same as web permissions):
+Slash commands (role-gated same as web permissions). Responses use **Discord embeds** for readable output (team roster, world events, switch results, storage, etc.).
 
 | Command | Description |
 |---------|-------------|
-| `/help` | Command reference for Discord and in-game chat |
+| `/help` | Command reference (embed with grouped fields) |
 | `/status` | API and Rust+ connection health |
-| `/devices` | List paired smart devices |
-| `/switch` | Toggle, on, or off a switch by name or entity ID |
+| `/devices` | List paired smart devices (grouped by type) |
+| `/switch` | Set on, off, or toggle a switch by name or entity ID |
+| `/alias` | Run a configured switch chat alias (on/off/toggle/**status**, optional timed revert) |
 | `/alarm` | List smart alarms |
-| `/storage` | Show a storage monitor's contents |
-| `/team` | Online teammates |
-| `/time` | In-game time |
+| `/storage` | Show a storage monitor's contents (formatted, not raw JSON) |
+| `/team` | Team roster with online status and grid |
+| `/time` | In-game time and day/night phase |
 | `/deepsea` | Deep Sea status and countdown |
 | `/chat` | Send a message to in-game team chat |
+| `/send` | DM a linked Discord teammate |
 | `/map` | Post the current server map image |
+| `/online` `/offline` `/afk` `/alive` | Roster filters (same as in-game `!` commands) |
+| `/leader` | Promote yourself to team leader |
+| `/cargo` `/heli` `/chinook` `/vendor` `/bradley` `/convoy` `/large` `/small` `/events` | World event status |
+| `/upkeep` | Tool cupboard upkeep report |
+| `/mute` `/unmute` | Mute/unmute RustTools bot in team chat (admin) |
 | `/pair` | FCM pairing status |
 | `/link` | Start Rust+ account linking |
 | `/channel show\|set\|clear` | Bind channels to notification purposes (admin) |
 | `/blacklist add\|remove\|list` | Block Discord or Steam users from bot commands (admin) |
+
+In Discord, use **slash commands only** — do not type `!` commands in a channel. In-game team chat still uses the `!` prefix.
+
+To check switch state in Discord: `/alias name:<your-alias> action:status` (alias must be configured on Devices or Automations).
 
 ### Discord channel purposes (`/channel set`)
 
 - **Live information board** — auto-updating embed (map, server, team, events, Deep Sea) every 60s
 - **Smart alarms**
 - **Team chat mirror**
-- **Commands** — run `!` commands from Discord as if in team chat
+- **Commands channel** — optional channel binding (legacy); all bot commands are **slash commands**, not typed `!` messages in Discord
 - **Map events**
 - **Deep Sea**
 - **Storage**
@@ -299,7 +317,7 @@ Set a channel with `/channel set purpose:information` — one message updated ev
 
 ## In-game chat commands
 
-Type in **team chat** or the Discord **commands** channel (Switch permission for device commands).
+Type in **team chat**, or use matching **slash commands** in Discord (Switch permission for device commands).
 
 ### Help & team
 
@@ -310,7 +328,7 @@ Type in **team chat** or the Discord **commands** channel (Switch permission for
 
 ### Events & world
 
-- `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy`
+- `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!bradley` · `!convoy`
 - `!large` · `!small` — oil rig status and crate unlock timers
 - `!events` — summary of all tracked events
 - `!deepsea` · `!ds` — Deep Sea status
@@ -322,8 +340,10 @@ Type in **team chat** or the Discord **commands** channel (Switch permission for
 ### Switches
 
 - `!alias` — toggle (custom alias set on Devices or Automations)
-- `!alias on` · `!alias off` · `!alias toggle` · `!alias status`
+- `!alias on` · `!alias off` · `!alias toggle` · `!alias status` — **status** reads live ON/OFF from Rust+
 - `!alias on 60s` — timed revert
+
+On the **web Devices** page, switch state is shown as an ON/OFF badge and updates when you toggle from the UI, from Discord, from in-game chat, or when someone flips the switch manually in-game (via Rust+ push).
 
 ### Admin
 
@@ -336,7 +356,7 @@ Per-device aliases and switch group aliases are configured on the **Devices** an
 ## Admin & security
 
 - **Audit log** — who changed what (devices, settings, automations, FCM config uploads)
-- **Discord blacklist** — block users by Discord account or Steam ID from slash and `!` commands
+- **Discord blacklist** — block users by Discord account or Steam ID from slash commands and in-game `!` commands
 - **Admin data reset** — selective clears (cache, pairing, map overlays, procgen data, etc.)
 - **FCM config upload** — replace pairing credentials without shell access; shows expiry countdown
 - **Internal API key** — secures Discord bot → API calls

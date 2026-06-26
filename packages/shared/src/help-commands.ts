@@ -12,7 +12,7 @@ export function formatWebHelpCategories(): WebHelpCategory[] {
     },
     {
       name: "World events",
-      commands: ["!cargo", "!heli", "!chinook", "!vendor", "!large", "!small", "!events"],
+      commands: ["!cargo", "!heli", "!chinook", "!vendor", "!bradley", "!convoy", "!large", "!small", "!events"],
     },
     {
       name: "World & TC",
@@ -37,19 +37,23 @@ export function formatWebHelpCategories(): WebHelpCategory[] {
   ];
 }
 
-/** `!help` in team chat or the Discord commands channel. */
+/** `!help` in team chat. */
 export function parseHelpTeamChatCommand(message: string): boolean {
   const text = message.trim().toLowerCase();
   return text === "!help" || text.startsWith("!help ");
 }
 
 /** Multi-message team chat help (Rust chat length limits). */
-export function formatTeamChatHelpReplies(): string[] {
+export function formatTeamChatHelpReplies(fromDiscord = false): string[] {
+  const discordNote = fromDiscord
+    ? "Discord: use `/help` for slash commands (same features as `!` in-game)"
+    : "Discord: same commands as `/online`, `/cargo`, `/alias`, etc.";
+
   return [
     [
       "RustTools help (1/3)",
-      "Team: !online !offline !afk !alive",
-      "Events: !cargo !heli !chinook !large !small !vendor !events",
+      "Team: !online !offline !afk !alive !leader",
+      "Events: !cargo !heli !chinook !bradley !convoy !large !small !vendor !events",
       "World: !deepsea !ds · TC: !upkeepdetail",
     ].join(" · "),
     [
@@ -59,9 +63,8 @@ export function formatTeamChatHelpReplies(): string[] {
     ].join(" · "),
     [
       "RustTools help (3/3)",
-      "In-game: !send <discord-user> <msg> · !leader (team leader)",
-      "Admin: !mute !unmute",
-      "Discord: /help for slash commands",
+      "!send <discord-user> <msg> · Admin: !mute !unmute",
+      discordNote,
     ].join(" · "),
   ];
 }
@@ -79,40 +82,40 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       value: [
         "`/status` — Rust+ connection",
         "`/devices` — paired devices",
-        "`/switch <name> [on|off|toggle]` — toggle a switch",
-        "`/alarm` — list smart alarms",
-        "`/storage <name>` — storage monitor contents",
-        "`/pair` — FCM pairing status",
-        "`/link` — link Rust+ account",
+        "`/switch` — set on, off, or toggle by name/ID",
+        "`/alias` — switch chat alias (`action:status` for ON/OFF)",
+        "`/alarm` — smart alarms",
+        "`/storage` — storage monitor contents",
+        "`/pair` · `/link` — pairing & account link",
       ].join("\n"),
     },
     {
       name: "Team & world",
       value: [
-        "`/team` — online teammates",
+        "`/online` `/offline` `/afk` `/alive` — roster filters",
+        "`/leader` — promote team leader (linked Rust+ account)",
         "`/time` — in-game time",
         "`/deepsea` — Deep Sea status",
-        "`/map` — current server map",
-        "`/chat <message>` — send in-game team chat",
+        "`/upkeep` — TC upkeep report",
+        "`/map` — server map image",
+        "`/chat` — send in-game team chat",
+        "`/send` — DM a linked Discord teammate",
       ].join("\n"),
     },
     {
-      name: "Bang commands (`!` in commands channel)",
+      name: "World events",
       value: [
-        "Link a channel with `/channel set` → **In-game command runner**",
-        "Then type the same `!` commands as in-game team chat",
-        "`!help` — this command list",
-        "Team: `!online` `!offline` `!afk` `!alive`",
-        "Events: `!cargo` `!heli` `!chinook` `!large` `!small` `!vendor` `!events`",
-        "Other: `!deepsea` `!upkeepdetail` · Switches: `!alias on|off|toggle`",
+        "`/cargo` `/heli` `/chinook` `/vendor`",
+        "`/bradley` `/convoy` `/large` `/small`",
+        "`/events` — all tracked events",
       ].join("\n"),
     },
     {
       name: "Admin",
       value: [
-        "`/channel show|set|clear` — notification channel bindings (incl. live **information** board)",
-        "`/blacklist add|remove|list` — block Discord/Steam users from bot commands",
-        "In-game admin: `!mute` `!unmute` the bot",
+        "`/channel show|set|clear` — notification channels",
+        "`/blacklist add|remove|list` — block users",
+        "`/mute` `/unmute` — bot team-chat replies",
       ].join("\n"),
     },
   ];
