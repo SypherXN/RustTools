@@ -25,6 +25,10 @@ jobs:
           cache: npm
 
       - run: npm install
+
+      - name: Clean TypeScript incremental caches
+        run: find . -name '*.tsbuildinfo' -delete
+
       - run: npm run build --workspace=@rusttools/shared
       - name: Validate frontend API URL
         run: |

@@ -35,7 +35,7 @@ See **[docs/SETUP.md](docs/SETUP.md)** for the full production deployment guide 
 git clone https://github.com/SypherXN/RustTools.git
 cd RustTools
 ./scripts/setup.sh
-# Edit .env — Discord credentials, INTERNAL_API_KEY, secrets
+# Edit .env — checklist + data/DEPLOY-REMINDERS.txt (includes VITE_API_URL for GitHub Actions)
 
 npm install
 npm run db:migrate
