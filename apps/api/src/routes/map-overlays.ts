@@ -10,12 +10,10 @@ import type {
 } from "@rusttools/shared";
 import { buildConnectString, parseServerMapMeta } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
+import { deleteAutomationRulesReferencingMapPin } from "../lib/automation-rule-cleanup.js";
 import { generateId } from "../lib/ids.js";
 import { getActiveServer } from "../lib/rust-data.js";
-import {
-  ensureMapPinScreensDir,
-  pinScreenshotPath,
-} from "../lib/map-pin-storage.js";
+import { deletePinScreenshotIfExists, ensureMapPinScreensDir, pinScreenshotPath } from "../lib/map-pin-storage.js";
 
 function parseDrawingRow(row: typeof mapDrawings.$inferSelect): MapDrawingStroke {
   return {
@@ -213,8 +211,13 @@ export async function registerMapOverlayRoutes(
 
     const { id } = request.params as { id: string };
     const [row] = await deps.db.select().from(mapPins).where(eq(mapPins.id, id)).limit(1);
-    if (row?.screenshotPath && fs.existsSync(row.screenshotPath)) {
-      fs.unlinkSync(row.screenshotPath);
+    if (row?.screenshotPath) {
+      deletePinScreenshotIfExists(row.screenshotPath);
+    } else if (row) {
+      deletePinScreenshotIfExists(id);
+    }
+    if (row) {
+      await deleteAutomationRulesReferencingMapPin(deps.db, row.serverId, id);
     }
     await deps.db.delete(mapPins).where(eq(mapPins.id, id));
     return { ok: true };
@@ -240,6 +243,9 @@ export async function registerMapOverlayRoutes(
 
     ensureMapPinScreensDir();
     const dest = pinScreenshotPath(id);
+    if (row.screenshotPath) {
+      deletePinScreenshotIfExists(row.screenshotPath);
+    }
     fs.writeFileSync(dest, buffer);
 
     const now = new Date();

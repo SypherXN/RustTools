@@ -48,7 +48,11 @@ const READ_CACHE_TTL_MS = {
   mapMarkers: 15_000,
   map: 120_000,
   time: 15_000,
+  teamChat: 30_000,
 } as const;
+
+/** Short TTL for entity reads — list endpoints hit many entities at once. */
+const ENTITY_INFO_CACHE_TTL_MS = 8_000;
 
 type ReadCacheKey = keyof typeof READ_CACHE_TTL_MS;
 
@@ -159,6 +163,26 @@ function withRustTimeout<T>(
   });
 }
 
+function isRateLimitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.toLowerCase().includes("rate limit");
+}
+
+async function withRustRetry<T>(label: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (!isRateLimitError(err) || attempt === maxAttempts - 1) throw err;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+      console.warn(`[RustPlus] ${label} rate limited — retry ${attempt + 2}/${maxAttempts}`);
+    }
+  }
+  throw lastErr;
+}
+
 export class RustPlusManager {
   readonly eventBus = new EventBus();
   readonly jobScheduler = new JobScheduler();
@@ -172,6 +196,7 @@ export class RustPlusManager {
   private lastMapMarkers: unknown = null;
   private readCache = new Map<ReadCacheKey, { at: number; value: unknown }>();
   private readInflight = new Map<ReadCacheKey, Promise<unknown>>();
+  private entityInfoCache = new Map<number, { at: number; value: unknown }>();
 
   constructor(private options: RustPlusManagerOptions = {}) {
     this.notifications = options.notificationService ?? new NotificationService();
@@ -251,6 +276,7 @@ export class RustPlusManager {
     client.on("disconnected", () => {
       this.readCache.clear();
       this.readInflight.clear();
+      this.entityInfoCache.clear();
       this.lastMapMarkers = null;
       this.eventBus.emit({
         type: "connectionLost",
@@ -312,6 +338,12 @@ export class RustPlusManager {
     if (broadcast.entityChanged) {
       const payload = broadcast.entityChanged as { entityId?: number; payload?: unknown };
       if (payload.entityId != null) {
+        if (payload.payload != null) {
+          this.entityInfoCache.set(payload.entityId, {
+            at: Date.now(),
+            value: payload.payload,
+          });
+        }
         this.eventBus.emit({
           type: "entityChanged",
           serverId,
@@ -333,6 +365,7 @@ export class RustPlusManager {
       | undefined;
     const teamMessage = wrapper?.message;
     if (teamMessage?.message) {
+      this.readCache.delete("teamChat");
       this.eventBus.emit({
         type: "teamChat",
         serverId,
@@ -436,30 +469,63 @@ export class RustPlusManager {
     const conn = this.getActiveConnection();
     if (conn.subscribedEntities.has(entityId)) return;
 
-    await new Promise<void>((resolve, reject) => {
-      conn.client.getEntityInfo(entityId, (message) => {
-        if (message.response?.error) {
-          reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
-          return;
-        }
-        conn.subscribedEntities.add(entityId);
-        resolve();
-      });
-    });
+    await withRustRetry("subscribeEntity", () =>
+      new Promise<void>((resolve, reject) => {
+        conn.client.getEntityInfo(entityId, (message) => {
+          if (message.response?.error) {
+            reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
+            return;
+          }
+          const entityInfo = message.response?.entityInfo;
+          if (entityInfo != null) {
+            this.entityInfoCache.set(entityId, { at: Date.now(), value: entityInfo });
+          }
+          conn.subscribedEntities.add(entityId);
+          resolve();
+        });
+      }),
+    );
   }
 
   async getEntityInfo(entityId: number): Promise<unknown> {
+    const cached = this.readEntityInfoCache(entityId);
+    if (cached != null) return cached;
+
     await this.subscribeEntity(entityId);
+
+    const afterSubscribe = this.readEntityInfoCache(entityId);
+    if (afterSubscribe != null) return afterSubscribe;
+
     const conn = this.getActiveConnection();
-    return new Promise((resolve, reject) => {
-      conn.client.getEntityInfo(entityId, (message) => {
-        if (message.response?.error) {
-          reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
-          return;
-        }
-        resolve(message.response?.entityInfo);
-      });
-    });
+    const info = await withRustRetry("getEntityInfo", () =>
+      new Promise<unknown>((resolve, reject) => {
+        conn.client.getEntityInfo(entityId, (message) => {
+          if (message.response?.error) {
+            reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
+            return;
+          }
+          resolve(message.response?.entityInfo);
+        });
+      }),
+    );
+    this.entityInfoCache.set(entityId, { at: Date.now(), value: info });
+    return info;
+  }
+
+  private readEntityInfoCache(entityId: number): unknown | null {
+    const cached = this.entityInfoCache.get(entityId);
+    if (cached && Date.now() - cached.at < ENTITY_INFO_CACHE_TTL_MS) {
+      return cached.value;
+    }
+    return null;
+  }
+
+  invalidateEntityInfoCache(entityId?: number): void {
+    if (entityId != null) {
+      this.entityInfoCache.delete(entityId);
+      return;
+    }
+    this.entityInfoCache.clear();
   }
 
   async toggleSwitch(entityId: number, value: boolean): Promise<void> {
@@ -475,6 +541,7 @@ export class RustPlusManager {
         resolve();
       });
     });
+    this.entityInfoCache.delete(entityId);
   }
 
   async toggleSwitchGroup(name: string, value: boolean): Promise<number> {
@@ -487,60 +554,72 @@ export class RustPlusManager {
   async getServerInfo(): Promise<unknown> {
     return this.cachedRead("serverInfo", async () => {
       const conn = this.getActiveConnection();
-      return withRustTimeout("getInfo", (cb) => conn.client.getInfo(cb), (m) => m.response?.info);
+      return withRustRetry("getInfo", () =>
+        withRustTimeout("getInfo", (cb) => conn.client.getInfo(cb), (m) => m.response?.info),
+      );
     });
   }
 
   async getTeamInfo(): Promise<unknown> {
     return this.cachedRead("teamInfo", async () => {
       const conn = this.getActiveConnection();
-      return withRustTimeout(
-        "getTeamInfo",
-        (cb) => conn.client.getTeamInfo(cb),
-        (m) => m.response?.teamInfo,
+      return withRustRetry("getTeamInfo", () =>
+        withRustTimeout(
+          "getTeamInfo",
+          (cb) => conn.client.getTeamInfo(cb),
+          (m) => m.response?.teamInfo,
+        ),
       );
     });
   }
 
   async getTeamChat(): Promise<unknown[]> {
-    const conn = this.getActiveConnection();
-    type RequestClient = {
-      sendRequest: (
-        data: { getTeamChat: Record<string, never> },
-        callback: (message: RustPlusMessage) => boolean | void,
-      ) => void;
-    };
-    return withRustTimeout(
-      "getTeamChat",
-      (cb) => {
-        (conn.client as unknown as RequestClient).sendRequest({ getTeamChat: {} }, (message) => {
-          cb(message);
-          return true;
-        });
-      },
-      (m) => {
-        const teamChat = (m.response as { teamChat?: { messages?: unknown[] } } | undefined)
-          ?.teamChat;
-        return teamChat?.messages ?? [];
-      },
-    );
+    return this.cachedRead("teamChat", async () => {
+      const conn = this.getActiveConnection();
+      type RequestClient = {
+        sendRequest: (
+          data: { getTeamChat: Record<string, never> },
+          callback: (message: RustPlusMessage) => boolean | void,
+        ) => void;
+      };
+      return withRustRetry("getTeamChat", () =>
+        withRustTimeout(
+          "getTeamChat",
+          (cb) => {
+            (conn.client as unknown as RequestClient).sendRequest({ getTeamChat: {} }, (message) => {
+              cb(message);
+              return true;
+            });
+          },
+          (m) => {
+            const teamChat = (m.response as { teamChat?: { messages?: unknown[] } } | undefined)
+              ?.teamChat;
+            return teamChat?.messages ?? [];
+          },
+        ),
+      );
+    });
   }
 
   async getTime(): Promise<unknown> {
     return this.cachedRead("time", async () => {
       const conn = this.getActiveConnection();
-      return withRustTimeout("getTime", (cb) => conn.client.getTime(cb), (m) => m.response?.time);
+      return withRustRetry("getTime", () =>
+        withRustTimeout("getTime", (cb) => conn.client.getTime(cb), (m) => m.response?.time),
+      );
     });
   }
 
   async getMap(): Promise<CachedMap> {
     return this.cachedRead("map", async () => {
       const conn = this.getActiveConnection();
-      const map = await withRustTimeout(
-        "getMap",
-        (cb) => conn.client.getMap(cb),
-        (m) => m.response?.map,
-        MAP_REQUEST_TIMEOUT_MS,
+      const map = await withRustRetry("getMap", () =>
+        withRustTimeout(
+          "getMap",
+          (cb) => conn.client.getMap(cb),
+          (m) => m.response?.map,
+          MAP_REQUEST_TIMEOUT_MS,
+        ),
       );
       const data = map as {
         jpgImage?: Uint8Array | Buffer;
@@ -562,10 +641,12 @@ export class RustPlusManager {
   async getMapMarkers(): Promise<unknown> {
     const markers = await this.cachedRead("mapMarkers", async () => {
       const conn = this.getActiveConnection();
-      return withRustTimeout(
-        "getMapMarkers",
-        (cb) => conn.client.getMapMarkers(cb),
-        (m) => m.response?.mapMarkers,
+      return withRustRetry("getMapMarkers", () =>
+        withRustTimeout(
+          "getMapMarkers",
+          (cb) => conn.client.getMapMarkers(cb),
+          (m) => m.response?.mapMarkers,
+        ),
       );
     });
     this.lastMapMarkers = markers;
@@ -588,6 +669,36 @@ export class RustPlusManager {
 
   async promoteToLeader(steamId: string): Promise<void> {
     const conn = this.getActiveConnection();
+    await this.promoteOnClient(conn.client, steamId);
+  }
+
+  async promoteToLeaderWithCredentials(
+    credentials: Pick<ServerCredentials, "ip" | "port" | "playerId" | "playerToken">,
+    targetSteamId: string,
+  ): Promise<void> {
+    const client = new RustPlus(
+      credentials.ip,
+      credentials.port,
+      credentials.playerId,
+      Number.parseInt(String(credentials.playerToken), 10),
+    );
+
+    try {
+      await this.waitForConnection(client);
+      await this.promoteOnClient(client, targetSteamId);
+    } finally {
+      try {
+        client.disconnect();
+      } catch {
+        // ignore cleanup errors
+      }
+    }
+  }
+
+  private promoteOnClient(
+    client: InstanceType<typeof RustPlus>,
+    steamId: string,
+  ): Promise<void> {
     type RequestClient = {
       sendRequest: (
         data: { promoteToLeader: { steamId: string } },
@@ -595,7 +706,7 @@ export class RustPlusManager {
       ) => void;
     };
     return new Promise((resolve, reject) => {
-      (conn.client as unknown as RequestClient).sendRequest(
+      (client as unknown as RequestClient).sendRequest(
         { promoteToLeader: { steamId } },
         (response) => {
           if (response.response?.error) {
@@ -639,13 +750,9 @@ export class RustPlusManager {
     });
   }
 
-  async reloadFcmListener(): Promise<void> {
+  async reloadFcmListener(configPathOverride?: string): Promise<void> {
     this.stopFcmListener();
-    await this.ensureFcmStarted();
-  }
-
-  private async ensureFcmStarted(): Promise<void> {
-    const configPath = this.options.fcmConfigPath;
+    const configPath = configPathOverride ?? this.options.fcmConfigPath;
     if (!configPath || !this.fcmNotificationHandler) return;
     if (!fs.existsSync(configPath)) return;
 
@@ -657,6 +764,10 @@ export class RustPlusManager {
       this.fcmListening = false;
       throw err;
     }
+  }
+
+  private async ensureFcmStarted(): Promise<void> {
+    await this.reloadFcmListener();
   }
 
   stopFcmListener(): void {

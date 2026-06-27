@@ -19,7 +19,7 @@ const TEAM_CHAT_SLASH = [
   { name: "offline", description: "List teammates who are offline" },
   { name: "afk", description: "List AFK teammates" },
   { name: "alive", description: "List alive teammates" },
-  { name: "leader", description: "Promote yourself to team leader (linked Rust+ account)" },
+  { name: "leader", description: "Promote yourself to team leader (must be online and alive)" },
   { name: "cargo", description: "Cargo ship status and location" },
   { name: "heli", description: "Patrol helicopter status and location" },
   { name: "chinook", description: "Chinook status and location" },
@@ -45,17 +45,21 @@ export const commands = [
     .setDescription("Check RustTools API and Rust+ connection status"),
   new SlashCommandBuilder()
     .setName("devices")
-    .setDescription("List all paired smart devices"),
+    .setDescription("List paired switches, alarms, and monitors with live switch ON/OFF"),
   new SlashCommandBuilder()
     .setName("switch")
-    .setDescription("Toggle a smart switch by name or entity ID")
+    .setDescription("Set on, off, toggle, or read status of a smart switch")
     .addStringOption((opt) =>
-      opt.setName("target").setDescription("Switch name or entity ID").setRequired(true),
+      opt
+        .setName("target")
+        .setDescription("Switch name or entity ID")
+        .setRequired(true)
+        .setAutocomplete(true),
     )
     .addStringOption((opt) =>
       opt
         .setName("action")
-        .setDescription("on, off, or toggle")
+        .setDescription("on, off, toggle, or status")
         .addChoices(...SWITCH_ACTION_CHOICES),
     ),
   new SlashCommandBuilder()
@@ -82,13 +86,17 @@ export const commands = [
     .setDescription("List paired smart alarms"),
   new SlashCommandBuilder()
     .setName("storage")
-    .setDescription("Show storage monitor contents")
+    .setDescription("Show storage monitor contents and upkeep")
     .addStringOption((opt) =>
-      opt.setName("target").setDescription("Storage monitor name or entity ID").setRequired(true),
+      opt
+        .setName("target")
+        .setDescription("Storage monitor name or entity ID")
+        .setRequired(true)
+        .setAutocomplete(true),
     ),
   new SlashCommandBuilder()
     .setName("team")
-    .setDescription("Show online teammates (raw team payload)"),
+    .setDescription("Team roster with online status and grid positions"),
   new SlashCommandBuilder()
     .setName("time")
     .setDescription("Show in-game time"),
@@ -118,7 +126,7 @@ export const commands = [
     .setDescription("Show FCM pairing status"),
   new SlashCommandBuilder()
     .setName("link")
-    .setDescription("Start Rust+ account linking"),
+    .setDescription("How to link your Steam ID in the web dashboard"),
   ...TEAM_CHAT_SLASH.map(({ name, description }) =>
     new SlashCommandBuilder().setName(name).setDescription(description),
   ),

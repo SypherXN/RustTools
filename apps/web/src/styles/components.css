@@ -581,6 +581,83 @@ button:active,
   color: var(--muted);
 }
 
+.fcm-wizard {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.fcm-wizard--nested {
+  margin-top: 0.75rem;
+  padding-top: 0;
+  border-top: none;
+}
+
+.fcm-wizard-title {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.fcm-wizard-callout {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 107, 107, 0.08);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: var(--error);
+  font-size: 0.88rem;
+}
+
+.fcm-wizard-ok {
+  margin-top: 0.75rem;
+}
+
+.fcm-wizard-steps {
+  margin: 0;
+}
+
+.fcm-wizard-steps > li + li {
+  margin-top: 1.25rem;
+}
+
+.fcm-wizard-note {
+  margin: 0.35rem 0 0.65rem;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.fcm-command-block {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+}
+
+.fcm-command-block__cmd {
+  flex: 1 1 16rem;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+
+.fcm-renew-details {
+  margin-top: 1rem;
+}
+
+.fcm-renew-details summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.fcm-renew-details[open] summary {
+  margin-bottom: 0.5rem;
+}
+
 .success-text {
   color: var(--ok);
   margin-top: 0.75rem;

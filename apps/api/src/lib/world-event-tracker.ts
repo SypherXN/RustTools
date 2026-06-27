@@ -437,6 +437,10 @@ export class WorldEventTracker {
       announcements,
     };
   }
+
+  reset(serverId: string): void {
+    this.runtimes.delete(serverId);
+  }
 }
 
 export const worldEventTracker = new WorldEventTracker();

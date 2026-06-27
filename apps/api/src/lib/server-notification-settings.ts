@@ -10,6 +10,8 @@ import {
   type ServerNotificationSettings,
   type TeamChatBotSettings,
 } from "@rusttools/shared";
+import { trimTeamTrackerDeaths } from "./team-tracker.js";
+import { pruneTeamEventLogsToLimits } from "./team-event-store.js";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
 
 export async function notificationCapabilities(
@@ -65,6 +67,7 @@ export async function updateActiveNotificationSettings(
     deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
     tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
     teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
+    teamActivity?: Partial<ServerNotificationSettings["teamActivity"]>;
     eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
     automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
     legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
@@ -93,6 +96,11 @@ export async function updateActiveNotificationSettings(
       updatedAt: new Date(),
     })
     .where(eq(rustServers.id, server.id));
+
+  if (patch.teamActivity) {
+    await pruneTeamEventLogsToLimits(db, server.id, next.teamActivity);
+    trimTeamTrackerDeaths(server.id, next.teamActivity.deathLogLimit);
+  }
 
   return next;
 }

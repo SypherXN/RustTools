@@ -80,15 +80,36 @@ export function assertInternalApiKey(authHeader?: string): boolean {
   return authHeader === `Bearer ${env.internalApiKey}`;
 }
 
+const CAPABILITY_LABELS: Record<DiscordCapability, string> = {
+  view: "View",
+  switch: "Switch",
+  admin: "Admin",
+};
+
+export function formatDiscordPermissionError(error: string): string {
+  if (error === "discordUserId is required") {
+    return "Could not verify your Discord identity. Try the command again.";
+  }
+  if (error === "You are blacklisted from RustTools commands") {
+    return "You are blocked from RustTools commands on this server.";
+  }
+  for (const capability of ["view", "switch", "admin"] as const) {
+    if (error === `Missing ${capability} permission`) {
+      return `You need the **${CAPABILITY_LABELS[capability]}** Discord role to use this command. Ask a server admin to assign the role in Discord.`;
+    }
+  }
+  return error;
+}
+
 export async function requireDiscordCapability(
   discordUserId: string | undefined,
   capability: DiscordCapability,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; code: "permission_denied" | "invalid_request" }> {
   if (!discordUserId) {
-    return { ok: false, error: "discordUserId is required" };
+    return { ok: false, error: "discordUserId is required", code: "invalid_request" };
   }
   if (!(await hasDiscordCapability(discordUserId, capability))) {
-    return { ok: false, error: `Missing ${capability} permission` };
+    return { ok: false, error: `Missing ${capability} permission`, code: "permission_denied" };
   }
   return { ok: true };
 }
@@ -98,7 +119,9 @@ export async function requireDiscordBotAccess(
   discordUserId: string | undefined,
   capability: DiscordCapability,
   guildId?: string | null,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  { ok: true } | { ok: false; error: string; code: "permission_denied" | "invalid_request" }
+> {
   const perm = await requireDiscordCapability(discordUserId, capability);
   if (!perm.ok) return perm;
 
@@ -108,7 +131,11 @@ export async function requireDiscordBotAccess(
       discordId: discordUserId,
     });
     if (blocked) {
-      return { ok: false, error: "You are blacklisted from RustTools commands" };
+      return {
+        ok: false,
+        error: "You are blacklisted from RustTools commands",
+        code: "permission_denied",
+      };
     }
   }
 

@@ -4,13 +4,13 @@ import {
   GatewayIntentBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { internalFetch, internalPost, mapAttachment } from "./api.js";
+import { internalFetch, internalPost, mapAttachment, ApiError } from "./api.js";
 import { env } from "./config.js";
 import { BANG_MESSAGE_BY_SLASH, BANG_SLASH_COMMAND_NAMES } from "./commands.js";
 import type { DiscordChannelBinding } from "@rusttools/shared";
 import { DISCORD_CHANNEL_PURPOSE_LABELS, formatDeepSeaDiscordDescription, formatDiscordHelpSections } from "@rusttools/shared";
 import { buildAliasBangMessage, runBangCommand } from "./team-command.js";
-import { errorEmbed, replyEmbed, toApiEmbed } from "./reply-embeds.js";
+import { errorEmbed, permissionDeniedEmbed, replyEmbed, toApiEmbed } from "./reply-embeds.js";
 import {
   alarmsEmbed,
   blacklistEmbed,
@@ -61,7 +61,13 @@ async function handleStatus(interaction: ChatInputCommandInteraction) {
 
 async function handleDevices(interaction: ChatInputCommandInteraction) {
   const data = await internalFetch<{
-    devices: Array<{ name: string; entityType: string; entityId: number }>;
+    devices: Array<{
+      name: string;
+      displayName?: string | null;
+      entityType: string;
+      entityId: number;
+      switchValue?: boolean | null;
+    }>;
   }>("/internal/devices", interaction.user.id);
 
   await replyEmbed(interaction, devicesEmbed(data.devices), { ephemeral: true });
@@ -69,15 +75,53 @@ async function handleDevices(interaction: ChatInputCommandInteraction) {
 
 async function handleSwitch(interaction: ChatInputCommandInteraction) {
   const target = interaction.options.getString("target", true);
-  const action = (interaction.options.getString("action") ?? "toggle") as "on" | "off" | "toggle";
+  const action = (interaction.options.getString("action") ?? "toggle") as
+    | "on"
+    | "off"
+    | "toggle"
+    | "status";
 
-  const result = await internalPost<{ ok: boolean; device: string; value: boolean }>(
-    "/internal/switch",
-    interaction.user.id,
-    { target, action },
+  const result = await internalPost<{
+    ok: boolean;
+    device: string;
+    value: boolean | null;
+    readOnly?: boolean;
+  }>("/internal/switch", interaction.user.id, { target, action });
+
+  await replyEmbed(
+    interaction,
+    switchResultEmbed(result.device, result.value, { readOnly: result.readOnly ?? action === "status" }),
   );
+}
 
-  await replyEmbed(interaction, switchResultEmbed(result.device, result.value));
+async function handleDeviceAutocomplete(
+  interaction: import("discord.js").AutocompleteInteraction,
+  entityType: "smart_switch" | "storage_monitor",
+): Promise<void> {
+  const focused = interaction.options.getFocused().toLowerCase();
+
+  try {
+    const data = await internalFetch<{
+      targets: Array<{ name: string; entityId: number; label: string }>;
+    }>(
+      `/internal/device-targets?entityType=${encodeURIComponent(entityType)}`,
+      interaction.user.id,
+    );
+
+    const matches = data.targets
+      .filter(
+        (t) =>
+          !focused ||
+          t.name.toLowerCase().includes(focused) ||
+          String(t.entityId).includes(focused),
+      )
+      .slice(0, 25)
+      .map((t) => ({ name: t.label.slice(0, 100), value: t.name.slice(0, 100) }));
+
+    await interaction.respond(matches);
+  } catch {
+    await interaction.respond([]);
+  }
 }
 
 async function handleAlarm(interaction: ChatInputCommandInteraction) {
@@ -380,6 +424,18 @@ async function main() {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isAutocomplete()) {
+      if (interaction.commandName === "switch") {
+        await handleDeviceAutocomplete(interaction, "smart_switch");
+        return;
+      }
+      if (interaction.commandName === "storage") {
+        await handleDeviceAutocomplete(interaction, "storage_monitor");
+        return;
+      }
+      return;
+    }
+
     if (interaction.isButton() && interaction.customId.startsWith("storage_recycle:")) {
       const entityDbId = interaction.customId.slice("storage_recycle:".length);
       try {
@@ -392,8 +448,12 @@ async function main() {
           ephemeral: true,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to load recycle breakdown";
-        await interaction.reply({ content: msg, ephemeral: true });
+        const message = err instanceof Error ? err.message : "Failed to load recycle breakdown";
+        const embed =
+          err instanceof ApiError && err.status === 403
+            ? permissionDeniedEmbed(message)
+            : errorEmbed(message);
+        await interaction.reply({ embeds: [toApiEmbed(embed)], ephemeral: true });
       }
       return;
     }
@@ -478,10 +538,14 @@ async function main() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Command failed";
+      const embed =
+        err instanceof ApiError && err.status === 403
+          ? permissionDeniedEmbed(message)
+          : errorEmbed(message);
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp({ embeds: [toApiEmbed(errorEmbed(message))], ephemeral: true });
+        await interaction.followUp({ embeds: [toApiEmbed(embed)], ephemeral: true });
       } else {
-        await interaction.reply({ embeds: [toApiEmbed(errorEmbed(message))], ephemeral: true });
+        await interaction.reply({ embeds: [toApiEmbed(embed)], ephemeral: true });
       }
     }
   });

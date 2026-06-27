@@ -20,3 +20,13 @@ export function ensureMapPinScreensDir(): void {
 export function pinScreenshotPath(pinId: string, ext = "jpg"): string {
   return path.join(resolveMapPinScreensDir(), `${pinId}.${ext}`);
 }
+
+export function deletePinScreenshotIfExists(screenshotPathOrPinId: string): void {
+  const direct = screenshotPathOrPinId.includes("/") || screenshotPathOrPinId.includes("\\")
+    ? screenshotPathOrPinId
+    : pinScreenshotPath(screenshotPathOrPinId);
+
+  if (fs.existsSync(direct)) {
+    fs.unlinkSync(direct);
+  }
+}

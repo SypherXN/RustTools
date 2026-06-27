@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   api:
     build:
@@ -5,10 +11,13 @@ services:
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
     env_file: .env
+    environment:
+      PROCGEN_PARSE_HEAP_MB: ${PROCGEN_PARSE_HEAP_MB:-4096}
     volumes:
       - rusttools-data:/app/data
     expose:
       - "3000"
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
@@ -23,6 +32,7 @@ services:
     env_file: .env
     environment:
       API_PUBLIC_URL: http://api:3000
+    logging: *default-logging
     depends_on:
       api:
         condition: service_healthy
@@ -40,6 +50,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    logging: *default-logging
     depends_on:
       api:
         condition: service_healthy

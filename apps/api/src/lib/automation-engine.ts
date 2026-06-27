@@ -18,7 +18,7 @@ import {
 import { resolveAutomationPoint } from "./automation-base.js";
 import { getServerNotificationSettings } from "./server-notification-settings.js";
 import { parseTeamRoster, getWorldSize } from "./rust-data.js";
-import { applyTeamTracking } from "./team-tracker.js";
+import { applyTeamTrackingWithSettings } from "./team-tracker.js";
 import type { AutomationBaseSettings, TeamRosterMember } from "@rusttools/shared";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
 import { getSwitchState } from "./vending.js";
@@ -61,7 +61,7 @@ async function loadConditionContext(
     ]);
     const worldSize = getWorldSize(info) ?? 4000;
     const parsed = parseTeamRoster(team, worldSize);
-    const tracked = applyTeamTracking(serverId, parsed, worldSize);
+    const tracked = await applyTeamTrackingWithSettings(db, serverId, parsed, worldSize);
     const members = tracked.team.members;
     return {
       isDay: (time as { isDay?: boolean }).isDay !== false,
@@ -105,6 +105,7 @@ async function conditionsMet(
   serverId: string,
   conditions: AutomationCondition[],
   ctx?: ConditionContext,
+  switchStateCache?: Map<number, boolean | null>,
 ): Promise<boolean> {
   if (conditions.length === 0) return true;
 
@@ -123,7 +124,11 @@ async function conditionsMet(
           .where(eq(rustEntities.id, condition.entityId))
           .limit(1);
         if (!entity) return false;
-        const state = await getSwitchState(rustPlus, entity.entityId);
+        let state = switchStateCache?.get(entity.entityId);
+        if (state === undefined) {
+          state = await getSwitchState(rustPlus, entity.entityId);
+          switchStateCache?.set(entity.entityId, state);
+        }
         if (state !== condition.switchValue) return false;
         break;
       }
@@ -257,6 +262,7 @@ export async function dispatchAutomationEvent(
 ): Promise<void> {
   const rules = await listAutomationRules(db, serverId);
   const matching = rules.filter((r) => r.enabled && r.trigger.type === eventType);
+  const switchStateCache = new Map<number, boolean | null>();
 
   for (const rule of matching) {
     if (eventType === "smart_alarm" && rule.trigger.entityId && rule.trigger.entityId !== context.entityId) {
@@ -270,7 +276,7 @@ export async function dispatchAutomationEvent(
       if (context.upkeepHours != null && context.upkeepHours > threshold) continue;
     }
 
-    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
+    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions, undefined, switchStateCache))) continue;
     await runActions(db, rustPlus, notifications, serverId, rule.actions);
   }
 }
@@ -292,6 +298,7 @@ export async function evaluateTeamPresenceAutomationRules(
   const rules = await listAutomationRules(db, serverId).then((rows) =>
     rows.filter((r) => r.enabled && r.trigger.type === "team_presence_change"),
   );
+  const switchStateCache = new Map<number, boolean | null>();
 
   for (const rule of rules) {
     const point = await resolveAutomationPoint(db, serverId, ctx.serverBase, rule.trigger);
@@ -310,7 +317,7 @@ export async function evaluateTeamPresenceAutomationRules(
     );
 
     const allMet =
-      presenceMet && (await conditionsMet(db, rustPlus, serverId, rule.conditions, ctx));
+      presenceMet && (await conditionsMet(db, rustPlus, serverId, rule.conditions, ctx, switchStateCache));
     const was = lastPresenceState.get(rule.id) ?? false;
     if (allMet && !was) {
       await runActions(db, rustPlus, notifications, serverId, rule.actions);
@@ -330,6 +337,7 @@ export async function evaluateIntervalAutomationRules(
   );
 
   const now = Date.now();
+  const switchStateCache = new Map<number, boolean | null>();
   for (const rule of rules) {
     const minutes = rule.trigger.intervalMinutes ?? 60;
     const key = rule.id;
@@ -337,7 +345,7 @@ export async function evaluateIntervalAutomationRules(
     if (now - last < minutes * 60_000) continue;
     lastIntervalRun.set(key, now);
 
-    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
+    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions, undefined, switchStateCache))) continue;
     await runActions(db, rustPlus, notifications, serverId, rule.actions);
   }
 }
@@ -354,11 +362,12 @@ export async function evaluateTimeOfDayAutomationRules(
     rows.filter((r) => r.enabled && r.trigger.type === "time_of_day" && r.trigger.phase === phase),
   );
 
+  const switchStateCache = new Map<number, boolean | null>();
   for (const rule of rules) {
     if (lastTimeOfDayPhase.get(rule.id) === phase) continue;
     lastTimeOfDayPhase.set(rule.id, phase);
 
-    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
+    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions, undefined, switchStateCache))) continue;
     await runActions(db, rustPlus, notifications, serverId, rule.actions);
   }
 }
@@ -373,6 +382,7 @@ export async function evaluateScheduleWindowAutomationRules(
     rows.filter((r) => r.enabled && r.trigger.type === "schedule_window"),
   );
 
+  const switchStateCache = new Map<number, boolean | null>();
   for (const rule of rules) {
     const inWindow = isLocalTimeInScheduleWindow(rule.trigger);
     const was = lastScheduleWindowActive.get(rule.id) ?? false;
@@ -386,7 +396,7 @@ export async function evaluateScheduleWindowAutomationRules(
     lastScheduleWindowActive.set(rule.id, inWindow);
     if (!shouldRun) continue;
 
-    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions))) continue;
+    if (!(await conditionsMet(db, rustPlus, serverId, rule.conditions, undefined, switchStateCache))) continue;
     await runActions(db, rustPlus, notifications, serverId, rule.actions);
   }
 }

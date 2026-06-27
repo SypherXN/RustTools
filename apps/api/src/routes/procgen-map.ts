@@ -2,10 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import type { ProcgenOverlayId } from "../lib/procgen/types.js";
 import type { Database } from "@rusttools/db";
-import { mapFootprints, rustServers } from "@rusttools/db";
+import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { requireCapability } from "../lib/auth.js";
-import { generateId } from "../lib/ids.js";
 import { getActiveServer } from "../lib/rust-data.js";
 import {
   deleteProcgenMap,
@@ -146,99 +145,5 @@ export async function registerProcgenMapRoutes(
     const height = await readProcgenJson(active.id, "height");
     if (!height) return reply.status(404).send({ error: "Height data not available" });
     return height;
-  });
-
-  app.get("/servers/active/map/footprints", async (request, reply) => {
-    const user = await requireCapability(deps.db, request, reply, "view");
-    if (!user) return;
-
-    const active = await getActiveServer(deps.db);
-    if (!active) return reply.status(404).send({ error: "No active server" });
-
-    const rows = await deps.db
-      .select()
-      .from(mapFootprints)
-      .where(eq(mapFootprints.serverId, active.id));
-
-    return {
-      footprints: rows.map((row) => ({
-        id: row.id,
-        label: row.label,
-        pieces: JSON.parse(row.piecesJson) as unknown[],
-        createdBy: row.createdBy,
-        createdAt: row.createdAt.toISOString(),
-        updatedAt: row.updatedAt.toISOString(),
-      })),
-    };
-  });
-
-  app.post("/servers/active/map/footprints", async (request, reply) => {
-    const user = await requireCapability(deps.db, request, reply, "switch");
-    if (!user) return;
-
-    const active = await getActiveServer(deps.db);
-    if (!active) return reply.status(404).send({ error: "No active server" });
-
-    const body = request.body as { label?: string; pieces?: unknown[] };
-    if (!body.label?.trim()) return reply.status(400).send({ error: "Label is required" });
-    if (!Array.isArray(body.pieces)) return reply.status(400).send({ error: "pieces array is required" });
-
-    const id = generateId();
-    const now = new Date();
-    await deps.db.insert(mapFootprints).values({
-      id,
-      serverId: active.id,
-      label: body.label.trim(),
-      piecesJson: JSON.stringify(body.pieces),
-      createdBy: user.discordUsername,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return { id };
-  });
-
-  app.put("/servers/active/map/footprints/:id", async (request, reply) => {
-    const user = await requireCapability(deps.db, request, reply, "switch");
-    if (!user) return;
-
-    const active = await getActiveServer(deps.db);
-    if (!active) return reply.status(404).send({ error: "No active server" });
-
-    const { id } = request.params as { id: string };
-    const body = request.body as { label?: string; pieces?: unknown[] };
-
-    const [existing] = await deps.db
-      .select()
-      .from(mapFootprints)
-      .where(eq(mapFootprints.id, id))
-      .limit(1);
-
-    if (!existing || existing.serverId !== active.id) {
-      return reply.status(404).send({ error: "Footprint not found" });
-    }
-
-    await deps.db
-      .update(mapFootprints)
-      .set({
-        label: body.label?.trim() || existing.label,
-        piecesJson: Array.isArray(body.pieces) ? JSON.stringify(body.pieces) : existing.piecesJson,
-        updatedAt: new Date(),
-      })
-      .where(eq(mapFootprints.id, id));
-
-    return { ok: true };
-  });
-
-  app.delete("/servers/active/map/footprints/:id", async (request, reply) => {
-    const user = await requireCapability(deps.db, request, reply, "switch");
-    if (!user) return;
-
-    const active = await getActiveServer(deps.db);
-    if (!active) return reply.status(404).send({ error: "No active server" });
-
-    const { id } = request.params as { id: string };
-    await deps.db.delete(mapFootprints).where(eq(mapFootprints.id, id));
-    return { ok: true };
   });
 }

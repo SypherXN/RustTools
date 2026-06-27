@@ -23,6 +23,10 @@ export function webPushConfigured(): boolean {
   return Boolean(env.webPush.publicKey && env.webPush.privateKey);
 }
 
+function isValidSubscriptionRow(row: typeof pushSubscriptions.$inferSelect): boolean {
+  return Boolean(row.endpoint?.trim() && row.p256dh?.trim() && row.auth?.trim());
+}
+
 export async function broadcastWebPush(
   db: Database,
   payload: { title: string; body: string; url?: string },
@@ -33,13 +37,30 @@ export async function broadcastWebPush(
   const data = JSON.stringify(payload);
 
   for (const row of rows) {
+    if (!isValidSubscriptionRow(row)) {
+      await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, row.id));
+      continue;
+    }
+
+    const [current] = await db
+      .select()
+      .from(pushSubscriptions)
+      .where(eq(pushSubscriptions.id, row.id))
+      .limit(1);
+    if (!current || !isValidSubscriptionRow(current)) {
+      if (current) {
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, row.id));
+      }
+      continue;
+    }
+
     try {
       await webpush.sendNotification(
         {
-          endpoint: row.endpoint,
+          endpoint: current.endpoint,
           keys: {
-            p256dh: row.p256dh,
-            auth: row.auth,
+            p256dh: current.p256dh,
+            auth: current.auth,
           },
         },
         data,
@@ -47,7 +68,7 @@ export async function broadcastWebPush(
     } catch (err) {
       const status = (err as { statusCode?: number }).statusCode;
       if (status === 404 || status === 410) {
-        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, row.id));
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, current.id));
       } else {
         console.error("[WebPush] Delivery failed:", err);
       }

@@ -4,12 +4,7 @@ import { formatDurationSince, formatDiscordHelpSections, formatWebHelpCategories
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useActiveServer } from "../hooks/useActiveServer";
-
-interface HealthResponse {
-  status: string;
-  rustplus: { connected: boolean; activeServerId: string | null };
-  fcm: { listening: boolean };
-}
+import { useRustPlusStatus } from "../hooks/useRustPlusStatus";
 
 interface ServerInfoResponse {
   info: { name?: string; players?: number; queuedPlayers?: number; maxPlayers?: number };
@@ -24,20 +19,13 @@ interface ServerInfoResponse {
 }
 
 export function DashboardPage() {
-  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const { health } = useRustPlusStatus();
   const { epoch } = useActiveServer();
   const [server, setServer] = useState<ServerInfoResponse | null>(null);
   const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
   const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
   const [deepSea, setDeepSea] = useState<DeepSeaStatus | null>(null);
   const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<HealthResponse>("/health")
-      .then(setHealth)
-      .catch((err: Error) => setError(err.message));
-  }, [epoch]);
 
   useEffect(() => {
     apiFetch<ServerInfoResponse>("/servers/active/info")
@@ -66,6 +54,15 @@ export function DashboardPage() {
   useWebSocket((event, payload) => {
     if (event === "deepSeaChanged") setDeepSea(payload as DeepSeaStatus);
     if (event === "worldEventsChanged") setWorldEvents(payload as WorldEventsStatus);
+    if (event === "teamChanged") {
+      const p = payload as TeamApiResponse | null;
+      if (p?.team?.members) {
+        setTeamCounts({
+          online: p.team.members.filter((m) => m.isOnline).length,
+          total: p.team.members.length,
+        });
+      }
+    }
   });
 
   const nowSec = Math.floor(Date.now() / 1000);
@@ -78,8 +75,6 @@ export function DashboardPage() {
         <h1>Dashboard</h1>
         <p>Server status and quick overview.</p>
       </header>
-
-      {error && <div className="alert alert-error">{error}</div>}
 
       <div className="grid">
         <section className="card">

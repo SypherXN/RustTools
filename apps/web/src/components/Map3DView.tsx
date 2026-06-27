@@ -18,7 +18,7 @@ import type { MapFocusTarget, MapTrackTarget } from "./MapViewport";
 import type { MapClusterContext, MapSelection, MarkerSelection } from "../lib/map-clusters";
 import { resolveMapSelection } from "../lib/map-clusters";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
 const SEA_LEVEL = 0;
 const WATER_LIFT = 0.35;
 const SHOW_WATER = true;

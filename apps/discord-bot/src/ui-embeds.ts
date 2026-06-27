@@ -16,7 +16,13 @@ const COLORS = {
 } as const;
 
 export function devicesEmbed(
-  devices: Array<{ name: string; entityType: string; entityId: number }>,
+  devices: Array<{
+    name: string;
+    displayName?: string | null;
+    entityType: string;
+    entityId: number;
+    switchValue?: boolean | null;
+  }>,
 ): EmbedPayload {
   if (devices.length === 0) {
     return {
@@ -30,7 +36,14 @@ export function devicesEmbed(
   const byType = new Map<string, string[]>();
   for (const d of devices) {
     const list = byType.get(d.entityType) ?? [];
-    list.push(`**${d.name}** · \`${d.entityId}\``);
+    const label = d.displayName ?? d.name;
+    let line = `**${label}** · \`${d.entityId}\``;
+    if (d.entityType === "smart_switch") {
+      const state =
+        d.switchValue === true ? "**ON**" : d.switchValue === false ? "**OFF**" : "*unknown*";
+      line += ` · ${state}`;
+    }
+    list.push(line);
     byType.set(d.entityType, list);
   }
 
@@ -47,7 +60,22 @@ export function devicesEmbed(
   };
 }
 
-export function switchResultEmbed(device: string, value: boolean): EmbedPayload {
+export function switchResultEmbed(
+  device: string,
+  value: boolean | null,
+  options?: { readOnly?: boolean },
+): EmbedPayload {
+  if (options?.readOnly) {
+    const state = value === true ? "ON" : value === false ? "OFF" : "Unknown";
+    return {
+      title: `Switch — ${state}`,
+      description: `**${device}** is **${state}**.`,
+      color: value === true ? COLORS.on : value === false ? COLORS.off : COLORS.primary,
+      footer: { text: "RustTools" },
+      timestamp: new Date().toISOString(),
+    };
+  }
+
   return {
     title: value ? "Switch ON" : "Switch OFF",
     description: `**${device}** is now **${value ? "ON" : "OFF"}**.`,
@@ -182,14 +210,19 @@ export function chatSentEmbed(): EmbedPayload {
 
 export function linkAccountEmbed(webUrl: string): EmbedPayload {
   return {
-    title: "Link your Rust+ account",
+    title: "Link your Steam identity",
     color: COLORS.primary,
     fields: [
       { name: "1", value: `Log in at ${webUrl}` },
-      { name: "2", value: "Open **Settings** → **Link Rust+ Account**" },
-      { name: "3", value: "Pair your server in-game while FCM is listening" },
+      { name: "2", value: "Open **Settings → Account → Steam Identity**" },
+      { name: "3", value: "Enter your Steam ID (F1 → `player.id`) or use the pairing flow" },
+      {
+        name: "Optional — companion Rust+",
+        value:
+          "If you need `!leader` while you hold in-game leader (bot is not leader), link **Companion Rust+** on the same page with credentials from local `fcm-register`.",
+      },
     ],
-    footer: { text: "Your Steam ID links on the next pairing notification" },
+    footer: { text: "Master server pairing is admin-only (Settings → Server & Map)" },
   };
 }
 

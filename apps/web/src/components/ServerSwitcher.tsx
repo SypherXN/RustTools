@@ -45,6 +45,28 @@ export function ServerSwitcher() {
     }
   };
 
+  const removeServer = async (server: Server) => {
+    if (
+      !window.confirm(
+        `Delete "${server.name}"? This removes all devices, automations, map data, and procgen files for that server.`,
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await apiFetch(`/servers/${server.id}`, { method: "DELETE" });
+      load();
+      notifyActivated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete server");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (servers.length === 0) return null;
 
   return (
@@ -61,6 +83,16 @@ export function ServerSwitcher() {
             {!s.isActive && canAdmin && (
               <button type="button" disabled={loading} onClick={() => void activate(s.id)}>
                 Activate
+              </button>
+            )}
+            {canAdmin && (
+              <button
+                type="button"
+                className="danger"
+                disabled={loading}
+                onClick={() => void removeServer(s)}
+              >
+                Delete
               </button>
             )}
             {!s.isActive && !canAdmin && <span className="muted">Inactive</span>}

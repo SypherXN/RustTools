@@ -49,7 +49,7 @@ declare module "@liamcottle/rustplus.js" {
   }
 }
 
-declare module "@liamcottle/push-receiver/src/client" {
+declare module "@liamcottle/push-receiver/src/client.js" {
   import { EventEmitter } from "node:events";
   export default class PushReceiverClient extends EventEmitter {
     constructor(androidId: string, securityToken: string, persistentIds: string[]);

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { pushSubscriptions } from "@rusttools/db";
 import { env } from "../config.js";
@@ -28,16 +28,18 @@ export async function registerPushRoutes(app: FastifyInstance, db: Database): Pr
     }
 
     const [existing] = await db
-      .select({ id: pushSubscriptions.id })
+      .select({ id: pushSubscriptions.id, userId: pushSubscriptions.userId })
       .from(pushSubscriptions)
       .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
       .limit(1);
 
     if (existing) {
+      if (existing.userId !== user.id) {
+        return reply.status(403).send({ error: "Push subscription belongs to another user" });
+      }
       await db
         .update(pushSubscriptions)
         .set({
-          userId: user.id,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
         })
@@ -67,7 +69,14 @@ export async function registerPushRoutes(app: FastifyInstance, db: Database): Pr
       return reply.status(400).send({ error: "endpoint is required" });
     }
 
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint.trim()));
+    await db
+      .delete(pushSubscriptions)
+      .where(
+        and(
+          eq(pushSubscriptions.endpoint, endpoint.trim()),
+          eq(pushSubscriptions.userId, user.id),
+        ),
+      );
     return { ok: true };
   });
 }

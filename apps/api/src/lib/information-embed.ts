@@ -289,6 +289,7 @@ export async function ensureInformationEmbed(
 export async function refreshAllInformationEmbeds(
   db: Database,
   rustPlus: RustPlusManager,
+  skipGuildIds: Set<string> = new Set(),
 ): Promise<void> {
   const rows = await db
     .select({
@@ -299,6 +300,7 @@ export async function refreshAllInformationEmbeds(
     .where(eq(discordLiveEmbeds.purpose, INFORMATION_PURPOSE));
 
   for (const row of rows) {
+    if (skipGuildIds.has(row.guildId)) continue;
     try {
       await syncInformationEmbed(db, rustPlus, row.guildId, row.channelId);
     } catch (err) {

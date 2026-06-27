@@ -87,8 +87,10 @@ export async function evaluateSwitchAutoModes(
       case "proximity": {
         const radius = settings.switch?.proximityGridRadius ?? 1;
         let switchGrid: string | null = null;
+        let entityInfo: unknown;
         try {
-          const info = (await rustPlus.getEntityInfo(sw.entityId)) as {
+          entityInfo = await rustPlus.getEntityInfo(sw.entityId);
+          const info = entityInfo as {
             payload?: { x?: number; y?: number };
             x?: number;
             y?: number;
@@ -107,7 +109,15 @@ export async function evaluateSwitchAutoModes(
           const grid = worldToGridLabel(m.x, m.y, worldSize);
           return gridDistance(switchGrid!, grid) <= radius;
         });
-        break;
+        if (desired === null) continue;
+        try {
+          const current = await getSwitchState(rustPlus, sw.entityId, entityInfo);
+          if (current === desired) continue;
+          await rustPlus.toggleSwitch(sw.entityId, desired);
+        } catch {
+          // offline
+        }
+        continue;
       }
     }
 

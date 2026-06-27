@@ -15,7 +15,6 @@ export const FCM_WARNING_DAYS_BEFORE = 14;
 export const DATA_RESET_SCOPES = [
   "team_events",
   "world_event_state",
-  "storage_history",
   "map_overlays",
   "automation_rules",
   "smart_devices",
@@ -26,13 +25,12 @@ export const DATA_RESET_SCOPES = [
 export type DataResetScope = (typeof DATA_RESET_SCOPES)[number];
 
 export const DATA_RESET_SCOPE_LABELS: Record<DataResetScope, string> = {
-  team_events: "Team death & connection logs",
+  team_events: "Team death & connection logs (auto-cleared on wipe)",
   world_event_state: "World event tracker state",
-  storage_history: "Storage snapshot history",
   map_overlays: "Map drawings & base pins",
-  automation_rules: "Automation rules & templates",
-  smart_devices: "Paired smart devices, groups & library",
-  server_pairing: "Active server pairing (disconnect Rust+)",
+  automation_rules: "Automation rules (templates kept)",
+  smart_devices: "Paired smart devices, groups & library (templates kept)",
+  server_pairing: "Active server pairing (disconnect Rust+; removes all server data)",
   audit_log: "Audit log (all servers)",
 };
 
@@ -48,4 +46,13 @@ export interface DiscordBlacklistEntry {
   reason: string;
   createdBy: string | null;
   createdAt: string;
+}
+
+export interface AdminUserSummary {
+  id: string;
+  discordId: string;
+  discordUsername: string;
+  steamId: string | null;
+  createdAt: string;
+  blocked: boolean;
 }

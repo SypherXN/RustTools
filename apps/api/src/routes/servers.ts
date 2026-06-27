@@ -9,7 +9,13 @@ import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
 import { parseInGameTime, parseTeamRoster, parseWipeCountdown, getWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { buildActiveServerConnectInfo } from "./map-overlays.js";
-import { applyTeamTracking, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import { applyTeamTrackingWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import {
+  canPromoteViaRustPlus,
+  getActiveServerRow,
+  PromoteLeaderError,
+  promoteTeamLeader,
+} from "../lib/promote-leader.js";
 import { persistTeamRosterEvents, listTeamConnectionHistory, listTeamDeathHistory } from "../lib/team-event-store.js";
 import { mergeTeamChatHistory } from "../lib/team-chat-buffer.js";
 import {
@@ -19,6 +25,7 @@ import {
 } from "../lib/server-notification-settings.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
+import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
 export async function registerServerRoutes(
@@ -67,11 +74,16 @@ export async function registerServerRoutes(
       const [team, info, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getServerInfo(),
-        getActiveServer(deps.db),
+        getActiveServerRow(deps.db),
       ]);
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
-      const tracked = applyTeamTracking(activeServer?.id ?? null, parsed, worldSize);
+      const tracked = await applyTeamTrackingWithSettings(
+        deps.db,
+        activeServer?.id ?? null,
+        parsed,
+        worldSize,
+      );
       if (activeServer?.id) {
         await persistTeamRosterEvents(
           deps.db,
@@ -80,7 +92,12 @@ export async function registerServerRoutes(
           tracked.newConnections,
         );
       }
-      return enrichTeamApiResponse(activeServer?.playerId ?? null, tracked.team, tracked.deaths);
+      const canPromote = await canPromoteViaRustPlus(
+        deps.db,
+        activeServer,
+        tracked.team.leaderSteamId,
+      );
+      return enrichTeamApiResponse(activeServer?.playerId ?? null, tracked.team, tracked.deaths, canPromote);
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",
@@ -121,7 +138,7 @@ export async function registerServerRoutes(
       const [team, info, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getServerInfo(),
-        getActiveServer(deps.db),
+        getActiveServerRow(deps.db),
       ]);
 
       if (!activeServer) {
@@ -131,25 +148,38 @@ export async function registerServerRoutes(
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
 
-      if (!parsed.leaderSteamId || parsed.leaderSteamId !== activeServer.playerId) {
-        return reply.status(403).send({
-          error:
-            "Only the in-game team leader can promote, and RustTools must be paired with that leader's Rust+ account.",
-        });
+      if (!parsed.leaderSteamId) {
+        return reply.status(503).send({ error: "No team leader found" });
       }
 
       const target = parsed.members.find((m) => m.steamId === steamId.trim());
       if (!target) {
         return reply.status(404).send({ error: "Player is not on your team" });
       }
-      if (target.isLeader) {
-        return reply.status(400).send({ error: "Player is already team leader" });
+
+      try {
+        await promoteTeamLeader(
+          deps.db,
+          deps.rustPlus,
+          activeServer,
+          parsed.leaderSteamId,
+          target.steamId,
+          target,
+        );
+      } catch (err) {
+        if (err instanceof PromoteLeaderError) {
+          return reply.status(err.statusCode).send({ error: err.message });
+        }
+        throw err;
       }
 
-      await deps.rustPlus.promoteToLeader(target.steamId);
-
       const refreshed = parseTeamRoster(await deps.rustPlus.getTeamInfo(), worldSize);
-      const tracked = applyTeamTracking(activeServer.id, refreshed, worldSize);
+      const tracked = await applyTeamTrackingWithSettings(
+        deps.db,
+        activeServer.id,
+        refreshed,
+        worldSize,
+      );
       await persistTeamRosterEvents(
         deps.db,
         activeServer.id,
@@ -165,7 +195,12 @@ export async function registerServerRoutes(
         metadata: { name: target.name },
       });
 
-      return enrichTeamApiResponse(activeServer.playerId, tracked.team, tracked.deaths);
+      const canPromote = await canPromoteViaRustPlus(
+        deps.db,
+        activeServer,
+        tracked.team.leaderSteamId,
+      );
+      return enrichTeamApiResponse(activeServer.playerId, tracked.team, tracked.deaths, canPromote);
     } catch (err) {
       return reply.status(502).send({
         error: err instanceof Error ? err.message : "Failed to promote team leader",
@@ -279,6 +314,7 @@ export async function registerServerRoutes(
       deepSea?: Partial<ServerNotificationSettings["deepSea"]>;
       tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
       teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
+      teamActivity?: Partial<ServerNotificationSettings["teamActivity"]>;
       eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
       automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
       legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
@@ -343,5 +379,29 @@ export async function registerServerRoutes(
     }
 
     return { ok: true, activeServerId: id };
+  });
+
+  app.delete("/servers/:id", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+
+    try {
+      const { name, wasActive } = await deleteRustServer(deps.db, deps.rustPlus, id);
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "server_delete",
+        targetType: "server",
+        targetId: id,
+        metadata: { name, wasActive },
+      });
+      return { ok: true, name, wasActive };
+    } catch (err) {
+      if (err instanceof ServerNotFoundError) {
+        return reply.status(404).send({ error: "Server not found" });
+      }
+      throw err;
+    }
   });
 }

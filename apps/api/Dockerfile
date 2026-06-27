@@ -7,6 +7,7 @@ COPY apps/discord-bot/package.json ./apps/discord-bot/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
 COPY packages/rustplus-client/package.json ./packages/rustplus-client/
+COPY patches ./patches
 RUN npm install
 COPY . .
 RUN npm run build --workspace=@rusttools/shared \
@@ -22,6 +23,7 @@ COPY apps/api/package.json ./apps/api/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/db/package.json ./packages/db/
 COPY packages/rustplus-client/package.json ./packages/rustplus-client/
+COPY patches ./patches
 RUN npm install --omit=dev
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
@@ -30,4 +32,4 @@ COPY --from=builder /app/packages/db/drizzle ./packages/db/drizzle
 COPY --from=builder /app/packages/rustplus-client/dist ./packages/rustplus-client/dist
 ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["sh", "-c", "npm run migrate --workspace=@rusttools/db && node apps/api/dist/index.js"]
+CMD ["sh", "-c", "node packages/db/dist/migrate.js && node apps/api/dist/index.js"]

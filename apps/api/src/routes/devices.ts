@@ -6,13 +6,21 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   aggregateStorageItemSearch,
   parseStorageEntityInfo,
-  resolveStorageMonitorIcon,
   STORAGE_CONTAINER_ICON_CATALOG,
 } from "@rusttools/shared";
 import { logAudit } from "../lib/audit.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
 import { requireCapability } from "../lib/auth.js";
+import {
+  fetchSwitchStateForEntityDbId,
+  fetchSwitchStatesByDbId,
+  listDeviceRows,
+  listStorageMonitorMetadata,
+} from "../lib/device-list.js";
 import { getActiveServerId } from "../lib/rust-data.js";
 import { getSwitchState, recycleFromEntityInfo, resolveSwitchTargetValue } from "../lib/vending.js";
+
+const STORAGE_ITEM_SEARCH_CONCURRENCY = 5;
 
 export async function registerDeviceRoutes(
   app: FastifyInstance,
@@ -23,19 +31,37 @@ export async function registerDeviceRoutes(
     if (!user) return;
 
     const serverId = await getActiveServerId(deps.db);
-    const rows = serverId
-      ? await deps.db.select().from(rustEntities).where(eq(rustEntities.serverId, serverId))
-      : await deps.db.select().from(rustEntities);
+    const rows = await listDeviceRows(deps.db, serverId);
+    return { devices: rows, activeServerId: serverId };
+  });
 
-    const devices = await Promise.all(
-      rows.map(async (device) => {
-        if (device.entityType !== "smart_switch") return device;
-        const switchValue = await getSwitchState(deps.rustPlus, device.entityId);
-        return { ...device, switchValue };
-      }),
-    );
+  app.get("/devices/switch-states", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
 
-    return { devices, activeServerId: serverId };
+    const { entityId, entityDbId } = request.query as {
+      entityId?: string;
+      entityDbId?: string;
+    };
+    const serverId = await getActiveServerId(deps.db);
+    const rows = await listDeviceRows(deps.db, serverId);
+    const switches = rows.filter((d) => d.entityType === "smart_switch");
+
+    if (entityDbId) {
+      const value = await fetchSwitchStateForEntityDbId(deps.db, deps.rustPlus, entityDbId);
+      return { states: value == null ? {} : { [entityDbId]: value } };
+    }
+
+    if (entityId) {
+      const rustId = Number(entityId);
+      const match = switches.find((sw) => sw.entityId === rustId);
+      if (!match) return { states: {} };
+      const value = await getSwitchState(deps.rustPlus, match.entityId);
+      return { states: { [match.id]: value } };
+    }
+
+    const states = await fetchSwitchStatesByDbId(deps.rustPlus, switches);
+    return { states };
   });
 
   app.patch("/devices/:entityId", async (request, reply) => {
@@ -207,36 +233,8 @@ export async function registerDeviceRoutes(
     if (!user) return;
 
     const serverId = await getActiveServerId(deps.db);
-    const monitorConditions = [eq(rustEntities.entityType, "storage_monitor")];
-    if (serverId) monitorConditions.push(eq(rustEntities.serverId, serverId));
-
-    const monitors = await deps.db
-      .select()
-      .from(rustEntities)
-      .where(and(...monitorConditions));
-
-    const enriched = await Promise.all(
-      monitors.map(async (monitor) => {
-        let parsed = null;
-        try {
-          const info = await deps.rustPlus.getEntityInfo(monitor.entityId);
-          parsed = parseStorageEntityInfo(info);
-        } catch {
-          // offline or unavailable
-        }
-        const resolved = resolveStorageMonitorIcon({ savedIcon: monitor.icon, parsed });
-        return {
-          ...monitor,
-          containerKind: resolved.kind,
-          iconShortname: resolved.shortname,
-          iconUrl: resolved.iconUrl,
-          iconName: resolved.name,
-          iconAutoDetected: resolved.autoDetected,
-        };
-      }),
-    );
-
-    return { monitors: enriched };
+    const monitors = await listStorageMonitorMetadata(deps.db, serverId);
+    return { monitors };
   });
 
   app.get("/storage/search", async (request, reply) => {
@@ -281,29 +279,35 @@ export async function registerDeviceRoutes(
       .from(rustEntities)
       .where(and(...monitorConditions));
 
-    const monitorResults = await Promise.all(
-      monitors.map(async (monitor) => {
-        try {
-          const info = await deps.rustPlus.getEntityInfo(monitor.entityId);
-          const parsed = parseStorageEntityInfo(info);
-          return {
-            id: monitor.id,
-            name: monitor.displayName ?? monitor.name,
-            entityId: monitor.entityId,
-            items: parsed.items,
-            error: null as string | null,
-          };
-        } catch (err) {
-          return {
-            id: monitor.id,
-            name: monitor.displayName ?? monitor.name,
-            entityId: monitor.entityId,
-            items: [],
-            error: err instanceof Error ? err.message : "Failed to load",
-          };
-        }
-      }),
-    );
+    const monitorResults: Array<{
+      id: string;
+      name: string;
+      entityId: number;
+      items: ReturnType<typeof parseStorageEntityInfo>["items"];
+      error: string | null;
+    }> = [];
+
+    await runWithConcurrency(monitors, STORAGE_ITEM_SEARCH_CONCURRENCY, async (monitor) => {
+      try {
+        const info = await deps.rustPlus.getEntityInfo(monitor.entityId);
+        const parsed = parseStorageEntityInfo(info);
+        monitorResults.push({
+          id: monitor.id,
+          name: monitor.displayName ?? monitor.name,
+          entityId: monitor.entityId,
+          items: parsed.items,
+          error: null,
+        });
+      } catch (err) {
+        monitorResults.push({
+          id: monitor.id,
+          name: monitor.displayName ?? monitor.name,
+          entityId: monitor.entityId,
+          items: [],
+          error: err instanceof Error ? err.message : "Failed to load",
+        });
+      }
+    });
 
     const matches = aggregateStorageItemSearch(monitorResults, q);
     const failed = monitorResults

@@ -31,7 +31,9 @@ export const demoUser: AuthUserResponse = {
     steamId: "76561198000000000",
   },
   linkedRust: true,
-  pendingRustLink: false,
+  linkedSteam: true,
+  companionLinked: false,
+  pendingLinkType: null,
   permissions: {
     view: FULL_USER_PERMISSIONS.view,
     switch: FULL_USER_PERMISSIONS.switch,
@@ -583,6 +585,37 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { ok: true, scope: body.scope, detail: "Demo mode — no data changed." } as T;
   }
 
+  if (path === "/admin/users") {
+    return {
+      users: [
+        {
+          id: "demo-user-1",
+          discordId: "123456789012345678",
+          discordUsername: "DemoAdmin",
+          steamId: "76561198000000000",
+          createdAt: new Date().toISOString(),
+          blocked: false,
+        },
+      ],
+    } as T;
+  }
+
+  if (path === "/admin/blacklist") {
+    return { entries: [] } as T;
+  }
+
+  if (path.startsWith("/admin/users/") && method === "DELETE") {
+    return { ok: true } as T;
+  }
+
+  if (path.startsWith("/admin/blacklist/") && method === "DELETE") {
+    return { ok: true } as T;
+  }
+
+  if (path === "/admin/blacklist" && method === "POST") {
+    return { ok: true, entry: { id: "demo-block-1", guildId: "demo", discordId: null, steamId: null, reason: "", createdBy: null, createdAt: new Date().toISOString() } } as T;
+  }
+
   if (path === "/servers") return { servers: demoServers } as T;
 
   const activateMatch = path.match(/^\/servers\/([^/]+)\/activate$/);
@@ -591,6 +624,13 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       s.isActive = s.id === activateMatch[1];
     }
     return { ok: true } as T;
+  }
+
+  const deleteMatch = path.match(/^\/servers\/([^/]+)$/);
+  if (deleteMatch && method === "DELETE") {
+    const idx = demoServers.findIndex((s) => s.id === deleteMatch[1]);
+    if (idx >= 0) demoServers.splice(idx, 1);
+    return { ok: true, name: "Demo Server", wasActive: false } as T;
   }
 
   if (path === "/servers/active/info") {
@@ -681,11 +721,17 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/map") {
     return {
-      map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null },
+      map: { width: demoMapSize.width, height: demoMapSize.height },
       transform: demoMapTransform,
       team: demoTeam,
       monuments: demoMonuments,
       markers: demoMapMarkers,
+    } as T;
+  }
+
+  if (path === "/servers/active/map/image") {
+    return {
+      map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null },
     } as T;
   }
 
@@ -714,7 +760,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     } as T;
   }
 
-  if (path.startsWith("/servers/active/map/procgen/") || path.startsWith("/servers/active/map/footprints")) {
+  if (path.startsWith("/servers/active/map/procgen/")) {
     throw new Error("Procgen map features require a .map upload (disabled in demo mode)");
   }
 
@@ -766,13 +812,17 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path === "/devices") {
-    return {
-      devices: demoDevices.map((device) =>
-        device.entityType === "smart_switch"
-          ? { ...device, switchValue: demoSwitchStates[device.id] ?? false }
-          : device,
-      ),
-    } as T;
+    return { devices: demoDevices } as T;
+  }
+
+  if (path === "/devices/switch-states") {
+    const states: Record<string, boolean | null> = {};
+    for (const device of demoDevices) {
+      if (device.entityType === "smart_switch") {
+        states[device.id] = demoSwitchStates[device.id] ?? false;
+      }
+    }
+    return { states } as T;
   }
 
   const toggleMatch = path.match(/^\/devices\/([^/]+)\/toggle$/);

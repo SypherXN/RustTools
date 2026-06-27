@@ -1,11 +1,11 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
-import { rustEntities, storageSnapshots } from "@rusttools/db";
+import { rustEntities } from "@rusttools/db";
 import type { RustPlusManager, NotificationService } from "@rusttools/rustplus-client";
 import { parseStorageEntityInfo } from "@rusttools/shared";
-import { generateId } from "../lib/ids.js";
 import { getWorldSize, parseTeamRoster, getActiveServer } from "../lib/rust-data.js";
-import { processTeamRoster, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import { processTeamRosterWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
+import { canPromoteViaRustPlus, getActiveServerRow } from "../lib/promote-leader.js";
 import { handleTeamRosterEvents } from "../lib/team-event-store.js";
 import { recordTeamChatMessage } from "../lib/team-chat-buffer.js";
 import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
@@ -53,6 +53,24 @@ import {
   evaluateTimeOfDayAutomationRules,
 } from "../lib/automation-engine.js";
 import { restorePendingSwitchJobs } from "../lib/switch-scheduler.js";
+import { checkServerWipe } from "../lib/wipe-tracker.js";
+import { reconcileStaleEntities, onEntityRemoved, markEntityValidated } from "../lib/entity-lifecycle.js";
+
+/** Use Rust+ push payload when it contains parseable entity fields. */
+function entityInfoFromChangedPayload(payload: unknown): unknown | null {
+  if (payload == null || typeof payload !== "object") return null;
+  const p = payload as Record<string, unknown>;
+  if (
+    "items" in p ||
+    "capacity" in p ||
+    "hasProtection" in p ||
+    "HasProtection" in p ||
+    "value" in p
+  ) {
+    return { payload: p };
+  }
+  return null;
+}
 
 export function startPhase2Listeners(
   db: Database,
@@ -60,6 +78,10 @@ export function startPhase2Listeners(
   notifications: NotificationService,
 ): void {
   const lastStorageJson = new Map<string, string>();
+
+  onEntityRemoved((entityDbId) => {
+    lastStorageJson.delete(entityDbId);
+  });
 
   rustPlus.eventBus.on("entityChanged", async (event) => {
     notifications.webSocket({ event: "entityChanged", payload: event });
@@ -73,17 +95,13 @@ export function startPhase2Listeners(
     if (!entity || entity.entityType !== "storage_monitor") return;
 
     try {
-      const info = await rustPlus.getEntityInfo(event.entityId);
+      const info =
+        entityInfoFromChangedPayload(event.payload) ??
+        (await rustPlus.getEntityInfo(event.entityId));
+      markEntityValidated(event.serverId, event.entityId);
       const json = JSON.stringify(info);
       const prev = lastStorageJson.get(entity.id);
       lastStorageJson.set(entity.id, json);
-
-      await db.insert(storageSnapshots).values({
-        id: generateId(),
-        entityId: entity.id,
-        contentsJson: json,
-        createdAt: new Date(),
-      });
 
       if (prev && prev !== json) {
         const parsed = parseStorageEntityInfo(info);
@@ -108,7 +126,12 @@ export function startPhase2Listeners(
         }
         notifications.webSocket({
           event: "storageChanged",
-          payload: { entityId: entity.id, name: entity.name },
+          payload: {
+            entityId: entity.id,
+            name: entity.displayName ?? entity.name,
+            parsed,
+            recycle,
+          },
         });
 
         const activeServer = await getActiveServer(db);
@@ -391,21 +414,22 @@ const lastAllOfflineByServer = new Map<string, boolean>();
 
   rustPlus.eventBus.on("teamChanged", async (event) => {
     try {
-      const [info, activeServer] = await Promise.all([
-        rustPlus.getServerInfo(),
-        getActiveServer(db),
-      ]);
+      const [activeServer] = await Promise.all([getActiveServerRow(db)]);
+      const cachedInfo = rustPlus.getCachedServerInfo();
+      const info = cachedInfo ?? (await rustPlus.getServerInfo());
       const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(event.teamInfo, worldSize);
-      const { team, deaths, newDeaths, newConnections } = processTeamRoster(
+      const { team, deaths, newDeaths, newConnections } = await processTeamRosterWithSettings(
+        db,
         event.serverId,
         parsed,
         worldSize,
       );
       await handleTeamRosterEvents(db, notifications, event.serverId, newDeaths, newConnections);
+      const canPromote = await canPromoteViaRustPlus(db, activeServer, team.leaderSteamId);
       notifications.webSocket({
         event: "teamChanged",
-        payload: enrichTeamApiResponse(activeServer?.playerId ?? null, team, deaths),
+        payload: enrichTeamApiResponse(activeServer?.playerId ?? null, team, deaths, canPromote),
       });
       if (activeServer && newConnections.length > 0) {
         void dispatchAutomationEvent(
@@ -463,6 +487,42 @@ const lastAllOfflineByServer = new Map<string, boolean>();
   });
 
   rustPlus.jobScheduler.register({
+    id: "wipe-monitor",
+    intervalMs: 300_000,
+    run: async () => {
+      const activeServer = await getActiveServer(db);
+      if (!activeServer) return;
+      try {
+        const info = await rustPlus.getServerInfo();
+        const result = await checkServerWipe(db, rustPlus, activeServer.id, info);
+        if (result.action === "wiped") {
+          lastStorageJson.clear();
+          lastAllOfflineByServer.delete(activeServer.id);
+        }
+      } catch {
+        // disconnected
+      }
+    },
+  });
+
+  rustPlus.jobScheduler.register({
+    id: "entity-reconcile",
+    intervalMs: 600_000,
+    run: async () => {
+      const activeServer = await getActiveServer(db);
+      if (!activeServer) return;
+      try {
+        const removed = await reconcileStaleEntities(db, rustPlus, activeServer.id);
+        if (removed > 0) {
+          console.log(`[EntityLifecycle] Removed ${removed} stale device(s) for ${activeServer.id}`);
+        }
+      } catch (err) {
+        console.error("[EntityLifecycle] Reconcile failed:", err);
+      }
+    },
+  });
+
+  rustPlus.jobScheduler.register({
     id: "team-offline-sam",
     intervalMs: 180_000,
     run: async () => {
@@ -489,6 +549,7 @@ const lastAllOfflineByServer = new Map<string, boolean>();
   rustPlus.jobScheduler.register({
     id: "schedule-window-automation",
     intervalMs: 60_000,
+    initialDelayMs: 0,
     run: async () => {
       const activeServer = await getActiveServer(db);
       if (!activeServer) return;
@@ -524,6 +585,7 @@ const lastAllOfflineByServer = new Map<string, boolean>();
   rustPlus.jobScheduler.register({
     id: "tc-decay-monitor",
     intervalMs: 60_000,
+    initialDelayMs: 20_000,
     run: async () => {
       const activeServer = await getActiveServer(db);
       if (!activeServer) return;
@@ -542,6 +604,7 @@ const lastAllOfflineByServer = new Map<string, boolean>();
   rustPlus.jobScheduler.register({
     id: "automation-interval",
     intervalMs: 60_000,
+    initialDelayMs: 40_000,
     run: async () => {
       const activeServer = await getActiveServer(db);
       if (!activeServer) return;

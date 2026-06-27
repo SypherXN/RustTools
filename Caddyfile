@@ -2,7 +2,7 @@
 	email {$ACME_EMAIL}
 	encode gzip
 
-	@api path /auth/* /health /servers/* /devices/* /storage/* /vending/* /audit /ws
+	@api path /admin/* /audit /auth/* /automation-* /cameras/* /device-library* /devices* /health /push/* /servers* /storage* /switch-groups* /vending/* /ws
 	handle @api {
 		reverse_proxy api:3000
 	}

@@ -1,9 +1,8 @@
 import type { ProcgenOverlayId } from "./procgen/types.js";
-import { buildProcgenArtifacts } from "./procgen/parse.js";
+import { runProcgenParseInSubprocess } from "./procgen-subprocess.js";
 import { eq } from "drizzle-orm";
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import sharp from "sharp";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import { parseServerMapMeta } from "@rusttools/shared";
@@ -35,6 +34,30 @@ const OVERLAY_IDS: ProcgenOverlayId[] = [
 
 function procgenDir(serverId: string): string {
   return path.join(env.dataDir, "procgen", serverId);
+}
+
+/** Remove all procgen files for a server from disk (safe if already absent). */
+export async function removeProcgenServerDir(serverId: string): Promise<void> {
+  await rm(procgenDir(serverId), { recursive: true, force: true });
+}
+
+const PARSE_ARTIFACT_NAMES = [
+  "meta.json",
+  "paths.json",
+  "prefabs.json",
+  "height.json",
+  "overlay-building-blocked.png",
+  "overlay-heatmap-ores.png",
+  "overlay-heatmap-stones.png",
+  "overlay-heatmap-sulfur.png",
+] as const;
+
+/** Drop generated parse files but keep source.map (failed parse cleanup). */
+async function removeProcgenParseArtifacts(serverId: string): Promise<void> {
+  const dir = procgenDir(serverId);
+  await Promise.all(
+    PARSE_ARTIFACT_NAMES.map((name) => rm(path.join(dir, name), { force: true })),
+  );
 }
 
 function sourceMapPath(serverId: string): string {
@@ -92,19 +115,13 @@ export async function getProcgenMapStatus(
   };
 }
 
-async function writeRgbaPng(filePath: string, rgba: Uint8Array, size: number): Promise<void> {
-  await sharp(Buffer.from(rgba), {
-    raw: { width: size, height: size, channels: 4 },
-  })
-    .png()
-    .toFile(filePath);
-}
-
 export async function parseAndCacheProcgenMap(
   db: Database,
   serverId: string,
   mapBuffer: Buffer,
 ): Promise<void> {
+  await removeProcgenServerDir(serverId);
+
   const dir = procgenDir(serverId);
   await mkdir(dir, { recursive: true });
 
@@ -124,30 +141,16 @@ export async function parseAndCacheProcgenMap(
     .where(eq(rustServers.id, serverId));
 
   try {
-    const parsed = buildProcgenArtifacts(mapBuffer);
+    await runProcgenParseInSubprocess(sourcePath, dir);
 
-    for (const overlayId of OVERLAY_IDS) {
-      const rgba = parsed.overlays[overlayId];
-      await writeRgbaPng(overlayPath(serverId, overlayId), rgba, parsed.overlaySize);
-    }
-
-    await writeFile(
-      metaPath(serverId),
-      JSON.stringify({
-        worldSize: parsed.worldSize,
-        version: parsed.version,
-        overlaySize: parsed.overlaySize,
-      }),
-    );
-    await writeFile(pathsPath(serverId), JSON.stringify(parsed.paths));
-    await writeFile(prefabsPath(serverId), JSON.stringify(parsed.prefabs));
-    await writeFile(heightPath(serverId), JSON.stringify(parsed.height));
+    const meta = await readProcgenJson<{ worldSize: number }>(serverId, "meta");
+    const worldSize = meta?.worldSize ?? null;
 
     await db
       .update(rustServers)
       .set({
         mapSeed: null,
-        mapWorldSize: parsed.worldSize,
+        mapWorldSize: worldSize,
         mapParseStatus: "ready",
         mapParseError: null,
         mapParsedAt: new Date(),
@@ -156,6 +159,7 @@ export async function parseAndCacheProcgenMap(
       .where(eq(rustServers.id, serverId));
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to parse .map file";
+    await removeProcgenParseArtifacts(serverId);
     await db
       .update(rustServers)
       .set({
@@ -197,7 +201,7 @@ export async function readProcgenJson<T>(serverId: string, kind: "paths" | "pref
 }
 
 export async function deleteProcgenMap(db: Database, serverId: string): Promise<void> {
-  await rm(procgenDir(serverId), { recursive: true, force: true });
+  await removeProcgenServerDir(serverId);
   await db
     .update(rustServers)
     .set({

@@ -31,9 +31,10 @@ export function searchVending(
 export async function getSwitchState(
   rustPlus: RustPlusManager,
   entityId: number,
+  cachedInfo?: unknown,
 ): Promise<boolean | null> {
   try {
-    const info = await rustPlus.getEntityInfo(entityId);
+    const info = cachedInfo ?? (await rustPlus.getEntityInfo(entityId));
     return parseSwitchEntityValue(info);
   } catch {
     return null;

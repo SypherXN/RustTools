@@ -47,8 +47,15 @@ export interface TeamApiResponse {
   deaths: TeamDeathEvent[];
   /** Steam ID of the account paired to RustTools for this server. */
   pairedPlayerId: string | null;
-  /** True when the paired account is the in-game team leader (can promote via Rust+). */
+  /** True when RustTools can call promoteToLeader (master is leader or leader has companion link). */
   canPromote: boolean;
+}
+
+/** Whether a roster member is eligible to become team leader. */
+export function canBecomeTeamLeader(
+  member: Pick<TeamRosterMember, "isLeader" | "isOnline" | "isAlive">,
+): boolean {
+  return !member.isLeader && member.isOnline && member.isAlive;
 }
 
 function formatDuration(seconds: number): string {

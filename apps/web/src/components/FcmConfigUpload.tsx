@@ -1,32 +1,37 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { FcmCredentialStatus } from "@rusttools/shared";
 import { FCM_CREDENTIAL_LIFETIME_DAYS, FCM_WARNING_DAYS_BEFORE } from "@rusttools/shared";
-import { apiFetch, apiUpload } from "../lib/api";
+import { apiUpload } from "../lib/api";
+import { invalidateFcmStatusCache, useFcmStatus } from "../hooks/useFcmStatus";
+
+const FCM_REGISTER_CMD =
+  "npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json";
+
+function fcmHealthy(status: FcmCredentialStatus | null): boolean {
+  return Boolean(status?.configured && status.listening && !status.warning && !status.expired);
+}
 
 export function FcmConfigUpload() {
-  const [status, setStatus] = useState<FcmCredentialStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const sharedStatus = useFcmStatus(true);
+  const [status, setStatus] = useState<FcmCredentialStatus | null>(sharedStatus);
+  const [loading, setLoading] = useState(sharedStatus == null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await apiFetch<FcmCredentialStatus>("/admin/fcm-status");
-      setStatus(data);
-    } catch (err) {
-      setStatus(null);
-      setError(err instanceof Error ? err.message : "Could not load FCM status");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (sharedStatus) {
+      setStatus(sharedStatus);
+      setLoading(false);
+    }
+  }, [sharedStatus]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   const onUpload = async (file: File | null) => {
     if (!file) return;
@@ -40,12 +45,22 @@ export function FcmConfigUpload() {
         "/admin/fcm-config/upload",
         form,
       );
+      invalidateFcmStatusCache();
       setStatus(result.status);
       setMessage("FCM config uploaded and listener restarted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const copyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(FCM_REGISTER_CMD);
+      setCopied(true);
+    } catch {
+      setError("Could not copy — select the command and copy manually.");
     }
   };
 
@@ -64,14 +79,77 @@ export function FcmConfigUpload() {
     return "fcm-status--muted";
   })();
 
+  const healthy = fcmHealthy(status);
+  const showWizard = !healthy;
+
+  const uploadButton = (
+    <label className="btn-secondary procgen-upload-label">
+      {uploading ? "Working…" : status?.configured ? "Replace fcm-config.json" : "Upload fcm-config.json"}
+      <input
+        type="file"
+        accept=".json,application/json"
+        disabled={uploading}
+        hidden
+        onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
+      />
+    </label>
+  );
+
+  const registerStep = (
+    <>
+      <p className="muted fcm-wizard-note">
+        Run once on a machine with <strong>Google Chrome</strong> (Windows, Mac, or Linux). Chrome
+        opens automatically so you can sign in with Steam and link Rust+. The command writes{" "}
+        <code>data/fcm-config.json</code> in your RustTools folder (or repo root in dev).
+      </p>
+      <div className="fcm-command-block">
+        <code className="fcm-command-block__cmd">{FCM_REGISTER_CMD}</code>
+        <button type="button" className="btn-secondary" onClick={() => void copyCommand()}>
+          {copied ? "Copied!" : "Copy command"}
+        </button>
+      </div>
+    </>
+  );
+
+  const wizardSteps = (
+    <ol className="setup-steps fcm-wizard-steps">
+      <li>
+        <strong>Register FCM credentials</strong>
+        {registerStep}
+      </li>
+      <li>
+        <strong>Upload to RustTools</strong>
+        <p className="muted fcm-wizard-note">
+          Choose the <code>fcm-config.json</code> file from step 1. The API saves it and restarts
+          the pairing listener — no server restart needed.
+        </p>
+        <div className="procgen-upload-actions">{uploadButton}</div>
+      </li>
+      <li>
+        <strong>Link your Rust+ account</strong>
+        <p className="muted fcm-wizard-note">
+          Open the <strong>Server</strong> tab → click <strong>Link Rust+ Account</strong> (or{" "}
+          <strong>Re-pair Server</strong> if reconnecting). This tells RustTools to capture your
+          Steam ID on the next in-game pair.
+        </p>
+      </li>
+      <li>
+        <strong>Pair in Rust</strong>
+        <p className="muted fcm-wizard-note">
+          In-game: Rust+ menu → <strong>Pair with Server</strong>. Pair smart switches, alarms, and
+          storage monitors with the wire tool. New devices appear on the Devices page automatically.
+        </p>
+      </li>
+    </ol>
+  );
+
   return (
     <section className="settings-section card">
       <h2>FCM credentials (pairing &amp; alarms)</h2>
       <p className="muted">
-        Upload your <code>fcm-config.json</code> from{" "}
-        <code>npx @liamcottle/rustplus.js fcm-register</code>. Credentials last about{" "}
-        {FCM_CREDENTIAL_LIFETIME_DAYS} days; a warning appears in the app when{" "}
-        {FCM_WARNING_DAYS_BEFORE} days or fewer remain.
+        FCM lets RustTools receive server and device pairing from the game, plus smart-alarm
+        triggers. Credentials last about {FCM_CREDENTIAL_LIFETIME_DAYS} days — renew before they
+        expire (warning at {FCM_WARNING_DAYS_BEFORE} days).
       </p>
 
       {loading ? (
@@ -104,18 +182,44 @@ export function FcmConfigUpload() {
             </dl>
           )}
 
-          <div className="procgen-upload-actions">
-            <label className="btn-secondary procgen-upload-label">
-              {uploading ? "Working…" : status?.configured ? "Replace fcm-config.json" : "Upload fcm-config.json"}
-              <input
-                type="file"
-                accept=".json,application/json"
-                disabled={uploading}
-                hidden
-                onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
-              />
-            </label>
-          </div>
+          {showWizard ? (
+            <div className="fcm-wizard">
+              <h3 className="fcm-wizard-title">
+                {!status?.configured
+                  ? "Setup wizard"
+                  : status.expired
+                    ? "Credentials expired — renew"
+                    : "Renew before expiry"}
+              </h3>
+              {!status?.configured && (
+                <p className="fcm-wizard-callout">
+                  Pairing and in-game alarms will not work until FCM is configured.
+                </p>
+              )}
+              {wizardSteps}
+            </div>
+          ) : (
+            <>
+              <p className="settings-success fcm-wizard-ok">
+                FCM is active — pairing and alarm pushes are enabled.
+              </p>
+              <details className="fcm-renew-details">
+                <summary>Renew credentials (every ~{FCM_CREDENTIAL_LIFETIME_DAYS} days)</summary>
+                <div className="fcm-wizard fcm-wizard--nested">
+                  <ol className="setup-steps fcm-wizard-steps">
+                    <li>
+                      <strong>Re-run registration</strong>
+                      {registerStep}
+                    </li>
+                    <li>
+                      <strong>Upload the new file</strong>
+                      <div className="procgen-upload-actions">{uploadButton}</div>
+                    </li>
+                  </ol>
+                </div>
+              </details>
+            </>
+          )}
         </>
       )}
 

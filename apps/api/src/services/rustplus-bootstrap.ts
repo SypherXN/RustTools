@@ -3,6 +3,11 @@ import type { Database } from "@rusttools/db";
 import { rustEntities, rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { decrypt } from "../lib/crypto.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
+import { markEntityValidated } from "../lib/entity-lifecycle.js";
+import { checkServerWipe } from "../lib/wipe-tracker.js";
+
+const SUBSCRIBE_CONCURRENCY = 5;
 
 export async function reconnectStoredServers(
   db: Database,
@@ -27,12 +32,20 @@ export async function reconnectStoredServers(
         .from(rustEntities)
         .where(eq(rustEntities.serverId, server.id));
 
-      for (const entity of entities) {
+      await runWithConcurrency(entities, SUBSCRIBE_CONCURRENCY, async (entity) => {
         try {
           await rustPlus.subscribeEntity(entity.entityId);
+          markEntityValidated(server.id, entity.entityId);
         } catch (err) {
           console.error(`[RustPlus] Failed to subscribe entity ${entity.entityId}:`, err);
         }
+      });
+
+      try {
+        const info = await rustPlus.getServerInfo();
+        await checkServerWipe(db, rustPlus, server.id, info);
+      } catch (err) {
+        console.error(`[RustPlus] Wipe check failed for ${server.name}:`, err);
       }
 
       console.log(`[RustPlus] Reconnected to server: ${server.name}`);

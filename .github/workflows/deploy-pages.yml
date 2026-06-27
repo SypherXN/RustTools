@@ -26,6 +26,14 @@ jobs:
 
       - run: npm install
       - run: npm run build --workspace=@rusttools/shared
+      - name: Validate frontend API URL
+        run: |
+          if [ -z "$VITE_API_URL" ]; then
+            echo "Set repository variable VITE_API_URL to your API origin, e.g. https://rusttools.example.com" >&2
+            exit 1
+          fi
+        env:
+          VITE_API_URL: ${{ vars.VITE_API_URL }}
       - run: npm run build --workspace=@rusttools/web
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}

@@ -1,4 +1,5 @@
 import {
+  DEFAULT_TEAM_ACTIVITY_SETTINGS,
   type ParsedTeamInfo,
   type TeamApiResponse,
   type TeamConnectionEvent,
@@ -7,11 +8,11 @@ import {
   type TeamRosterMember,
   worldToGridLabel,
 } from "@rusttools/shared";
+import type { Database } from "@rusttools/db";
+import { getServerNotificationSettings } from "./server-notification-settings.js";
 
 /** Seconds without position change before an online alive member is marked AFK. */
 export const TEAM_AFK_THRESHOLD_SEC = 300;
-
-const MAX_DEATHS_PER_SERVER = 100;
 
 interface MemberTrackState {
   lastDeathTime: number | null;
@@ -50,7 +51,8 @@ function recordDeath(
   state: ServerTeamState,
   member: TeamRosterMember,
   deathTime: number,
-  worldSize?: number,
+  worldSize: number | undefined,
+  maxDeaths: number,
 ): TeamDeathEvent | null {
   const track = state.members.get(member.steamId) ?? {
     lastDeathTime: null,
@@ -77,8 +79,8 @@ function recordDeath(
       }
     }
     state.deaths.unshift(event);
-    if (state.deaths.length > MAX_DEATHS_PER_SERVER) {
-      state.deaths.length = MAX_DEATHS_PER_SERVER;
+    if (state.deaths.length > maxDeaths) {
+      state.deaths.length = maxDeaths;
     }
     return event;
   }
@@ -177,11 +179,23 @@ function inferOnlineTransition(
   return null;
 }
 
+export function clearTeamTrackerState(serverId: string): void {
+  stateByServer.delete(serverId);
+}
+
+export function trimTeamTrackerDeaths(serverId: string, maxDeaths: number): void {
+  const state = stateByServer.get(serverId);
+  if (state && state.deaths.length > maxDeaths) {
+    state.deaths.length = maxDeaths;
+  }
+}
+
 export function processTeamRoster(
   serverId: string,
   team: ParsedTeamInfo,
   worldSize?: number,
   nowSec = Math.floor(Date.now() / 1000),
+  maxDeaths = DEFAULT_TEAM_ACTIVITY_SETTINGS.deathLogLimit,
 ): {
   team: ParsedTeamInfo;
   deaths: TeamDeathEvent[];
@@ -205,7 +219,7 @@ export function processTeamRoster(
     }
 
     if (member.deathTime && member.deathTime > 0) {
-      const death = recordDeath(state, member, member.deathTime, worldSize);
+      const death = recordDeath(state, member, member.deathTime, worldSize, maxDeaths);
       if (death) newDeaths.push(death);
     }
 
@@ -232,6 +246,7 @@ export function applyTeamTracking(
   serverId: string | null,
   team: ParsedTeamInfo,
   worldSize?: number,
+  maxDeaths = DEFAULT_TEAM_ACTIVITY_SETTINGS.deathLogLimit,
 ): {
   team: ParsedTeamInfo;
   deaths: TeamDeathEvent[];
@@ -255,7 +270,7 @@ export function applyTeamTracking(
     };
   }
 
-  const result = processTeamRoster(serverId, team, worldSize);
+  const result = processTeamRoster(serverId, team, worldSize, undefined, maxDeaths);
   return {
     team: result.team,
     deaths: result.deaths,
@@ -264,13 +279,33 @@ export function applyTeamTracking(
   };
 }
 
+export async function applyTeamTrackingWithSettings(
+  db: Database,
+  serverId: string | null,
+  team: ParsedTeamInfo,
+  worldSize?: number,
+) {
+  const maxDeaths = serverId
+    ? (await getServerNotificationSettings(db, serverId)).teamActivity.deathLogLimit
+    : DEFAULT_TEAM_ACTIVITY_SETTINGS.deathLogLimit;
+  return applyTeamTracking(serverId, team, worldSize, maxDeaths);
+}
+
+export async function processTeamRosterWithSettings(
+  db: Database,
+  serverId: string,
+  team: ParsedTeamInfo,
+  worldSize?: number,
+) {
+  const maxDeaths = (await getServerNotificationSettings(db, serverId)).teamActivity.deathLogLimit;
+  return processTeamRoster(serverId, team, worldSize, undefined, maxDeaths);
+}
+
 export function enrichTeamApiResponse(
   pairedPlayerId: string | null,
   team: ParsedTeamInfo,
   deaths: TeamDeathEvent[],
+  canPromote = false,
 ): TeamApiResponse {
-  const canPromote = Boolean(
-    pairedPlayerId && team.leaderSteamId && pairedPlayerId === team.leaderSteamId,
-  );
   return { team, deaths, pairedPlayerId, canPromote };
 }

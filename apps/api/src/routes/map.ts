@@ -6,7 +6,7 @@ import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { sendAndPublishTeamChat } from "../lib/team-chat-outbound.js";
-import { applyTeamTracking } from "../lib/team-tracker.js";
+import { applyTeamTrackingWithSettings } from "../lib/team-tracker.js";
 import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
 import { searchVending } from "../lib/vending.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
@@ -26,6 +26,26 @@ export async function registerServerRoutes(
   await registerMapOverlayRoutes(app, deps);
   await registerProcgenMapRoutes(app, deps);
 
+  app.get("/servers/active/map/image", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    try {
+      const map = await deps.rustPlus.getMap();
+      return {
+        map: {
+          width: map.width,
+          height: map.height,
+          imageBase64: map.jpgImage?.toString("base64") ?? null,
+        },
+      };
+    } catch (err) {
+      return reply.status(503).send({
+        error: err instanceof Error ? err.message : "Rust+ not connected",
+      });
+    }
+  });
+
   app.get("/servers/active/map", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
@@ -42,12 +62,12 @@ export async function registerServerRoutes(
       ]);
       const transform = buildMapTransform(map, info as { mapSize?: number });
       const parsed = parseTeamRoster(team, worldSize);
-      const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
+      const activeServerId = deps.rustPlus.getStatus().activeServerId;
+      const tracked = await applyTeamTrackingWithSettings(deps.db, activeServerId, parsed, worldSize);
       return {
         map: {
           width: map.width,
           height: map.height,
-          imageBase64: map.jpgImage?.toString("base64") ?? null,
         },
         transform,
         team: tracked.team.members,
@@ -73,7 +93,8 @@ export async function registerServerRoutes(
         deps.rustPlus.getMapMarkers(),
       ]);
       const parsed = parseTeamRoster(team, worldSize);
-      const tracked = applyTeamTracking(deps.rustPlus.getStatus().activeServerId, parsed, worldSize);
+      const activeServerId = deps.rustPlus.getStatus().activeServerId;
+      const tracked = await applyTeamTrackingWithSettings(deps.db, activeServerId, parsed, worldSize);
       const activeServer = await getActiveServer(deps.db);
       const worldEvents = activeServer
         ? await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id, worldSize).catch(

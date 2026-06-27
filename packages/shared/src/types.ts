@@ -2,21 +2,29 @@ import type { UserCapabilities } from "./permissions.js";
 
 export type EntityType = "smart_switch" | "smart_alarm" | "storage_monitor";
 
+export type PendingLinkType = "steam" | "companion" | "master";
+
 export interface User {
   id: string;
   discordId: string;
   discordUsername: string;
   discordAvatar: string | null;
   steamId: string | null;
-  pendingRustLink?: boolean;
+  pendingLinkType?: PendingLinkType | null;
+  companionPlayerId?: string | null;
+  companionLinkedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface AuthUserResponse {
-  user: Pick<User, "id" | "discordId" | "discordUsername" | "discordAvatar" | "steamId">;
+  user: Pick<User, "id" | "discordId" | "discordUsername" | "discordAvatar" | "steamId"> & {
+    companionPlayerId?: string | null;
+  };
   linkedRust: boolean;
-  pendingRustLink?: boolean;
+  linkedSteam: boolean;
+  companionLinked: boolean;
+  pendingLinkType?: PendingLinkType | null;
   permissions: UserCapabilities;
   rolesConfigured: boolean;
 }

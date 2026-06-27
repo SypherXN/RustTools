@@ -1,5 +1,5 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
 import { eq } from "drizzle-orm";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { Database } from "@rusttools/db";
 import { sessions, users } from "@rusttools/db";
 import { env } from "../config.js";
@@ -9,6 +9,7 @@ import {
   hasDiscordCapability,
   type DiscordCapability,
 } from "./discord-permissions.js";
+import { rejectIfBlocked } from "./user-access.js";
 
 const REFRESH_COOKIE = "rusttools_refresh";
 const ACCESS_COOKIE = "rusttools_access";
@@ -62,6 +63,9 @@ async function loadUserFromRefreshToken(
     .limit(1);
 
   if (!session || session.expiresAt < new Date()) {
+    if (session) {
+      await db.delete(sessions).where(eq(sessions.id, session.id));
+    }
     return null;
   }
 
@@ -117,11 +121,12 @@ export async function requireAuth(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<typeof users.$inferSelect | null> {
-  const user = await getSessionUser(db, request);
+  const user = await getSessionUser(db, request, reply);
   if (!user) {
     reply.status(401).send({ error: "Unauthorized" });
     return null;
   }
+  if (await rejectIfBlocked(db, user, reply)) return null;
   return user;
 }
 

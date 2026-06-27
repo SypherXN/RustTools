@@ -12,6 +12,11 @@ import type { AutomationRuleInput, AutomationRuleTemplateInput } from "@rusttool
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { parseRule } from "../lib/automation-engine.js";
+import { deleteAutomationRulesReferencingGroup } from "../lib/automation-rule-cleanup.js";
+import {
+  pruneEmptyDeviceLibraryGroups,
+  pruneEmptySwitchGroups,
+} from "../lib/entity-lifecycle.js";
 import { getEntitySettings, updateEntitySettings } from "../lib/entity-settings.js";
 import { generateId } from "../lib/ids.js";
 import { getActiveServerId } from "../lib/rust-data.js";
@@ -163,6 +168,7 @@ export async function registerAutomationRoutes(
       for (const entityId of body.memberEntityIds) {
         await deps.db.insert(switchGroupMembers).values({ groupId, entityId });
       }
+      await pruneEmptySwitchGroups(deps.db, group.serverId);
     }
 
     return { ok: true };
@@ -173,6 +179,14 @@ export async function registerAutomationRoutes(
     if (!user) return;
 
     const { groupId } = request.params as { groupId: string };
+    const [group] = await deps.db
+      .select()
+      .from(switchGroups)
+      .where(eq(switchGroups.id, groupId))
+      .limit(1);
+    if (group) {
+      await deleteAutomationRulesReferencingGroup(deps.db, group.serverId, groupId);
+    }
     await deps.db.delete(switchGroups).where(eq(switchGroups.id, groupId));
     return { ok: true };
   });
@@ -319,6 +333,7 @@ export async function registerAutomationRoutes(
       for (const entityId of body.memberEntityIds) {
         await deps.db.insert(deviceLibraryMembers).values({ groupId, entityId });
       }
+      await pruneEmptyDeviceLibraryGroups(deps.db, group.serverId);
     }
 
     return { ok: true };

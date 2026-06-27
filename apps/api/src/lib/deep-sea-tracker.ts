@@ -96,6 +96,10 @@ export class DeepSeaTracker {
       transition,
     };
   }
+
+  reset(serverId: string): void {
+    this.states.delete(serverId);
+  }
 }
 
 export function monumentsFromMap(map: unknown): Array<{ token: string }> {

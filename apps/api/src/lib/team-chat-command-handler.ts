@@ -22,13 +22,18 @@ import { isDiscordBlacklisted } from "./discord-blacklist.js";
 import { fetchDeepSeaStatus } from "./deep-sea.js";
 import { sendDiscordDirectMessage } from "./discord-dm.js";
 import { findDiscordUserIdForSendTarget } from "./discord-send-target.js";
-import { getWorldSize, parseTeamRoster, getActiveServer } from "./rust-data.js";
+import { getWorldSize, parseTeamRoster } from "./rust-data.js";
+import {
+  getActiveServerRow,
+  promoteTeamLeader,
+  PromoteLeaderError,
+} from "./promote-leader.js";
 import {
   getServerNotificationSettings,
   updateTeamChatBotSettings,
 } from "./server-notification-settings.js";
 import { hasSteamAdminCapability, steamIdForDiscordUser } from "./steam-admin.js";
-import { processTeamRoster } from "./team-tracker.js";
+import { processTeamRosterWithSettings } from "./team-tracker.js";
 import { fetchTcUpkeepReportEntries } from "./tc-upkeep-report.js";
 import { fetchWorldEventsStatus } from "./world-events-status.js";
 import { executeSwitchChatCommand } from "./switch-command-handler.js";
@@ -238,7 +243,7 @@ export async function executeTeamChatCommand(
     const [team, info] = await Promise.all([rustPlus.getTeamInfo(), rustPlus.getServerInfo()]);
     const worldSize = getWorldSize(info);
     const parsed = parseTeamRoster(team, worldSize);
-    const { team: tracked } = processTeamRoster(ctx.serverId, parsed, worldSize);
+    const { team: tracked } = await processTeamRosterWithSettings(db, ctx.serverId, parsed, worldSize);
     const reply = formatRosterCommandResponse(rosterCommand, tracked);
     return forDiscord(ctx, { reply }, [buildRosterEmbed(rosterCommand, tracked, worldSize)]);
   }
@@ -247,11 +252,11 @@ export async function executeTeamChatCommand(
     const senderSteamId = await resolveSenderSteamId(db, ctx);
     if (!senderSteamId) {
       const reply =
-        "RustTools: Link your Rust+ account in the web dashboard (Settings → Account) to use !leader.";
+        "RustTools: Link your Steam ID in the web dashboard (Settings → Account) to use !leader.";
       return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" })]);
     }
 
-    const activeServer = await getActiveServer(db);
+    const activeServer = await getActiveServerRow(db);
     if (!activeServer || activeServer.id !== ctx.serverId) {
       const reply = "RustTools: No active server.";
       return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "error" })]);
@@ -261,9 +266,8 @@ export async function executeTeamChatCommand(
     const worldSize = getWorldSize(info);
     const parsed = parseTeamRoster(team, worldSize);
 
-    if (!parsed.leaderSteamId || parsed.leaderSteamId !== activeServer.playerId) {
-      const reply =
-        "RustTools: !leader is only available when RustTools is paired with the current team leader.";
+    if (!parsed.leaderSteamId) {
+      const reply = "RustTools: No team leader found.";
       return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" })]);
     }
 
@@ -278,7 +282,25 @@ export async function executeTeamChatCommand(
       return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Promote leader", kind: "info" })]);
     }
 
-    await rustPlus.promoteToLeader(sender.steamId);
+    try {
+      await promoteTeamLeader(
+        db,
+        rustPlus,
+        activeServer,
+        parsed.leaderSteamId,
+        sender.steamId,
+        sender,
+      );
+    } catch (err) {
+      const reply =
+        err instanceof PromoteLeaderError
+          ? `RustTools: ${err.message}`
+          : "RustTools: Failed to promote team leader.";
+      return forDiscord(ctx, { reply }, [
+        buildNoticeEmbed(reply, { title: "Promote leader", kind: "error" }),
+      ]);
+    }
+
     const reply = `RustTools: ${sender.name} is now team leader.`;
     return forDiscord(ctx, { reply }, [
       buildNoticeEmbed(`**${sender.name}** is now team leader.`, {

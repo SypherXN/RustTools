@@ -1,11 +1,69 @@
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, inArray } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { teamConnectionLog, teamDeathLog } from "@rusttools/db";
 import type { NotificationService } from "@rusttools/rustplus-client";
-import type { TeamConnectionEvent, TeamDeathEvent } from "@rusttools/shared";
-import { formatTeamConnectionLabel } from "@rusttools/shared";
+import type { TeamActivitySettings, TeamConnectionEvent, TeamDeathEvent } from "@rusttools/shared";
+import { DEFAULT_TEAM_ACTIVITY_SETTINGS, formatTeamConnectionLabel } from "@rusttools/shared";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
+import { getServerNotificationSettings } from "./server-notification-settings.js";
 import { generateId } from "./ids.js";
+
+async function resolveTeamActivitySettings(
+  db: Database,
+  serverId: string,
+): Promise<TeamActivitySettings> {
+  const settings = await getServerNotificationSettings(db, serverId);
+  return settings.teamActivity;
+}
+
+async function pruneTeamDeathLog(db: Database, serverId: string, limit: number): Promise<void> {
+  if (limit < 1) return;
+
+  const rows = await db
+    .select({ id: teamDeathLog.id })
+    .from(teamDeathLog)
+    .where(eq(teamDeathLog.serverId, serverId))
+    .orderBy(desc(teamDeathLog.deathTime))
+    .offset(limit);
+
+  if (!rows.length) return;
+  await db.delete(teamDeathLog).where(
+    inArray(
+      teamDeathLog.id,
+      rows.map((row) => row.id),
+    ),
+  );
+}
+
+async function pruneTeamConnectionLog(db: Database, serverId: string, limit: number): Promise<void> {
+  if (limit < 1) return;
+
+  const rows = await db
+    .select({ id: teamConnectionLog.id })
+    .from(teamConnectionLog)
+    .where(eq(teamConnectionLog.serverId, serverId))
+    .orderBy(desc(teamConnectionLog.occurredAt))
+    .offset(limit);
+
+  if (!rows.length) return;
+  await db.delete(teamConnectionLog).where(
+    inArray(
+      teamConnectionLog.id,
+      rows.map((row) => row.id),
+    ),
+  );
+}
+
+export async function pruneTeamEventLogsToLimits(
+  db: Database,
+  serverId: string,
+  limits: TeamActivitySettings = DEFAULT_TEAM_ACTIVITY_SETTINGS,
+): Promise<void> {
+  await Promise.all([
+    pruneTeamDeathLog(db, serverId, limits.deathLogLimit),
+    pruneTeamConnectionLog(db, serverId, limits.connectionLogLimit),
+  ]);
+}
 
 export async function persistTeamDeaths(
   db: Database,
@@ -28,6 +86,9 @@ export async function persistTeamDeaths(
       createdAt: now,
     })),
   );
+
+  const limits = await resolveTeamActivitySettings(db, serverId);
+  await pruneTeamDeathLog(db, serverId, limits.deathLogLimit);
 }
 
 export async function persistTeamConnections(
@@ -49,6 +110,9 @@ export async function persistTeamConnections(
       createdAt: now,
     })),
   );
+
+  const limits = await resolveTeamActivitySettings(db, serverId);
+  await pruneTeamConnectionLog(db, serverId, limits.connectionLogLimit);
 }
 
 export async function listTeamDeathHistory(
@@ -95,6 +159,11 @@ export async function listTeamConnectionHistory(
     event: row.event as TeamConnectionEvent["event"],
     occurredAt: row.occurredAt,
   }));
+}
+
+export async function clearTeamEventLogsForServer(db: Database, serverId: string): Promise<void> {
+  await db.delete(teamDeathLog).where(eq(teamDeathLog.serverId, serverId));
+  await db.delete(teamConnectionLog).where(eq(teamConnectionLog.serverId, serverId));
 }
 
 export async function persistTeamRosterEvents(

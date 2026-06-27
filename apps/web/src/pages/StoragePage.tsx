@@ -64,11 +64,23 @@ export function StoragePage() {
 
   useWebSocket((event, payload) => {
     if (event === "storageChanged") {
-      const p = payload as { name?: string };
+      const p = payload as {
+        name?: string;
+        entityId?: string;
+        parsed?: ParsedStorage;
+        recycle?: StorageInfo["recycle"];
+      };
       setAlert(`Storage changed: ${p.name ?? "monitor"}`);
-      if (selected) void loadInfo(selected);
+      if (selected && p.entityId === selected && p.parsed) {
+        setStorage({
+          info: null,
+          parsed: p.parsed,
+          recycle: p.recycle,
+        });
+      } else if (selected && (!p.entityId || p.entityId === selected)) {
+        void loadInfo(selected);
+      }
       if (itemResults?.query) void runItemSearch(itemResults.query);
-      void loadMonitors();
     }
   });
 

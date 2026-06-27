@@ -47,18 +47,31 @@ export function validateFcmConfigPayload(
   return { ok: true, config };
 }
 
-export function prepareFcmConfigForSave(config: Record<string, unknown>): Record<string, unknown> {
+export function prepareFcmConfigForSave(
+  config: Record<string, unknown>,
+  options?: { replace?: boolean },
+): Record<string, unknown> {
   const prepared = { ...config };
-  if (prepared.registered_at == null && prepared.registeredAt == null) {
+  if (options?.replace) {
+    prepared.registered_at = new Date().toISOString();
+    delete prepared.registeredAt;
+  } else if (prepared.registered_at == null && prepared.registeredAt == null) {
     prepared.registered_at = new Date().toISOString();
   }
   return prepared;
 }
 
-export function writeFcmConfigFile(configPath: string, config: Record<string, unknown>): void {
+export function writeFcmConfigFile(
+  configPath: string,
+  config: Record<string, unknown>,
+  options?: { replace?: boolean },
+): void {
   const resolved = path.resolve(configPath);
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  const prepared = prepareFcmConfigForSave(config);
+  if (options?.replace && fs.existsSync(resolved)) {
+    fs.unlinkSync(resolved);
+  }
+  const prepared = prepareFcmConfigForSave(config, options);
   fs.writeFileSync(resolved, `${JSON.stringify(prepared, null, 2)}\n`, "utf8");
 }
 

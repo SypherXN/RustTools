@@ -4,7 +4,7 @@ import { assetUrl } from "../lib/asset-url";
 
 const ERROR_MESSAGES: Record<string, string> = {
   discord_token_failed:
-    "Discord login failed. Check that the redirect URL in the Discord app is exactly: http://localhost:5173/api/auth/discord/callback",
+    "Discord login failed. Check that the Discord app redirect URL matches your configured API callback.",
 };
 
 export function LoginPage() {

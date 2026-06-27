@@ -13,13 +13,17 @@ export function startInformationEmbedUpdater(
       const { configuredGuildId, resolveDiscordChannelId } = await import("../lib/discord-channels.js");
       const { ensureInformationEmbed } = await import("../lib/information-embed.js");
       const guildId = configuredGuildId();
+      const skipGuildIds = new Set<string>();
+
       if (guildId) {
         const channelId = await resolveDiscordChannelId(db, guildId, "information");
         if (channelId) {
           await ensureInformationEmbed(db, rustPlus, guildId, channelId);
+          skipGuildIds.add(guildId);
         }
       }
-      await refreshAllInformationEmbeds(db, rustPlus);
+
+      await refreshAllInformationEmbeds(db, rustPlus, skipGuildIds);
     } catch (err) {
       console.error("[InformationEmbed] Periodic refresh failed:", err);
     }

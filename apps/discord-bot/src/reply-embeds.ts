@@ -104,3 +104,12 @@ export function errorEmbed(message: string): EmbedPayload {
     footer: { text: "RustTools" },
   };
 }
+
+export function permissionDeniedEmbed(message: string): EmbedPayload {
+  return {
+    title: "Permission denied",
+    description: message,
+    color: 0xe85d2a,
+    footer: { text: "RustTools · ask a server admin for the View / Switch / Admin role" },
+  };
+}

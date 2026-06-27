@@ -37,7 +37,7 @@ import { Map3DView } from "../components/Map3DView";
 import { VendingTradeRow } from "../components/VendingTradeRow";
 import type { MapTrackableEvent } from "../components/MapEventDock";
 import { useMapImageSrc } from "../hooks/useMapImageSrc";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket, useWebSocketConnected } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { apiFetch } from "../lib/api";
@@ -221,6 +221,7 @@ export function MapPage() {
   }, []);
 
   const mapImageSrc = useMapImageSrc(mapImage?.imageBase64);
+  const wsConnected = useWebSocketConnected();
 
   useEffect(() => {
     setLoading(true);
@@ -228,15 +229,19 @@ export function MapPage() {
     setFocusTarget(null);
     setFollowSteamId(null);
     setTrackEventId(null);
+    setMapImage(null);
     Promise.all([
-      apiFetch<MapData>("/servers/active/map"),
+      apiFetch<Omit<MapData, "map"> & { map: { width: number; height: number } }>(
+        "/servers/active/map",
+      ),
+      apiFetch<{ map: MapData["map"] }>("/servers/active/map/image"),
       apiFetch<MapOverlaysResponse>("/servers/active/map/overlays").catch(() => ({
         drawings: [],
         pins: [],
       })),
     ])
-      .then(([data, overlays]) => {
-        setMapImage(data.map);
+      .then(([data, imageRes, overlays]) => {
+        setMapImage(imageRes.map);
         setTransform(data.transform);
         setTeam(data.team);
         setMonuments(data.monuments);
@@ -273,14 +278,14 @@ export function MapPage() {
   }, [procgenReady, epoch]);
 
   useEffect(() => {
-    if (loading) return;
+    if (loading || wsConnected) return;
     const interval = setInterval(() => {
       void refreshLive().catch(() => {
         // Keep showing the last good map if a live refresh fails.
       });
-    }, 60_000);
+    }, 90_000);
     return () => clearInterval(interval);
-  }, [loading, refreshLive]);
+  }, [loading, refreshLive, wsConnected]);
 
   useWebSocket((event, payload) => {
     if (event === "teamChanged") {

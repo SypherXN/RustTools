@@ -108,3 +108,39 @@ export function mapEventDiscordEnabled(settings: MapEventAutomationSettings): bo
 export function mapEventAlertsEnabled(settings: MapEventAutomationSettings): boolean {
   return mapEventTeamChatEnabled(settings) || mapEventDiscordEnabled(settings);
 }
+
+/** Remove legacy automation references to a Rust+ entity ID that no longer exists. */
+export function scrubLegacyAutomationsForRemovedRustEntity(
+  legacy: LegacyAutomationSettings,
+  rustEntityId: number,
+): LegacyAutomationSettings | null {
+  const entityIds = legacy.nightLights.entityIds.filter((id) => id !== rustEntityId);
+  const switchEntityId =
+    legacy.teamOfflineSam.switchEntityId === rustEntityId
+      ? null
+      : legacy.teamOfflineSam.switchEntityId;
+
+  if (
+    entityIds.length === legacy.nightLights.entityIds.length &&
+    switchEntityId === legacy.teamOfflineSam.switchEntityId
+  ) {
+    return null;
+  }
+
+  return {
+    ...legacy,
+    nightLights: { ...legacy.nightLights, entityIds },
+    teamOfflineSam: { ...legacy.teamOfflineSam, switchEntityId },
+  };
+}
+
+/** Clear all legacy automation device references (e.g. on server wipe). */
+export function clearLegacyAutomationEntityRefs(
+  legacy: LegacyAutomationSettings,
+): LegacyAutomationSettings {
+  return {
+    ...legacy,
+    nightLights: { ...legacy.nightLights, entityIds: [] },
+    teamOfflineSam: { ...legacy.teamOfflineSam, switchEntityId: null },
+  };
+}

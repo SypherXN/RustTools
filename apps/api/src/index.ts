@@ -9,14 +9,16 @@ import { createDatabase, resolveDatabasePath, runMigrations } from "@rusttools/d
 import { users } from "@rusttools/db";
 import { eq } from "drizzle-orm";
 import { NotificationService, RustPlusManager } from "@rusttools/rustplus-client";
-import { env } from "./config.js";
+import { env, assertProductionDiscordGuildId, assertProductionDiscordRoles, assertProductionInternalApiKey, assertProductionRustPlusPairing, assertProductionSecrets } from "./config.js";
 import { getSessionUser } from "./lib/auth.js";
 import { hasDiscordCapability } from "./lib/discord-permissions.js";
+import { isUserBlocked } from "./lib/user-access.js";
 import { consumeWsToken } from "./lib/ws-tokens.js";
 import { registerRoutes } from "./routes/index.js";
 import { handleFcmNotification } from "./services/fcm-handler.js";
 import { startPhase2Listeners } from "./services/phase2-listeners.js";
 import { startInformationEmbedUpdater } from "./services/information-embed-updater.js";
+import { startDataRetention } from "./services/data-retention.js";
 import { reconnectStoredServers } from "./services/rustplus-bootstrap.js";
 import { WsHub } from "./services/ws-hub.js";
 import { postDiscordMessage } from "./lib/discord-messages.js";
@@ -39,6 +41,12 @@ async function sendDiscordMessage(notification: {
 }
 
 async function main() {
+  assertProductionSecrets();
+  assertProductionDiscordRoles();
+  assertProductionDiscordGuildId();
+  assertProductionInternalApiKey();
+  assertProductionRustPlusPairing();
+
   const dbPath = resolveDatabasePath(env.databaseUrl);
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
@@ -93,16 +101,22 @@ async function main() {
       return;
     }
 
+    if (await isUserBlocked(db, user)) {
+      socket.close(4403, "Forbidden");
+      return;
+    }
+
     wsHub.add(socket);
     socket.send(JSON.stringify({ event: "connected", payload: { ok: true } }));
   });
 
   await registerRoutes(app, { db, rustPlus });
 
+  await reconnectStoredServers(db, rustPlus);
+
   startPhase2Listeners(db, rustPlus, notifications);
   startInformationEmbedUpdater(db, rustPlus);
-
-  await reconnectStoredServers(db, rustPlus);
+  startDataRetention(db);
 
   const fcmPath = env.rustplus.resolvedFcmConfigPath;
   if (fs.existsSync(fcmPath)) {

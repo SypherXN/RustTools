@@ -16,12 +16,13 @@ For a quick local dev start, see the [README](../README.md).
 6. [Domain and DNS](#6-domain-and-dns)
 7. [Configure environment variables](#7-configure-environment-variables)
 8. [Deploy with Docker Compose](#8-deploy-with-docker-compose)
-9. [Rust+ FCM registration](#9-rust-fcm-registration)
-10. [Pair your server and devices](#10-pair-your-server-and-devices)
+9. [Rust+ FCM registration (master bot)](#9-rust-fcm-registration-master-bot)
+10. [Pair your server, link accounts, and devices](#10-pair-your-server-link-accounts-and-devices)
 11. [Register Discord slash commands](#11-register-discord-slash-commands)
 12. [Verify everything works](#12-verify-everything-works)
 13. [Updating after deploy](#13-updating-after-deploy)
 14. [Troubleshooting](#14-troubleshooting)
+15. [Disk usage & data growth](#disk-usage--data-growth)
 
 ---
 
@@ -32,9 +33,9 @@ RustTools splits across two hosts:
 | Component | Where it runs | Purpose |
 |-----------|---------------|---------|
 | **Web UI** | GitHub Pages | React dashboard (login, devices, map, etc.) |
-| **API** | Your VM (Docker) | REST + WebSocket, Rust+ connection, FCM listener, auth |
-| **Discord bot** | Your VM (Docker) | Slash commands → internal API |
-| **Caddy** | Your VM (Docker) | HTTPS reverse proxy for the API |
+| **API** | Your VM (Docker) — **Oracle A1 12 GB** recommended | REST + WebSocket, Rust+ connection, FCM listener, auth |
+| **Discord bot** | Same VM (Docker) | Slash commands → internal API |
+| **Caddy** | Same VM (Docker) | HTTPS reverse proxy for the API |
 
 ```
 Browser (GitHub Pages)
@@ -62,11 +63,21 @@ Before you start, have these ready:
 - [ ] **Docker** and **Docker Compose** on the VM
 - [ ] A machine with **Google Chrome** for one-time Rust+ FCM registration (can be your laptop, not the VM)
 - [ ] A **Rust+ mobile app** account linked to the same Steam account you play Rust with
+- [ ] Discord **role IDs** for at least one permission tier (`DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW`) — required in production
+- [ ] GitHub Actions variable **`VITE_API_URL`** set before the first Pages deploy
 
-Recommended VM specs (Oracle Free Tier):
+Recommended hosting (Oracle Always Free):
 
-- Ubuntu 22.04 or 24.04
-- 1 OCPU / 1–6 GB RAM (the stack is lightweight)
+| Role | Shape | Sizing |
+|------|--------|--------|
+| **RustTools** (this stack) | **Ampere A1** (`VM.Standard.A1.Flex`) | **2 OCPU · 12 GB RAM** (uses the full A1 Always Free pool) |
+| Other light bots / scripts | **E2.1.Micro** (optional, separate) | 1 OCPU · 1 GB — fine for a small Discord bot; **not** recommended for RustTools + procgen |
+
+Oracle Always Free A1 totals (across all A1 instances in the tenancy): **2 OCPUs** and **12 GB memory**. See [Oracle Always Free docs](https://docs.oracle.com/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm).
+
+Also works on any Linux VPS with a public IP, Docker, and **≥ 2 GB RAM** (12 GB recommended if you use procgen 3D map).
+
+- Ubuntu 22.04 or 24.04 (ARM64 on A1)
 - Open inbound ports **80** and **443**
 
 ---
@@ -131,7 +142,9 @@ You can configure channels in **two ways**:
 
 Re-register slash commands after updating the bot: `npm run register-commands --workspace=@rusttools/discord-bot`
 
-### 3.6 Role-based permissions (optional)
+### 3.6 Role-based permissions
+
+**Required in production** — the API will not start without `DISCORD_GUILD_ID` and at least one role env var.
 
 To restrict who can use the web dashboard and Discord bot:
 
@@ -142,11 +155,13 @@ To restrict who can use the web dashboard and Discord bot:
 |------|--------|-------------|
 | **View** | Read dashboard, map, storage, team | `/status`, `/devices`, `/team`, `/map`, `/online`, `/cargo`, `/events`, etc. |
 | **Switch** | Toggle switches, send team chat | `/switch`, `/alias`, `/chat`, `/send`, all team/world slash commands |
-| **Admin** | Settings, server activation, audit, renames | All of the above + `/channel`, `/blacklist`, `/mute`, `/unmute` |
+| **Admin** | Settings, master bot re-pair, audit, renames | All of the above + `/channel`, `/blacklist`, `/mute`, `/unmute` |
 
 Higher roles include lower ones (Admin can do everything Switch and View can).
 
-Leave all role env vars blank to allow any logged-in Discord user full access.
+In production, set `DISCORD_GUILD_ID` and at least one of `DISCORD_ROLE_ADMIN`,
+`DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW`. Development mode may leave role
+env vars blank to allow any logged-in Discord user full access.
 
 ---
 
@@ -162,13 +177,13 @@ Pushes to `main` run `.github/workflows/deploy-pages.yml` and publish the web UI
 ### 4.2 Set the API URL variable
 
 1. Repo → **Settings** → **Secrets and variables** → **Actions** → **Variables**
-2. Add:
+2. Add (**required** — the Pages workflow fails the build if this is missing):
 
 | Name | Example value |
 |------|----------------|
 | `VITE_API_URL` | `https://rusttools.yourdomain.com` |
 
-No trailing slash. This is baked into the frontend at build time.
+No trailing slash. This is baked into the frontend at build time. Local dev uses the Vite proxy (`/api`) when this variable is unset.
 
 Optional GitHub Actions variable:
 
@@ -199,10 +214,15 @@ These steps are for Oracle Cloud; adapt as needed for other providers.
 ### 5.1 Create the instance
 
 1. Oracle Cloud Console → **Compute** → **Instances** → **Create instance**
-2. Image: **Ubuntu 22.04** or **24.04**
-3. Shape: **Ampere A1** (Always Free) or equivalent
-4. Add your SSH public key
-5. Create the instance and note the **public IP**
+2. Image: **Ubuntu 22.04** or **24.04** (A1 uses **aarch64**)
+3. Shape: **Ampere A1** → `VM.Standard.A1.Flex` → **2 OCPUs**, **12 GB** memory (Always Free)
+4. Boot volume: default **47 GB** is fine (200 GB block storage free tier shared across volumes)
+5. Add your SSH public key
+6. Create the instance and note the **public IP**
+
+**Splitting with other projects:** You can run RustTools on **1 OCPU · 12 GB** and leave 1 OCPU unused, or use **2 OCPU · 12 GB** on one VM (recommended for faster procgen). Do not run RustTools on **E2.1.Micro** (1 GB) unless you add swap and accept slow procgen — see [Minimal VM (E2.1.Micro)](#minimal-vm-e21micro).
+
+**Other bots:** A separate **E2.1.Micro** does not count against the A1 2/12 pool — a common layout is RustTools on A1, household bot on micro.
 
 ### 5.2 Open firewall ports
 
@@ -287,10 +307,15 @@ nano .env             # or your preferred editor
 | `DISCORD_CLIENT_SECRET` | OAuth client secret |
 | `DISCORD_REDIRECT_URI` | `https://rusttools.yourdomain.com/auth/discord/callback` |
 | `DISCORD_BOT_TOKEN` | Bot token |
-| `DISCORD_GUILD_ID` | Your Discord server ID |
-| `INTERNAL_API_KEY` | Long random string (same value used by API and bot — generate with `openssl rand -hex 32`) |
+| `DISCORD_GUILD_ID` | Your Discord server ID (**required in production**) |
+| `DISCORD_ROLE_ADMIN` / `DISCORD_ROLE_SWITCH` / `DISCORD_ROLE_VIEW` | Role IDs for permission tiers — **at least one required in production** |
+| `INTERNAL_API_KEY` | Long random string, **32+ characters** (same value in API and bot — generate with `openssl rand -hex 32`) |
 | `CORS_ORIGINS` | Your GitHub Pages origin, e.g. `https://sypherxn.github.io` |
 | `FRONTEND_URL` | Full Pages URL including repo path, e.g. `https://sypherxn.github.io/RustTools` |
+
+`./scripts/setup.sh` generates `SESSION_SECRET` and `ENCRYPTION_KEY` if they still use the `.env.example` placeholders. In production, the API also refuses to start if those secrets or `INTERNAL_API_KEY` still use example defaults.
+
+Do **not** set `RUSTPLUS_ALLOW_UNPROMPTED_PAIR=true` in production — master server pairing must go through **Settings → Server & Map → Re-pair Server**.
 
 ### Production example (partial)
 
@@ -311,14 +336,20 @@ DISCORD_CLIENT_SECRET=your-secret
 DISCORD_REDIRECT_URI=https://rusttools.yourdomain.com/auth/discord/callback
 DISCORD_BOT_TOKEN=your-bot-token
 DISCORD_GUILD_ID=9876543210987654321
+DISCORD_ROLE_ADMIN=1111111111111111111
+DISCORD_ROLE_SWITCH=2222222222222222222
+DISCORD_ROLE_VIEW=3333333333333333333
 
-INTERNAL_API_KEY=your-long-random-internal-key
+INTERNAL_API_KEY=your-long-random-internal-key-at-least-32-characters
 
 DISCORD_NOTIFICATION_CHANNEL_ID=1111111111111111111
 DISCORD_TEAM_CHAT_CHANNEL_ID=2222222222222222222
 
 RUSTPLUS_FCM_CONFIG_PATH=./data/fcm-config.json
 DATABASE_URL=file:./data/rusttools.db
+
+# Procgen parse heap for child worker (default 4096 — tuned for A1 12 GB)
+# PROCGEN_PARSE_HEAP_MB=4096
 
 # Optional — default 600 req/min per IP; /health is exempt
 # API_RATE_LIMIT_MAX=600
@@ -357,9 +388,13 @@ This starts three services:
 
 | Service | Role |
 |---------|------|
-| `api` | Runs DB migrations on start, then the API on port 3000 |
+| `api` | Runs DB migrations (`node packages/db/dist/migrate.js`), then the API on port 3000 |
 | `discord-bot` | Connects to Discord; calls API at `http://api:3000` |
 | `caddy` | Terminates HTTPS and proxies API routes |
+
+Caddy forwards these paths to the API: `/admin/*`, `/audit`, `/auth/*`, `/automation-*`, `/cameras/*`, `/device-library*`, `/devices*`, `/health`, `/push/*`, `/servers*`, `/storage*`, `/switch-groups*`, `/vending/*`, `/ws`. All other HTTPS requests get a short “use GitHub Pages” message.
+
+Container logs use the **json-file** driver with rotation (**10 MB × 3 files** per service) — see `docker-compose.yml`.
 
 ### Check status
 
@@ -389,11 +424,13 @@ docker run --rm -v rusttools_rusttools-data:/data -v $(pwd):/backup alpine \
 
 ---
 
-## 9. Rust+ FCM registration
+## 9. Rust+ FCM registration (master bot)
 
-FCM registration links your Facepunch/Rust+ account to the API so in-game pairing notifications reach your server.
+FCM registration links the **master bot’s** Facepunch/Rust+ account to the API so **server and device pairing notifications** reach your host. This is **one shared config** for the 24/7 bot — not per-teammate.
 
-**This step requires Chrome with a display** (run on your laptop, not headless on the VM).
+Teammates do **not** need FCM on the server. They link **Steam ID** (and optionally **companion Rust+** credentials) in **Settings → Account** without touching the master connection.
+
+**This step requires Chrome with a display** (run on your laptop, not headless on the VM). Use a dedicated Rust+ account / phone for the bot if possible.
 
 ### 9.1 Register locally
 
@@ -404,7 +441,7 @@ mkdir -p data
 npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json
 ```
 
-Follow the browser prompts and sign in with the **same Steam account** you use in Rust.
+Follow the browser prompts and sign in with the **Steam account used for the master bot** (the account that will stay paired 24/7).
 
 ### 9.2 Copy config to the VM
 
@@ -451,25 +488,57 @@ docker compose exec api ls -la /app/data/
 
 ---
 
-## 10. Pair your server and devices
+## 10. Pair your server, link accounts, and devices
 
-### 10.1 Link your Steam account (web)
+RustTools uses three separate link types. Only **master bot** pairing affects the live Rust+ WebSocket that powers devices, team, and automations.
 
-1. Open your GitHub Pages URL, e.g. `https://sypherxn.github.io/RustTools/`
-2. **Log in with Discord**
-3. Go to **Settings** → **Link Rust+ Account** → click the button
-4. Status should show “Waiting for in-game pairing…”
+| Link type | Who | Settings location | Stored where |
+|-----------|-----|-------------------|--------------|
+| **Master bot** | Admin | **Server & Map → Master Bot Server Pair** | `rust_servers` + active WebSocket |
+| **Steam identity** | Any teammate (View+) | **Account → Steam Identity** | `users.steam_id` |
+| **Companion Rust+** | Optional (View+) | **Account → Companion Rust+** | Encrypted on `users` row only |
 
-### 10.2 Pair the server (in-game)
+Companion credentials are used **only** for brief leader promotion when the in-game leader is not the master bot. Saving or using companion links **does not** disconnect the master bot or take down other features.
 
-1. Join your Rust server
-2. Open the **Rust+** menu (mobile app or in-game overlay)
-3. Choose **Pair with Server**
-4. Within a minute, the server should appear in RustTools (Dashboard shows connection; Settings shows linked Steam ID)
+### 10.1 Pair the master server (admin)
 
-### 10.3 Pair devices
+1. Confirm FCM is listening (section 9.4)
+2. Open the web UI → log in with Discord (admin role)
+3. **Settings → Server & Map → Master Bot Server Pair** → click **Re-pair Server**
+4. In-game on the **bot’s Rust+ account**: **Pair with Server**
+5. Within a minute, the Dashboard should show the server connected
 
-In-game, use the **wire tool** on smart switches, alarms, and storage monitors while connected to the paired server. They appear under **Devices** in the web UI.
+In **production**, unprompted server pairs (FCM notifications without a pending admin-started link) are **rejected**. In local dev, unprompted pairing is allowed by default (`RUSTPLUS_ALLOW_UNPROMPTED_PAIR` defaults to true unless set to `false`).
+
+### 10.2 Link Steam identity (teammates)
+
+Required for `!leader` / `/leader` (bot must know your Steam ID).
+
+1. **Settings → Account → Steam Identity**
+2. **Recommended:** enter your 17-digit Steam ID from in-game F1 → `player.id` → **Save Steam ID**
+3. **Alternative:** click **Start pairing flow**, then pair a device on the master Rust+ account (admin operation) — only one pending Steam link is processed at a time
+
+Steam linking does **not** give teammates device control; permissions still come from Discord roles.
+
+### 10.3 Link companion Rust+ (optional)
+
+Only needed if you want RustTools to promote someone **while you are in-game leader** but the master bot is not leader.
+
+1. On your own computer (not the VM):
+   ```bash
+   npx @liamcottle/rustplus.js fcm-register --config-file=./fcm-companion.json
+   ```
+2. In **your** Rust+ app: **Pair with Server** on the same Rust server
+3. Copy `playerId` and `playerToken` from the pairing output / notification
+4. **Settings → Account → Companion Rust+** → paste both → **Save companion credentials**
+
+The master bot keeps running. During promote, RustTools opens a **short-lived** second connection as your account, sends `promoteToLeader`, then disconnects.
+
+Do **not** use the bot’s FCM listener for companion pairing unless you intend to capture that notification on the server — the recommended path is **local `fcm-register` + paste**.
+
+### 10.4 Pair devices (admin / bot account)
+
+In-game on the **master bot’s Rust+ session**, use the **wire tool** on smart switches, alarms, and storage monitors while connected to the paired server. They appear under **Devices** in the web UI.
 
 Each **smart switch** shows a live **ON** / **OFF** / **Unknown** badge (from Rust+). The badge updates when you toggle from the web UI, Discord, in-game chat, or when someone flips the switch manually in-game — as long as Rust+ is connected and you have the Devices page (or another tab with WebSocket) open.
 
@@ -477,7 +546,7 @@ On the Devices page, **On** and **Off** force that state; **Toggle** flips the c
 
 Check switch state in-game: `!alias status` (alias configured under device Settings). In Discord: `/alias name:<alias> action:status`.
 
-### 10.4 Team chat (web)
+### 10.5 Team chat (web)
 
 On the **Team** page (Switch permission to send):
 
@@ -488,7 +557,7 @@ On the **Team** page (Switch permission to send):
 
 Discord `/chat` uses the same delivery path and also mirrors to the team-chat channel when configured.
 
-### 10.5 Server automation base (optional, admin)
+### 10.6 Server automation base (optional, admin)
 
 Used by **Automations** proximity rules (e.g. “all teammates away from base”) and shown on the map as a blue circle:
 
@@ -497,12 +566,12 @@ Used by **Automations** proximity rules (e.g. “all teammates away from base”
    - Set **Radius (m)** — circular distance in world meters (default **150**, max **10,000**)
 2. **Map page** (admin): **Set server base** in the toolbar → click the map → label + radius → save  
    Or open a team pin → **Set as server base**
-3. On the map, enable **Layers → Server base** to see the zone in **2D** and **3D** (3D requires procgen upload, section 10.6)
+3. On the map, enable **Layers → Server base** to see the zone in **2D** and **3D** (3D requires procgen upload, section 10.7)
 4. **Layers panel** (admin): edit proximity radius inline; **Focus base** pans to the center
 
 Per-rule **Radius (m)** on proximity triggers/conditions overrides the server default when set.
 
-### 10.6 Procgen map upload (optional)
+### 10.7 Procgen map upload (optional)
 
 Unlocks building-blocked overlays, resource heatmaps, roads/caves, and the **3D map** (not available from Rust+ alone):
 
@@ -511,12 +580,13 @@ Unlocks building-blocked overlays, resource heatmaps, roads/caves, and the **3D 
    - **In-game:** F1 console → `Download map file` (usually saves to Downloads), or
    - **Client cache:** after joining, find the file under your Rust `maps` folder (OS-specific path)
 3. Web UI → **Settings → Server & Map** → **Upload .map file**
-4. Open **Map** → enable procgen layers in the layers panel; switch to **3D** when parse status is `ready`
-5. Toggle **Server base** in layers to verify the automation base circle on terrain (if configured in 10.5)
+4. Parsing runs in a **background child process** (default **4 GB** heap on A1 — see [Disk usage & data growth](#disk-usage--data-growth))
+5. Open **Map** → enable procgen layers in the layers panel; switch to **3D** when parse status is `ready`
+6. Toggle **Server base** in layers to verify the automation base circle on terrain (if configured in 10.5)
 
 Seed/world-size mismatches are shown if the uploaded map does not match the active server.
 
-### 10.7 Live cameras (optional)
+### 10.8 Live cameras (optional)
 
 The **Cameras** page is on by default. To use it:
 
@@ -541,13 +611,6 @@ npm run register-commands --workspace=@rusttools/discord-bot
 
 Requires `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, and `DISCORD_GUILD_ID` in `.env`.
 
-Alternatively on the VM (one-off with Node installed, or via a temporary container):
-
-```bash
-docker compose run --rm -e DISCORD_BOT_TOKEN -e DISCORD_CLIENT_ID -e DISCORD_GUILD_ID \
-  discord-bot node -e "..." 
-```
-
 The npm script on a dev machine is the easiest path. After registration, commands appear in your Discord server within a few seconds.
 
 **Core:** `/help`, `/status`, `/devices`, `/switch`, `/alias`, `/alarm`, `/storage`, `/team`, `/time`, `/deepsea`, `/chat`, `/send`, `/map`, `/pair`, `/link`
@@ -567,11 +630,14 @@ Use this checklist after deploy:
 | Step | How to verify |
 |------|----------------|
 | API HTTPS | `curl https://YOUR_DOMAIN/health` returns 200 |
+| Production env | API container stays up (no startup validation errors in `docker compose logs api`) |
 | GitHub Pages | UI loads at `https://USER.github.io/RustTools/` |
 | Discord login | Log in on the web UI; redirects back to Pages logged in |
 | FCM | `/health` shows `"fcm": { "listening": true, "configured": true }` |
 | FCM expiry | **Settings → Admin** shows registered/expiry dates |
-| Rust+ | Dashboard shows server name and player count |
+| Rust+ | Dashboard shows server name and player count (master bot paired) |
+| Account links | Teammate can save Steam ID; optional companion credentials in Settings → Account |
+| Leader promote | `!leader` works when sender is online/alive and promotion path exists (master or companion) |
 | Devices | Each switch shows ON/OFF badge; **On**/**Off** set state; **Toggle** flips |
 | Switch live update | Flip a switch in-game → badge updates on open Devices page (Rust+ connected) |
 | Team chat | Send from Team page → message appears instantly; feed scrolls |
@@ -596,7 +662,7 @@ git pull
 docker compose up -d --build
 ```
 
-Database migrations run automatically when the API container starts.
+Database migrations run automatically when the API container starts (`node packages/db/dist/migrate.js` before the API process).
 
 After API URL or frontend changes:
 
@@ -609,6 +675,16 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 ---
 
 ## 14. Troubleshooting
+
+### API container exits immediately on startup
+
+Check `docker compose logs api` for a validation error. In production (`NODE_ENV=production`), common causes:
+
+- `SESSION_SECRET` or `ENCRYPTION_KEY` still use `.env.example` placeholders — run `./scripts/setup.sh` or set unique values
+- `DISCORD_GUILD_ID` is empty
+- No `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW` set
+- `INTERNAL_API_KEY` is missing, shorter than 32 characters, or still the example default
+- `RUSTPLUS_ALLOW_UNPROMPTED_PAIR=true` is set (not allowed in production)
 
 ### Caddy / HTTPS not working
 
@@ -626,16 +702,24 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 
 ### Web UI shows errors / cannot reach API
 
-- Confirm GitHub variable `VITE_API_URL` matches your live API URL
+- Confirm GitHub variable `VITE_API_URL` is set and matches your live API URL (Pages build fails without it)
 - Re-run the Pages deploy workflow after changing `VITE_API_URL`
 - Browser devtools → Network: requests should go to your API domain, not `localhost`
 
 ### `rustplus.connected: false`
 
-- Pair the server in-game (Rust+ menu)
-- Complete **Link Rust+ Account** in Settings first
+- Admin: complete **Master Bot Server Pair** (Settings → Server & Map) and pair in-game on the bot account
 - FCM must be listening (`fcm.listening: true`)
 - Check API logs: `docker compose logs api`
+
+Teammate Steam / companion links do **not** affect `rustplus.connected`.
+
+### Leader promote fails
+
+- Target must be **online** and **alive**, and on the team roster
+- `!leader` / `/leader`: link **Steam ID** in Settings → Account first
+- If the current leader is **not** the master bot, that leader must save **Companion Rust+** credentials, or promote the master bot account in-game first
+- Web **Team** page promote (admin): same rules; **Make leader** only shows for eligible targets when promotion is possible
 
 ### FCM not listening
 
@@ -651,7 +735,7 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 
 ### Rust+ “rate limit” on map or team data
 
-- Facepunch limits Rust+ API calls; RustTools caches reads and staggers background polls
+- Facepunch limits Rust+ API calls; RustTools caches reads (15–120s TTL), uses short entity-info cache with re-read after subscribe, limits concurrent switch/storage reads, staggers 60s background jobs (0s / 20s / 40s offsets), and retries on rate-limit errors
 - Wait a few seconds and refresh; avoid hammering the map refresh button
 
 ### Cameras time out or show no feed
@@ -663,7 +747,7 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 
 ### Discord bot online but commands fail
 
-- `INTERNAL_API_KEY` must match in API and bot (bot uses same `.env`)
+- `INTERNAL_API_KEY` must match in API and bot and be **32+ characters** in production
 - Bot uses `http://api:3000` inside Docker (set in `docker-compose.yml`; do not override with public URL for the bot service)
 - Register commands: `npm run register-commands --workspace=@rusttools/discord-bot`
 - Restart API and bot after deploy so slash-command routes and embed payloads are current
@@ -680,12 +764,74 @@ Re-register slash commands only if command definitions changed in `apps/discord-
 - Bot needs `applications.commands` scope when invited
 - Commands are guild-scoped; check `DISCORD_GUILD_ID`
 
+### Procgen `.map` upload fails or hangs
+
+- Check **Settings → Server & Map** parse status and error message
+- On **A1 12 GB** (default): `PROCGEN_PARSE_HEAP_MB=4096` in `.env` / `docker-compose.yml` — no swap required
+- Parse can take **several minutes** on 1 OCPU; watch `docker compose logs -f api`
+- On **E2.1.Micro**: see [Minimal VM (E2.1.Micro)](#minimal-vm-e21micro) — swap + `PROCGEN_PARSE_HEAP_MB=2048`
+- Ensure the uploaded file matches the active server (seed/size warnings on status page)
+
 ### Team chat / live updates not working on GitHub Pages
 
 - Live updates use WebSocket with a short-lived token from `/auth/ws-token`
 - You must be logged in; check browser console for WebSocket errors
 - API must be HTTPS (`wss://`)
 - If your own sent messages do not appear, restart the API after upgrading — older builds did not broadcast outbound web chat over WebSocket
+
+---
+
+## Disk usage & data growth
+
+RustTools keeps disk use bounded automatically:
+
+| What | Where | Retention |
+|------|--------|-----------|
+| **Audit log** | `audit_events` table | Entries **older than 30 days** pruned automatically; **cleared on map wipe** |
+| **Procgen map** | `data/procgen/<serverId>/` | **Replaced** when you upload a new `.map` (old files deleted first) |
+| **FCM config** | `data/fcm-config.json` | **Replaced** on admin upload; expiry clock resets from upload time |
+| **SQLite database** | `data/rusttools.db` | Usually stays small with the policies above |
+| **User link data** | `users` table | Steam ID + encrypted companion tokens (small; promote-only) |
+| **Team death / connection logs** | `team_death_log`, `team_connection_log` | **Cleared automatically on map wipe** (seed change detected every 5 min) |
+| **Docker logs** | `docker compose logs` | **Rotated** — 10 MB × 3 files per service (see `docker-compose.yml`) |
+
+**Manual cleanup (optional):**
+
+- **Settings → Admin → Data reset** can still clear `audit_log` or team logs immediately.
+- Monitor with `du -sh data/` and `ls -lh data/rusttools.db`.
+
+### Oracle A1 (12 GB) — recommended for RustTools
+
+Procgen `.map` parsing runs in a **short-lived child process** so the main API stays responsive. Defaults are tuned for **12 GB RAM**:
+
+| Setting | Default | Notes |
+|---------|---------|--------|
+| `PROCGEN_PARSE_HEAP_MB` | **4096** | Child process heap; set in `.env` or `docker-compose.yml` |
+| Swap | Not required | Optional 1–2 GB swap as insurance |
+
+Upload the `.map` from **Settings → Server & Map** when the server is quiet. On **2 OCPU · 12 GB**, parsing usually finishes in a few minutes.
+
+### Minimal VM (E2.1.Micro)
+
+**Not recommended** for RustTools if you use procgen — only 1 GB RAM. If you must run here (or are testing):
+
+1. Add **2 GB swap** (required for procgen):
+
+```bash
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+2. In `.env`:
+
+```env
+PROCGEN_PARSE_HEAP_MB=2048
+```
+
+Parsing may take **5–15 minutes** and will be slow. Prefer moving RustTools to **A1 12 GB** and keeping other bots on micro.
 
 ---
 

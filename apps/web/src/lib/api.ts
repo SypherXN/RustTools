@@ -1,6 +1,7 @@
 import { demoHandleApi, isDemoMode } from "./demo";
+import { cachedApiFetch } from "./api-cache";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (isDemoMode()) {
@@ -8,6 +9,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     return demoHandleApi<T>(path, init);
   }
 
+  return cachedApiFetch(path, () => fetchJson<T>(path, init), init);
+}
+
+async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const hasBody = init?.body != null && init.body !== "";
   const headers = new Headers(init?.headers);
   if (hasBody && !headers.has("Content-Type")) {

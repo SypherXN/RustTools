@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import PushReceiverClient from "@liamcottle/push-receiver/src/client";
+import PushReceiverClient from "@liamcottle/push-receiver/src/client.js";
 
 export interface FcmConfig {
   fcm_credentials?: {

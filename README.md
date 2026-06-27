@@ -2,6 +2,8 @@
 
 Self-hosted Rust companion for your team — Rust+ device control, live web dashboard, and Discord bot.
 
+**Account model:** one **master bot** Rust+ connection (FCM on the server) powers devices and live data; each teammate optionally links **Steam ID** and **companion Rust+** in Settings for identity and leader promotion.
+
 **Full feature list:** [FEATURES.md](FEATURES.md) · **Production deploy:** [docs/SETUP.md](docs/SETUP.md)
 
 ## Architecture
@@ -11,7 +13,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 - **Discord bot** — slash commands (embed responses) calling the API via internal auth
 
 ```
-GitHub Pages (UI)  ──HTTPS──►  Oracle VM (Caddy → API + Discord bot)
+GitHub Pages (UI)  ──HTTPS──►  Oracle A1 VM (Caddy → API + Discord bot)
                                     │
                                     ├── FCM ──► Rust Companion API
                                     └── WebSocket ──► Rust game server
@@ -56,10 +58,21 @@ The API dev script sets `NODE_OPTIONS='--max-old-space-size=4096'` for procgen m
 2. Copy Client ID + Secret to `.env`
 3. Create bot → copy token to `DISCORD_BOT_TOKEN`
 4. Invite bot with `bot` + `applications.commands` scopes (Message Content Intent is **not** required)
-5. Set `DISCORD_GUILD_ID`, `INTERNAL_API_KEY` (same value in API and bot `.env`)
-6. Register slash commands (see above)
+5. Set `DISCORD_GUILD_ID`, `INTERNAL_API_KEY` (32+ characters; same value in API and bot `.env`)
+6. **Production:** set at least one of `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW` — the API refuses to start without them when `NODE_ENV=production`
+7. Register slash commands (see above)
 
-### Rust+ pairing
+### Rust+ pairing (three tiers)
+
+RustTools separates the **24/7 bot account** from **per-user identity** and **optional companion credentials**:
+
+| Tier | Who | Where in UI | Purpose |
+|------|-----|-------------|---------|
+| **Master bot** | Admin | **Settings → Server & Map → Master Bot Server Pair** | 24/7 Rust+ WebSocket for devices, team, map, automations |
+| **Steam identity** | Anyone (View+) | **Settings → Account → Steam Identity** | Links Discord → Steam ID for `!leader` and command identity |
+| **Companion Rust+** | Optional (View+) | **Settings → Account → Companion Rust+** | Lets the bot promote via your account when you are in-game leader |
+
+**Master bot** uses the server FCM config (`fcm-config.json`). **Companion** credentials are stored encrypted on your user row only — they do **not** replace or disconnect the master bot.
 
 **Option A — CLI (one-time on a machine with Chrome):**
 
@@ -67,19 +80,21 @@ The API dev script sets `NODE_OPTIONS='--max-old-space-size=4096'` for procgen m
 npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json
 ```
 
-Restart the API if it was already running.
+Restart the API if it was already running. Use the **same Steam account** as the dedicated bot / Rust+ phone.
 
 **Option B — Web upload (admin):** run `fcm-register` locally, then **Settings → Admin → FCM credentials** and upload `fcm-config.json`. The API saves it and restarts the FCM listener.
 
-In-game: Rust+ menu → **Pair with Server**, then pair devices with the wire tool.
+**In-game (master):** Rust+ menu → **Pair with Server** (after admin starts **Master Bot Server Pair**), then pair devices with the wire tool. In production, unprompted server pairs are rejected — the admin must start **Re-pair Server** first.
 
-Web: **Settings → Account** → **Link Rust+ Account**, then pair in-game.
+**Teammates:** **Settings → Account** → enter Steam ID (F1 `player.id`) or link optional companion Rust+ with locally generated credentials — no server FCM required.
 
 FCM credentials expire after ~90 days; admins see a warning banner within 14 days of expiry and full status in **Settings → Admin**.
 
 ### Procgen map (optional, unlocks 3D + heatmaps)
 
 In **Settings → Server & Map**, upload the server’s `.map` file from your Rust client cache after joining, or from in-game F1 → `Download map file`. This enables building-blocked overlays, resource heatmaps, roads/caves on the map, and the **3D** view.
+
+On production (Oracle **A1 12 GB**), parsing uses an isolated child process (default **4 GB** heap). Local dev uses a larger in-process heap via `npm run dev`.
 
 ### Server automation base (optional)
 
@@ -95,22 +110,33 @@ Default proximity radius is **150 m** (circular world distance). Each automation
 
 The **Cameras** page is enabled by default. Remote CCTV requires the server owner to run `cctvrender.enabled true` in the server console (usually off on public servers). Set `VITE_LIVE_CAMERAS=false` at web build time to hide the nav item.
 
-## Production (Oracle VM)
+## Production (Oracle A1)
+
+Target layout: **Ampere A1** with **2 OCPU · 12 GB RAM** (Oracle Always Free). UI stays on **GitHub Pages**; the VM runs API + Discord bot + Caddy only.
 
 See **[docs/SETUP.md](docs/SETUP.md)** for step-by-step deploy instructions.
 
 ```bash
 cp .env.example .env
-# Set DOMAIN, API_PUBLIC_URL, CORS_ORIGINS, all secrets
+./scripts/setup.sh   # generates SESSION_SECRET + ENCRYPTION_KEY
+# Set DOMAIN, API_PUBLIC_URL, CORS_ORIGINS, FRONTEND_URL, Discord credentials,
+# DISCORD_GUILD_ID, DISCORD_ROLE_* (at least one), INTERNAL_API_KEY (32+ chars)
+# PROCGEN_PARSE_HEAP_MB defaults to 4096 in docker-compose.yml
 
 docker compose up -d --build
 ```
+
+**GitHub Pages:** set repository variable `VITE_API_URL` to your API origin (e.g. `https://rusttools.yourdomain.com`, no trailing slash). The Pages workflow **fails the build** if this variable is missing.
+
+**Production startup checks:** with `NODE_ENV=production`, the API exits on boot if secrets use dev defaults, `DISCORD_GUILD_ID` is unset, no Discord role env vars are set, `INTERNAL_API_KEY` is missing/short, or `RUSTPLUS_ALLOW_UNPROMPTED_PAIR=true`.
+
+**Other services** (e.g. a household Discord bot) can run on a separate **E2.1.Micro** without using the A1 memory pool.
 
 ## Highlights
 
 | Area | What you get |
 |------|----------------|
-| **Rust+** | FCM pairing, switches/alarms/storage, map/team/markers, reconnect + read caching |
+| **Rust+** | Gated master FCM pairing (prod), per-user Steam + companion links, switches/alarms/storage, map/team/markers, reconnect + read caching |
 | **Web UI** | Dashboard, devices (live ON/OFF badges, explicit On/Off controls), storage, 2D/3D map, server base zone, live team chat, automations, cameras, audit, settings |
 | **Map** | Live Rust+ map, server base overlay, optional procgen `.map` layers (heatmaps, no-build zones, 3D terrain) |
 | **Automations** | IFTTT rules, switch groups, server base + configurable proximity radius (meters) |

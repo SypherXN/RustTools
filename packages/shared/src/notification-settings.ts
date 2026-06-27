@@ -67,11 +67,24 @@ import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
 import type { EventTimerSettings } from "./world-events.js";
 import { DEFAULT_EVENT_TIMER_SETTINGS } from "./world-events.js";
 
+export interface TeamActivitySettings {
+  /** Max deaths kept in DB log and in-memory live tracker per server within a wipe. */
+  deathLogLimit: number;
+  /** Maximum connection log rows kept per server within a wipe. */
+  connectionLogLimit: number;
+}
+
+export const DEFAULT_TEAM_ACTIVITY_SETTINGS: TeamActivitySettings = {
+  deathLogLimit: 100,
+  connectionLogLimit: 200,
+};
+
 export interface ServerNotificationSettings {
   smartAlarm: SmartAlarmNotificationSettings;
   deepSea: DeepSeaNotificationSettings;
   tcDecay: TcDecayNotificationSettings;
   teamChatBot: TeamChatBotSettings;
+  teamActivity: TeamActivitySettings;
   eventTimers: EventTimerSettings;
   automationBase: AutomationBaseSettings;
   legacyAutomations: LegacyAutomationSettings;
@@ -117,6 +130,7 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
   },
   tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
   teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+  teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
   eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
   automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
   legacyAutomations: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS },
@@ -129,6 +143,7 @@ export function mergeNotificationSettings(
     deepSea?: Partial<DeepSeaNotificationSettings>;
     tcDecay?: Partial<TcDecayNotificationSettings>;
     teamChatBot?: Partial<TeamChatBotSettings>;
+    teamActivity?: Partial<TeamActivitySettings>;
     eventTimers?: Partial<EventTimerSettings>;
     automationBase?: Partial<AutomationBaseSettings>;
     legacyAutomations?: Partial<LegacyAutomationSettings> & {
@@ -159,6 +174,10 @@ export function mergeNotificationSettings(
     teamChatBot: {
       ...current.teamChatBot,
       ...patch.teamChatBot,
+    },
+    teamActivity: {
+      ...current.teamActivity,
+      ...patch.teamActivity,
     },
     eventTimers: {
       ...current.eventTimers,
@@ -194,6 +213,7 @@ export function parseServerNotificationSettings(
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
       tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+      teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
       legacyAutomations: legacyAutomationsFromEnv(),
@@ -207,6 +227,7 @@ export function parseServerNotificationSettings(
       deepSea: parsed.deepSea,
       tcDecay: parsed.tcDecay,
       teamChatBot: parsed.teamChatBot,
+      teamActivity: parsed.teamActivity,
       eventTimers: parsed.eventTimers,
       automationBase: parsed.automationBase,
       legacyAutomations: parsed.legacyAutomations ?? envLegacy,
@@ -217,6 +238,7 @@ export function parseServerNotificationSettings(
       deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
       tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
+      teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
       legacyAutomations: legacyAutomationsFromEnv(),

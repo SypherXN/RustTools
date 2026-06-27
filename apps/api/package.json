@@ -19,7 +19,7 @@
     "@rusttools/rustplus-client": "*",
     "@rusttools/shared": "*",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.41.0",
+    "drizzle-orm": "^0.45.2",
     "fastify": "^5.2.1",
     "nanoid": "^5.1.5",
     "rustworld": "^1.0.3",

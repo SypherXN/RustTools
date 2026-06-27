@@ -60,11 +60,18 @@ export function DevicesPage() {
   const load = async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
     try {
-      const [deviceData, groupData] = await Promise.all([
+      const [deviceData, statesData, groupData] = await Promise.all([
         apiFetch<{ devices: Device[] }>("/devices"),
+        apiFetch<{ states: Record<string, boolean | null> }>("/devices/switch-states"),
         apiFetch<{ groups: SwitchGroupRecord[] }>("/switch-groups").catch(() => ({ groups: [] })),
       ]);
-      setDevices(deviceData.devices);
+      setDevices(
+        deviceData.devices.map((device) =>
+          device.entityType === "smart_switch"
+            ? { ...device, switchValue: statesData.states[device.id] ?? null }
+            : device,
+        ),
+      );
       setSwitchGroups(groupData.groups);
       setError(null);
     } catch (err) {
@@ -94,7 +101,26 @@ export function DevicesPage() {
       return;
     }
 
-    void load({ silent: true });
+    void (async () => {
+      const device = devices.find((d) => d.entityId === data.entityId);
+      if (device?.entityType === "smart_switch") {
+        try {
+          const { states } = await apiFetch<{ states: Record<string, boolean | null> }>(
+            `/devices/switch-states?entityDbId=${encodeURIComponent(device.id)}`,
+          );
+          const value = states[device.id];
+          if (value !== undefined) {
+            setDevices((prev) =>
+              prev.map((d) => (d.id === device.id ? { ...d, switchValue: value } : d)),
+            );
+            return;
+          }
+        } catch {
+          // fall through to full reload
+        }
+      }
+      void load({ silent: true });
+    })();
   });
 
   const groupedDevices = useMemo(() => groupDevicesByType(devices), [devices]);

@@ -5,25 +5,46 @@ import { useActiveServer } from "./useActiveServer";
 
 const POLL_MS = 15_000;
 
-export function useRustPlusStatus(): "ok" | "warn" | "error" | "unknown" {
+export interface HealthResponse {
+  status: string;
+  rustplus: { connected: boolean; activeServerId: string | null };
+  fcm: { listening: boolean };
+}
+
+export function useRustPlusStatus(): {
+  status: "ok" | "warn" | "error" | "unknown";
+  health: HealthResponse | null;
+} {
   const [status, setStatus] = useState<"ok" | "warn" | "error" | "unknown">("unknown");
+  const [health, setHealth] = useState<HealthResponse | null>(null);
   const { epoch } = useActiveServer();
 
   useEffect(() => {
     if (isDemoMode()) {
       setStatus("ok");
+      setHealth({
+        status: "ok",
+        rustplus: { connected: true, activeServerId: "demo" },
+        fcm: { listening: false },
+      });
       return;
     }
 
     let cancelled = false;
 
     const refresh = () => {
-      void apiFetch<{ rustplus: { connected: boolean } }>("/health")
+      void apiFetch<HealthResponse>("/health")
         .then((h) => {
-          if (!cancelled) setStatus(h.rustplus.connected ? "ok" : "warn");
+          if (!cancelled) {
+            setHealth(h);
+            setStatus(h.rustplus.connected ? "ok" : "warn");
+          }
         })
         .catch(() => {
-          if (!cancelled) setStatus("error");
+          if (!cancelled) {
+            setHealth(null);
+            setStatus("error");
+          }
         });
     };
 
@@ -35,5 +56,5 @@ export function useRustPlusStatus(): "ok" | "warn" | "error" | "unknown" {
     };
   }, [epoch]);
 
-  return status;
+  return { status, health };
 }

@@ -225,7 +225,7 @@ function PinDetails({
   canSetServerBase?: boolean;
   onSetAsServerBase?: (pin: MapPin) => void;
 }) {
-  const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+  const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
   return (
     <>
       <p className="map-detail-meta">{formatCoords(pin.x, pin.y, worldSize)}</p>

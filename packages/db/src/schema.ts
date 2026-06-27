@@ -7,6 +7,11 @@ export const users = sqliteTable("users", {
   discordAvatar: text("discord_avatar"),
   steamId: text("steam_id"),
   pendingRustLink: integer("pending_rust_link", { mode: "boolean" }).notNull().default(false),
+  /** Pending FCM pairing: steam | companion | master */
+  pendingLinkType: text("pending_link_type"),
+  companionPlayerId: text("companion_player_id"),
+  companionTokenEncrypted: text("companion_token_encrypted"),
+  companionLinkedAt: integer("companion_linked_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -38,6 +43,9 @@ export const rustServers = sqliteTable("rust_servers", {
   mapParseStatus: text("map_parse_status"),
   mapParseError: text("map_parse_error"),
   mapParsedAt: integer("map_parsed_at", { mode: "timestamp" }),
+  /** Last seen map seed / wipe countdown — used to detect server wipes. */
+  trackedMapSeed: integer("tracked_map_seed"),
+  trackedWipeAt: integer("tracked_wipe_at"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
@@ -201,15 +209,6 @@ export const auditEvents = sqliteTable("audit_events", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
-export const storageSnapshots = sqliteTable("storage_snapshots", {
-  id: text("id").primaryKey(),
-  entityId: text("entity_id")
-    .notNull()
-    .references(() => rustEntities.id, { onDelete: "cascade" }),
-  contentsJson: text("contents_json").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-});
-
 export const discordGuildChannels = sqliteTable(
   "discord_guild_channels",
   {
@@ -272,18 +271,6 @@ export const discordLiveEmbeds = sqliteTable(
     pk: primaryKey({ columns: [table.guildId, table.purpose] }),
   }),
 );
-
-export const mapFootprints = sqliteTable("map_footprints", {
-  id: text("id").primaryKey(),
-  serverId: text("server_id")
-    .notNull()
-    .references(() => rustServers.id, { onDelete: "cascade" }),
-  label: text("label").notNull(),
-  piecesJson: text("pieces_json").notNull(),
-  createdBy: text("created_by").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
-});
 
 export const pushSubscriptions = sqliteTable("push_subscriptions", {
   id: text("id").primaryKey(),

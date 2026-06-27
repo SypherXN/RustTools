@@ -3,6 +3,7 @@ import { useAuth } from "../hooks/useAuth";
 import { apiFetch } from "../lib/api";
 import { ServerSwitcher } from "../components/ServerSwitcher";
 import { DataResetPanel } from "../components/DataResetPanel";
+import { AdminUsersPanel } from "../components/AdminUsersPanel";
 import type { NotificationSettingsResponse } from "@rusttools/shared";
 import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
@@ -41,6 +42,10 @@ export function SettingsPage() {
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [linkMessage, setLinkMessage] = useState<string | null>(null);
+  const [steamIdInput, setSteamIdInput] = useState("");
+  const [companionPlayerId, setCompanionPlayerId] = useState("");
+  const [companionToken, setCompanionToken] = useState("");
+  const [companionSaving, setCompanionSaving] = useState(false);
   const [notifications, setNotifications] = useState<NotificationSettingsResponse | null>(null);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationsSaving, setNotificationsSaving] = useState(false);
@@ -78,6 +83,7 @@ export function SettingsPage() {
     deepSea?: Partial<NotificationSettingsResponse["settings"]["deepSea"]>;
     tcDecay?: Partial<NotificationSettingsResponse["settings"]["tcDecay"]>;
     teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
+    teamActivity?: Partial<NotificationSettingsResponse["settings"]["teamActivity"]>;
     eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
     legacyAutomations?: Partial<NotificationSettingsResponse["settings"]["legacyAutomations"]> & {
       nightLights?: Partial<
@@ -208,6 +214,22 @@ export function SettingsPage() {
     void saveNotifications({ teamChatBot: { [key]: value } });
   };
 
+  const updateTeamActivity = (
+    key: keyof NotificationSettingsResponse["settings"]["teamActivity"],
+    value: number,
+  ) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        teamActivity: { ...notifications.settings.teamActivity, [key]: value },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ teamActivity: { [key]: value } });
+  };
+
   const updateEventTimers = (
     key: keyof NotificationSettingsResponse["settings"]["eventTimers"],
     value: number | number[],
@@ -224,21 +246,76 @@ export function SettingsPage() {
     void saveNotifications({ eventTimers: { [key]: value } });
   };
 
-  const linkRust = async () => {
+  const linkMaster = async () => {
     setLinking(true);
     setLinkError(null);
     setLinkMessage(null);
     try {
-      const res = await apiFetch<{ ok: boolean; message?: string }>("/auth/link-rust", {
+      const res = await apiFetch<{ ok: boolean; message?: string }>("/auth/link-master", {
         method: "POST",
       });
       await refresh();
-      await refresh();
       setLinkMessage(res.message ?? "Ready for in-game pairing.");
     } catch (err) {
-      setLinkError(err instanceof Error ? err.message : "Failed to start Rust+ link");
+      setLinkError(err instanceof Error ? err.message : "Failed to start master server pair");
     } finally {
       setLinking(false);
+    }
+  };
+
+  const linkSteam = async (directSteamId?: string) => {
+    setLinking(true);
+    setLinkError(null);
+    setLinkMessage(null);
+    try {
+      const res = await apiFetch<{ ok: boolean; message?: string }>("/auth/link-steam", {
+        method: "POST",
+        body: JSON.stringify(directSteamId ? { steamId: directSteamId } : {}),
+      });
+      await refresh();
+      setLinkMessage(res.message ?? "Steam link updated.");
+      if (directSteamId) setSteamIdInput("");
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : "Failed to link Steam ID");
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const saveCompanion = async () => {
+    setCompanionSaving(true);
+    setLinkError(null);
+    setLinkMessage(null);
+    try {
+      const res = await apiFetch<{ ok: boolean; message?: string }>("/auth/link-companion", {
+        method: "POST",
+        body: JSON.stringify({
+          playerId: companionPlayerId.trim(),
+          playerToken: companionToken.trim(),
+        }),
+      });
+      await refresh();
+      setCompanionPlayerId("");
+      setCompanionToken("");
+      setLinkMessage(res.message ?? "Companion credentials saved.");
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : "Failed to save companion credentials");
+    } finally {
+      setCompanionSaving(false);
+    }
+  };
+
+  const clearCompanion = async () => {
+    setCompanionSaving(true);
+    setLinkError(null);
+    try {
+      await apiFetch("/auth/link-companion", { method: "DELETE" });
+      await refresh();
+      setLinkMessage("Companion Rust+ link removed.");
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : "Failed to remove companion link");
+    } finally {
+      setCompanionSaving(false);
     }
   };
 
@@ -265,6 +342,30 @@ export function SettingsPage() {
       {tab === "server" && (
         <>
       <ServerSwitcher />
+
+      {canAdmin && (
+        <section className="card">
+          <h2>Master Bot Server Pair</h2>
+          <p className="muted">
+            Re-pair the 24/7 bot Rust+ account with your server. Requires FCM configured in Admin
+            settings.
+          </p>
+          {linkError && tab === "server" && <div className="alert alert-error">{linkError}</div>}
+          {linkMessage && tab === "server" && <div className="alert">{linkMessage}</div>}
+          <p className="muted">
+            {user?.pendingLinkType === "master"
+              ? "Waiting for in-game server pairing… open Rust+ and Pair with Server now."
+              : "Use when refreshing the bot token or switching servers."}
+          </p>
+          <button
+            type="button"
+            disabled={linking || user?.pendingLinkType === "master"}
+            onClick={() => void linkMaster()}
+          >
+            {linking ? "Starting…" : user?.pendingLinkType === "master" ? "Waiting for pairing…" : "Re-pair Server"}
+          </button>
+        </section>
+      )}
 
       <section className="card">
         <h2>Server & Map</h2>
@@ -355,47 +456,102 @@ export function SettingsPage() {
       </section>
 
       <section className="card">
-        <h2>Rust+ Link</h2>
-        {!canAdmin ? (
-          <p className="muted">Only admins can start or manage Rust+ account linking.</p>
-        ) : user?.linkedRust ? (
-          <>
-            <p>
-              Steam ID linked: <code>{user.user.steamId}</code>
-            </p>
-            {notifications && (
-              <p>
-                Rust+ WebSocket:{" "}
-                <span className={notifications.capabilities.rustPlusConnected ? "badge badge-ok" : "badge"}>
-                  {notifications.capabilities.rustPlusConnected ? "Connected" : "Disconnected"}
-                </span>
-              </p>
-            )}
-            {linkError && <div className="alert alert-error">{linkError}</div>}
-            {linkMessage && <div className="alert">{linkMessage}</div>}
-            <p className="muted">
-              {user.pendingRustLink
-                ? "Waiting for in-game pairing… open Rust+ and Pair with Server now."
-                : "Re-pair in-game to refresh your server token or link a different server."}
-            </p>
-            <button type="button" disabled={linking || user.pendingRustLink} onClick={() => void linkRust()}>
-              {linking ? "Starting…" : user.pendingRustLink ? "Waiting for pairing…" : "Re-pair Server"}
-            </button>
-          </>
+        <h2>Steam Identity</h2>
+        <p className="muted">
+          Links your Discord account to your in-game Steam ID for <code>!leader</code> and other
+          commands.
+        </p>
+        {user?.linkedSteam ? (
+          <p>
+            Steam ID: <code>{user.user.steamId}</code>
+          </p>
         ) : (
-          <>
-            {linkError && <div className="alert alert-error">{linkError}</div>}
-            {linkMessage && <div className="alert">{linkMessage}</div>}
-            <p className="muted">
-              {user?.pendingRustLink
-                ? "Waiting for in-game pairing… open Rust+ and Pair with Server now."
-                : "Not linked yet. Click below, then pair in-game."}
-            </p>
-            <button type="button" disabled={linking || user?.pendingRustLink} onClick={() => void linkRust()}>
-              {linking ? "Starting…" : user?.pendingRustLink ? "Waiting for pairing…" : "Link Rust+ Account"}
-            </button>
-          </>
+          <p className="muted">Not linked yet.</p>
         )}
+        {linkError && tab === "account" && <div className="alert alert-error">{linkError}</div>}
+        {linkMessage && tab === "account" && <div className="alert">{linkMessage}</div>}
+        {user?.pendingLinkType === "steam" && (
+          <p className="muted">Waiting for pairing… or enter your Steam ID below (F1 → player.id).</p>
+        )}
+        <div className="form-stack" style={{ marginTop: "0.75rem" }}>
+          <label>
+            Steam ID (17 digits)
+            <input
+              type="text"
+              value={steamIdInput}
+              placeholder="7656119…"
+              onChange={(e) => setSteamIdInput(e.target.value)}
+            />
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              disabled={linking || !steamIdInput.trim()}
+              onClick={() => void linkSteam(steamIdInput.trim())}
+            >
+              {linking ? "Saving…" : "Save Steam ID"}
+            </button>
+            <button
+              type="button"
+              disabled={linking || user?.pendingLinkType === "steam"}
+              onClick={() => void linkSteam()}
+            >
+              {user?.pendingLinkType === "steam" ? "Waiting for pairing…" : "Start pairing flow"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Companion Rust+</h2>
+        <p className="muted">
+          Optional. Lets RustTools promote you to team leader when you hold leader in-game but the
+          master bot account does not. Run{" "}
+          <code>npx @liamcottle/rustplus.js fcm-register</code> locally, pair with server in Rust+,
+          then paste <code>playerId</code> and <code>playerToken</code> from the pairing notification.
+        </p>
+        {user?.companionLinked ? (
+          <p>
+            Companion player ID: <code>{user.user.companionPlayerId}</code>
+          </p>
+        ) : (
+          <p className="muted">Not linked.</p>
+        )}
+        {user?.pendingLinkType === "companion" && (
+          <p className="muted">Pending companion pair — paste credentials below when ready.</p>
+        )}
+        <div className="form-stack" style={{ marginTop: "0.75rem" }}>
+          <label>
+            playerId
+            <input
+              type="text"
+              value={companionPlayerId}
+              onChange={(e) => setCompanionPlayerId(e.target.value)}
+            />
+          </label>
+          <label>
+            playerToken
+            <input
+              type="text"
+              value={companionToken}
+              onChange={(e) => setCompanionToken(e.target.value)}
+            />
+          </label>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="button"
+              disabled={companionSaving || !companionPlayerId.trim() || !companionToken.trim()}
+              onClick={() => void saveCompanion()}
+            >
+              {companionSaving ? "Saving…" : "Save companion credentials"}
+            </button>
+            {user?.companionLinked && (
+              <button type="button" className="btn-secondary" disabled={companionSaving} onClick={() => void clearCompanion()}>
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
       </section>
         </>
       )}
@@ -678,6 +834,44 @@ export function SettingsPage() {
               Minimum time between handled <code>!commands</code>. <code>!mute</code> /{" "}
               <code>!unmute</code> are not delayed.
             </p>
+
+            <h3>Team activity logs</h3>
+            <p className="muted">
+              Death and connection history on the Team page. The death limit also caps the live
+              in-memory tracker. Older entries are pruned automatically; both logs are cleared on
+              server wipe.
+            </p>
+            <label>
+              Death limit (DB + live tracker)
+              <input
+                type="number"
+                min={10}
+                max={1000}
+                step={10}
+                value={notifications.settings.teamActivity.deathLogLimit}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateTeamActivity("deathLogLimit", Math.max(10, Number(e.target.value) || 10))
+                }
+              />
+            </label>
+            <label>
+              Connection log limit
+              <input
+                type="number"
+                min={10}
+                max={2000}
+                step={10}
+                value={notifications.settings.teamActivity.connectionLogLimit}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateTeamActivity(
+                    "connectionLogLimit",
+                    Math.max(10, Number(e.target.value) || 10),
+                  )
+                }
+              />
+            </label>
           </div>
         )}
       </section>
@@ -909,24 +1103,16 @@ export function SettingsPage() {
       {tab === "admin" && canAdmin && (
         <>
         <section className="card">
+          <h2>Users &amp; blocks</h2>
+          <AdminUsersPanel disabled={notificationsSaving || linking} />
+        </section>
+
+        <section className="card">
           <h2>Data Management</h2>
           <DataResetPanel disabled={notificationsSaving || linking} />
         </section>
 
         <FcmConfigUpload />
-
-      <section className="card">
-        <h2>Pairing Setup</h2>
-        <ol className="setup-steps">
-          <li>
-            Run <code>npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json</code>{" "}
-            (or upload the generated file above)
-          </li>
-          <li>Click <strong>Link Rust+ Account</strong> or <strong>Re-pair Server</strong> in the Server tab</li>
-          <li>In Rust, open Rust+ menu → Pair with Server</li>
-          <li>Pair smart devices with the wire tool</li>
-        </ol>
-      </section>
         </>
       )}
     </div>

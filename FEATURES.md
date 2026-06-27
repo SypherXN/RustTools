@@ -1,6 +1,6 @@
 # RustTools Features
 
-Self-hosted Rust companion for your team — Rust+ device control, live web dashboard, and Discord bot. One host pairs with Rust+; teammates use Discord roles and the shared web UI.
+Self-hosted Rust companion for your team — Rust+ device control, live web dashboard, and Discord bot. One **master bot** stays paired with Rust+; teammates use Discord roles, Steam identity, and the shared web UI.
 
 ---
 
@@ -13,7 +13,9 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
   - **View** — read dashboard, map, team, storage
   - **Switch** — control devices, send team chat, run switch commands
   - **Admin** — settings, automations, audit log, data reset, notification config
-- **Multi-server support** — pair multiple Rust servers; activate one at a time
+- **Production boot validation** — with `NODE_ENV=production`, the API refuses to start unless `SESSION_SECRET` and `ENCRYPTION_KEY` are set to non-default values, `DISCORD_GUILD_ID` is set, at least one `DISCORD_ROLE_*` env var is configured, `INTERNAL_API_KEY` is at least 32 characters (not the example default), and `RUSTPLUS_ALLOW_UNPROMPTED_PAIR` is not enabled
+- **User blocking** — admins can block Discord or Steam IDs in **Settings → Admin**; blocked users cannot log in, call the API, or open WebSockets; Discord blacklist entries revoke active sessions
+- **Multi-server support** — pair multiple Rust servers; activate one at a time; admins can **delete** a server (disconnects only that server’s Rust+ session, removes DB row and on-disk assets)
 - **Demo mode** — try the UI without a live Rust+ connection (`?demo=1`)
 - **Live updates** — WebSocket pushes team, devices (including smart switch ON/OFF), storage, alarms, map events, camera frames, and chat to open tabs
 - **PWA-ready** — web app manifest + service worker for installable mobile/desktop experience
@@ -23,13 +25,29 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 
 ## Rust+ integration & pairing
 
-- **FCM server pairing** — register via `fcm-register`, or upload `fcm-config.json` in **Settings → Admin** (listener restarts automatically)
-- **In-game Rust+ account link** — Settings flow to pair your Steam/Rust+ identity with the host
-- **Smart device pairing** — wire-tool pair switches, alarms, and storage monitors; synced to the dashboard
-- **Rust+ WebSocket** — live entity subscriptions with reconnect and backoff
-- **Rust+ read caching** — TTL cache and in-flight dedup on map/team/info/markers/time requests to reduce Facepunch rate limits
-- **FCM credential expiry** — admin banner when config is missing, expired, or within 14 days of the ~90-day refresh window; full status (registered/expiry/days left) always shown in **Settings → Admin**
-- **Granular data reset** — admin panel to clear cache, pairing, overlays, or other scopes without full wipe
+RustTools separates the **master bot** (24/7 Rust+ WebSocket) from **per-user Steam identity** and **optional companion credentials**.
+
+### Master bot (admin)
+
+- **FCM server pairing** — register via `fcm-register`, or upload `fcm-config.json` in **Settings → Admin** (4-step wizard + copy command; listener restarts automatically)
+- **Master server re-pair** — **Settings → Server & Map → Master Bot Server Pair**; updates `rust_servers` and reconnects the bot
+- **Gated pairing in production** — unprompted server pairs are rejected unless an admin has started master or companion pairing first (`RUSTPLUS_ALLOW_UNPROMPTED_PAIR` is dev-only; cannot be enabled in production)
+- **Exclusive pending links** — only one pending master/companion/Steam link is processed at a time; overlapping FCM notifications are ignored until the current flow completes or expires
+- **Smart device pairing** — wire-tool pair switches, alarms, and storage monitors on the **bot account**; synced to the dashboard
+- **FCM credential expiry** — admin banner when config is missing, expired, or within 14 days of the ~90-day refresh window; full status in **Settings → Admin**
+
+### Per-user links (teammates)
+
+- **Steam identity** — **Settings → Account → Steam Identity**; enter Steam ID (F1 `player.id`) or pending pairing flow; used for `!leader` / command identity (unique per user)
+- **Companion Rust+** (optional) — **Settings → Account → Companion Rust+**; paste `playerId` + `playerToken` from local `fcm-register`; encrypted on user row only; **does not** disconnect or replace the master bot (one companion link per user)
+- **Isolated from master** — companion save/promote uses a short-lived second connection only during leader promotion
+
+### Connection behavior
+
+- **Rust+ WebSocket** — live entity subscriptions on the master connection with reconnect and backoff
+- **Rust+ read caching** — TTL cache and in-flight dedup on map/team/info/markers/time/chat reads; short-lived entity info cache (re-read after subscribe for new devices); rate-limit retry with backoff
+- **Bounded Rust+ reads** — switch state fetches and storage item search use concurrency limits to reduce Facepunch rate-limit bursts
+- **Granular data reset** — admin panel to clear team logs, world events, map overlays, automations, smart devices, server pairing, or audit log without a full reinstall
 
 ---
 
@@ -45,7 +63,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 | **Map** | 2D and 3D map, server base zone, team, monuments, markers, vending search, event dock, procgen overlays, drawings, pins |
 | **Team** | Roster, online/AFK/dead status, positions, death/connection logs, **live scrollable team chat** |
 | **Audit** | Admin action log (device toggles, settings changes, etc.) |
-| **Settings** | Rust+ link, notifications (tabbed), procgen `.map` upload, legacy automations, FCM upload (admin) |
+| **Settings** | Account linking (Steam + companion), master re-pair (admin), server delete (admin), notifications (tabbed), team log limits, procgen `.map` upload, legacy automations, FCM wizard (admin), users & blocks (admin) |
 
 ---
 
@@ -58,7 +76,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 - **Live state on Devices page** — each switch shows an **ON** / **OFF** / **Unknown** badge (read from Rust+ via `getEntityInfo`)
 - **In-game toggles push to the web UI** — Rust+ `entityChanged` broadcasts update open dashboard tabs over WebSocket (requires Rust+ connected and the device paired/subscribed)
 - **Per-device chat commands** — custom `!alias` for toggle, on, off, **status**
-- **Timed actions** — `!alias on 60s` auto-reverts after a delay
+- **Timed actions** — `!alias on 60s` auto-reverts after a delay; pending revert timers are cancelled when the switch entity is deleted, the server is wiped, or the server pairing is removed
 - **Auto modes** — on at night, on at day, always on/off, on when any teammate online, proximity-based
 - **Switch groups** — control multiple switches together; group-level chat aliases
 - **Quick group toggle** — name-based group on Devices page
@@ -76,7 +94,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 - **TC decay monitoring** — proactive Discord/team chat warnings at configurable hour thresholds
 - **Discord embeds** on storage change with inline recycle button
 - **`!upkeepdetail`** — all linked TCs with decay time, upkeep slots, and ~24h resource projection
-- Storage snapshot history written to DB (UI for timeline/diff not yet built)
+- **Storage change alerts** — Discord embeds on monitor updates (live contents only; no snapshot history stored)
 
 ---
 
@@ -126,6 +144,7 @@ Rule builder with triggers, optional conditions, and actions — saved per serve
 - **Night lights schedule template** — one-click rule draft for evening light windows
 - **Device library** — nested folders of switches and saved CCTV bookmarks for rule building
 - **Rule templates** — save and reuse rule definitions per server
+- **Lifecycle cleanup** — rules referencing a removed entity, switch group, or map pin are deleted automatically; empty switch groups and device-library folders are pruned when members disappear
 
 ### Live cameras (Cameras page)
 
@@ -142,6 +161,7 @@ Per-server config (env vars seed defaults for new servers):
 - **Night lights** — turn on configured switches at night
 - **Team-offline SAM** — flip a SAM site switch when everyone goes offline
 - **Map event alerts** — team chat and/or Discord for cargo, heli, chinook, vendor, oil, bradley, convoy
+- **Stale device cleanup** — when a paired device disappears from Rust+, its entity row, automation rules, switch-group/library membership, and legacy automation references (`nightLights.entityIds`, `teamOfflineSam.switchEntityId`) are removed automatically (10-minute reconcile job + immediate cleanup on manual unpair/wipe); pruning an empty switch group also removes automation rules that reference that group
 
 ---
 
@@ -162,7 +182,7 @@ Per-server config (env vars seed defaults for new servers):
 - **Vending search** — find items across all shops; filter by currency, price range, deal % vs median; item icons in results
 - **Connect string** — copy `client.connect ip:port` from Settings/Dashboard
 - **Map seed, salt, name, size** — displayed from Rust+ server info
-- **Live refresh** — team and markers update via WebSocket; periodic live poll with staggered Rust+ reads to avoid rate limits
+- **Live refresh** — team and markers update via WebSocket; map live poll runs only when WebSocket is disconnected (fallback); background jobs staggered at 0s / 20s / 40s offsets
 
 ### Procgen map (`.map` upload)
 
@@ -174,6 +194,7 @@ Upload the server’s procgen `.map` file in **Settings → Server & Map** to un
 - **Roads and rail paths** — extracted path network
 - **Caves and icebergs** — prefab markers from map data
 - **Parse status** — seed/world-size match warnings vs active server
+- **Isolated parse worker** — `.map` parsing runs in a child process (`PROCGEN_PARSE_HEAP_MB`, default **4096** on Docker/A1) so the API stays responsive
 - **3D map view** — terrain mesh, water, procgen overlays, team/markers/paths, **server base zone** (requires uploaded `.map`)
 
 ### 3D map
@@ -227,9 +248,11 @@ Discord: matching slash commands (`/cargo`, `/events`, etc.) — see [Discord bo
 - **Instant send feedback** — messages you post from the web UI (or Discord `/chat`) appear immediately via WebSocket, without refreshing
 - **Team chat mirror** — in-game messages mirrored to Discord team-chat channel
 - **Web → in-game** — Team page or Discord `/chat`; outbound text is prefixed with sender name in-game (`[DiscordUser] message`)
-- **Death log** — recent deaths with grid and timestamp on Team page
-- **Connection log** — join/disconnect history (Discord + web; no `!connections` command)
-- **Promote leader** — web UI or `!leader` in team chat when RustTools holds current leader
+- **Death log** — recent deaths with grid and timestamp on Team page; limit configurable in **Settings → Team Chat** (default 100); pruned on insert and when the limit changes; cleared automatically on map wipe
+- **Connection log** — join/disconnect history (Discord + web; configurable limit, default 200; cleared on wipe; no `!connections` command)
+- **Promote leader** — admin on Team page, or `!leader` / `/leader` for yourself when **online and alive**
+  - RustTools connects as **master bot** when it is in-game leader, or via the **current leader’s companion credentials** when they linked Companion Rust+
+  - No separate “can promote” permission — eligibility is about **who can become leader** (online, alive, on roster)
 - **`!send`** — route an in-game message to a specific Discord user via DM
 - **Roster commands** — `!online` · `!offline` · `!afk` · `!alive`
 - **Bot mute** — admins: `!mute` / `!unmute` or Settings → Team Chat Bot
@@ -271,11 +294,11 @@ Slash commands (role-gated same as web permissions). Responses use **Discord emb
 |---------|-------------|
 | `/help` | Command reference (embed with grouped fields) |
 | `/status` | API and Rust+ connection health |
-| `/devices` | List paired smart devices (grouped by type) |
-| `/switch` | Set on, off, or toggle a switch by name or entity ID |
+| `/devices` | List paired smart devices with **live switch ON/OFF** (grouped by type) |
+| `/switch` | Set on, off, toggle, or **status** for a switch by name or entity ID (autocomplete) |
 | `/alias` | Run a configured switch chat alias (on/off/toggle/**status**, optional timed revert) |
 | `/alarm` | List smart alarms |
-| `/storage` | Show a storage monitor's contents (formatted, not raw JSON) |
+| `/storage` | Show a storage monitor's contents (autocomplete; formatted, not raw JSON) |
 | `/team` | Team roster with online status and grid |
 | `/time` | In-game time and day/night phase |
 | `/deepsea` | Deep Sea status and countdown |
@@ -283,18 +306,18 @@ Slash commands (role-gated same as web permissions). Responses use **Discord emb
 | `/send` | DM a linked Discord teammate |
 | `/map` | Post the current server map image |
 | `/online` `/offline` `/afk` `/alive` | Roster filters (same as in-game `!` commands) |
-| `/leader` | Promote yourself to team leader |
+| `/leader` | Promote yourself to team leader (online, alive, Steam ID linked) |
 | `/cargo` `/heli` `/chinook` `/vendor` `/bradley` `/convoy` `/large` `/small` `/events` | World event status |
 | `/upkeep` | Tool cupboard upkeep report |
 | `/mute` `/unmute` | Mute/unmute RustTools bot in team chat (admin) |
 | `/pair` | FCM pairing status |
-| `/link` | Start Rust+ account linking |
+| `/link` | How to link Steam ID (and optional companion Rust+) in the web dashboard |
 | `/channel show\|set\|clear` | Bind channels to notification purposes (admin) |
 | `/blacklist add\|remove\|list` | Block Discord or Steam users from bot commands (admin) |
 
 In Discord, use **slash commands only** — do not type `!` commands in a channel. In-game team chat still uses the `!` prefix.
 
-To check switch state in Discord: `/alias name:<your-alias> action:status` (alias must be configured on Devices or Automations).
+To check switch state in Discord: `/switch target:<name> action:status` or `/alias name:<your-alias> action:status`.
 
 ### Discord channel purposes (`/channel set`)
 
@@ -323,7 +346,7 @@ Type in **team chat**, or use matching **slash commands** in Discord (Switch per
 
 - `!help` — multi-part command list
 - `!online` · `!offline` · `!afk` · `!alive` — roster filters
-- `!leader` — promote yourself to team leader (when eligible)
+- `!leader` — promote yourself to team leader (must be **online**, **alive**, Steam ID linked in Settings)
 - `!send <discord-user> <message>` — DM a Discord teammate from in-game
 
 ### Events & world
@@ -355,21 +378,33 @@ Per-device aliases and switch group aliases are configured on the **Devices** an
 
 ## Admin & security
 
-- **Audit log** — who changed what (devices, settings, automations, FCM config uploads)
-- **Discord blacklist** — block users by Discord account or Steam ID from slash commands and in-game `!` commands
-- **Admin data reset** — selective clears (cache, pairing, map overlays, procgen data, etc.)
-- **FCM config upload** — replace pairing credentials without shell access; shows expiry countdown
-- **Internal API key** — secures Discord bot → API calls
-- **Session management** — logout, secure cookies, WebSocket token for cross-origin clients
+- **Audit log** — who changed what (devices, settings, automations, FCM config uploads); entries older than **30 days** pruned hourly; **cleared on map wipe**
+- **Users & blocks** — **Settings → Admin**: list linked users, remove accounts, block by Discord ID or Steam ID (manual ID entry supported); blocking rejects OAuth login, HTTP API access, and WebSocket connections; adding to the Discord blacklist revokes sessions and push subscriptions for matched users
+- **Discord blacklist** — block users by Discord account or Steam ID from slash commands and in-game `!` commands (same block list as web)
+- **Admin data reset** — selective clears: team logs, world event state, map overlays, automation rules, smart devices (+ legacy automation device refs), full server pairing removal, or global audit log
+- **Server delete** — admins remove a paired server from **Settings → Server & Map** (disconnects only that server’s Rust+ session — background jobs for other servers keep running; deletes procgen assets, cascades DB data, cancels pending switch revert timers, evicts in-memory trackers)
+- **Map wipe detection** — seed change or sharp wipe-timer reset (every 5 min) clears team logs, map drawings/pins, automation-base pin link, paired devices, automation rules, saved cameras, switch groups, device library, legacy automation device refs, procgen map, world-event state, Deep Sea tracker, in-memory team tracker, pending switch revert timers, and audit log; **automation rule templates are kept**
+- **Stale entity reconcile** — every 10 minutes, entities Rust+ no longer reports are removed with dependent automation rules, empty switch groups (and rules referencing those groups), empty library folders, and legacy automation JSON refs scrubbed; pending switch revert timers for removed entities are cancelled
+- **FCM config upload** — replace **master bot** pairing credentials without shell access; 4-step wizard in **Settings → Admin**; shows expiry countdown
+- **Encrypted companion tokens** — per-user Rust+ credentials at rest (AES-256-GCM via `ENCRYPTION_KEY`); used only for leader promotion, not a second persistent bot connection
+- **Internal API key** — secures Discord bot → API calls; must be at least 32 characters in production (not the `.env.example` placeholder)
+- **Session management** — logout deletes session and push subscriptions; expired sessions pruned hourly; expired refresh token use deletes the session; secure cookies; WebSocket token for cross-origin clients
+- **Push subscription hygiene** — invalid endpoints removed on 404/410 delivery failures; subscriptions cleared on logout
 
 ---
 
 ## Operations
 
 - **Docker Compose** deploy with Caddy reverse proxy (see [docs/SETUP.md](docs/SETUP.md))
-- **Environment-based config** — Discord, Rust+, Twilio, SendGrid, VAPID, notification channels, automation defaults, `API_RATE_LIMIT_MAX`
+- **Recommended host** — Oracle Always Free **Ampere A1**: **2 OCPU · 12 GB RAM** total for A1 (one VM for RustTools is typical)
+- **Environment-based config** — Discord, Rust+, Twilio, SendGrid, VAPID, notification channels, automation defaults, `API_RATE_LIMIT_MAX`, `PROCGEN_PARSE_HEAP_MB`
+- **Automatic data retention** — audit log prune (30 days), expired session prune (hourly); team death/connection logs bounded by configurable limits and cleared on **map wipe**
+- **Docker log rotation** — 10 MB × 3 files per service (`docker-compose.yml`)
 - **Monorepo packages** — shared types, DB schema (Drizzle), Rust+ client library
-- **Auto DB migrations** — applied when the API starts
+- **Auto DB migrations** — compiled `node packages/db/dist/migrate.js` runs before the API on container start (20 migrations through `0018`)
+- **Caddy API proxy** — HTTPS terminates at Caddy and forwards `/admin/*`, `/auth/*`, `/automation-*`, `/cameras/*`, `/device-library*`, `/devices*`, `/health`, `/push/*`, `/servers*`, `/storage*`, `/switch-groups*`, `/vending/*`, `/ws`, and related routes to the API
+- **GitHub Pages build** — requires repository variable `VITE_API_URL`; frontend falls back to `/api` only in local dev
+- **Startup order** — stored Rust+ servers reconnect before phase-2 listeners restore switch revert timers and live subscriptions
 - **Smoke tests** — `npm run test:smoke` (API health, auth, routes; optional live Rust+ checks when configured)
 
 ---
@@ -380,9 +415,8 @@ RustTools is a **single-host, self-hosted web + Discord** product. These are int
 
 - Native desktop app, system tray, auto-update
 - Cloud account sync across hosts
-- Multi-tenant Rust+ credentials per Discord user
+- Multi-tenant Rust+ credentials per Discord user (companion is promote-only, not a second bot connection)
 - BattleMetrics player lists and trackers
-- Base footprint planner UI (API exists; web editor not built)
 - Storage snapshot history UI, death heatmaps, loot planner, vending price graphs
 - Outgoing webhooks (Home Assistant / Zapier)
 - In-game `!marker` navigation (planned)

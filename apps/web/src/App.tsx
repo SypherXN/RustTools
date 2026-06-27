@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Routes, Route, NavLink } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ActiveServerProvider } from "./hooks/useActiveServer";
+import { WebSocketProvider } from "./hooks/WebSocketProvider";
 import { isDemoMode } from "./lib/demo";
 import { assetUrl } from "./lib/asset-url";
 import { LIVE_CAMERAS_ENABLED } from "./lib/features";
@@ -43,7 +44,7 @@ function NavItem({ to, end, icon, children }: { to: string; end?: boolean; icon:
 
 function Shell() {
   const { user, loading, logout } = useAuth();
-  const rustPlusStatus = useRustPlusStatus();
+  const { status: rustPlusStatus } = useRustPlusStatus();
 
   if (loading) {
     return (
@@ -183,7 +184,9 @@ export function App() {
   return (
     <AuthProvider>
       <ActiveServerProvider>
-        <Shell />
+        <WebSocketProvider>
+          <Shell />
+        </WebSocketProvider>
       </ActiveServerProvider>
     </AuthProvider>
   );

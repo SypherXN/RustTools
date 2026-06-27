@@ -1,10 +1,14 @@
+import { randomBytes } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { users } from "@rusttools/db";
 import { env } from "../config.js";
-import { setAuthCookies, createSession } from "../lib/auth.js";
+import { SESSION_COOKIE_OPTIONS, setAuthCookies, createSession } from "../lib/auth.js";
 import { generateId } from "../lib/ids.js";
+import { isUserBlocked } from "../lib/user-access.js";
+
+const OAUTH_STATE_COOKIE = "oauth_state";
 
 interface DiscordTokenResponse {
   access_token: string;
@@ -14,6 +18,10 @@ interface DiscordUser {
   id: string;
   username: string;
   avatar: string | null;
+}
+
+function generateOAuthState(): string {
+  return randomBytes(24).toString("hex");
 }
 
 export async function registerDiscordOAuth(
@@ -27,11 +35,19 @@ export async function registerDiscordOAuth(
       });
     }
 
+    const state = generateOAuthState();
+    reply.setCookie(OAUTH_STATE_COOKIE, state, {
+      ...SESSION_COOKIE_OPTIONS,
+      maxAge: 600,
+      signed: true,
+    });
+
     const params = new URLSearchParams({
       client_id: env.discord.clientId,
       redirect_uri: env.discord.redirectUri,
       response_type: "code",
       scope: "identify",
+      state,
     });
 
     return reply.redirect(`https://discord.com/api/oauth2/authorize?${params}`);
@@ -42,9 +58,16 @@ export async function registerDiscordOAuth(
       return reply.status(503).send({ error: "Discord OAuth not configured" });
     }
 
-    const { code } = request.query as { code?: string };
+    const { code, state } = request.query as { code?: string; state?: string };
     if (!code) {
       return reply.status(400).send({ error: "Missing authorization code" });
+    }
+
+    const cookieState = request.unsignCookie(request.cookies[OAUTH_STATE_COOKIE] ?? "");
+    reply.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+
+    if (!state || !cookieState.valid || cookieState.value !== state) {
+      return reply.redirect(`${env.frontendRedirectUrl}/?error=oauth_state_invalid`);
     }
 
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
@@ -60,8 +83,12 @@ export async function registerDiscordOAuth(
     });
 
     if (!tokenRes.ok) {
-      const detail = await tokenRes.text();
-      request.log.error({ detail }, "Discord token exchange failed");
+      if (env.isDev) {
+        const detail = await tokenRes.text();
+        request.log.error({ status: tokenRes.status, detail }, "Discord token exchange failed");
+      } else {
+        request.log.error({ status: tokenRes.status }, "Discord token exchange failed");
+      }
       return reply.redirect(`${env.frontendRedirectUrl}/?error=discord_token_failed`);
     }
 
@@ -103,6 +130,10 @@ export async function registerDiscordOAuth(
         discordAvatar: discordUser.avatar,
         steamId: null,
         pendingRustLink: false,
+        pendingLinkType: null,
+        companionPlayerId: null,
+        companionTokenEncrypted: null,
+        companionLinkedAt: null,
         createdAt: now,
         updatedAt: now,
       };
@@ -117,12 +148,14 @@ export async function registerDiscordOAuth(
         .where(eq(users.id, user.id));
     }
 
+    if (await isUserBlocked(db, user)) {
+      return reply.redirect(`${env.frontendRedirectUrl}/?error=blocked`);
+    }
+
     const { sessionId, refreshToken, expiresAt } = await createSession(db, user.id);
     setAuthCookies(reply, sessionId, refreshToken, expiresAt);
 
     const frontendUrl = env.frontendRedirectUrl;
-    // 200 + JS redirect so Set-Cookie is stored before leaving the callback URL
-    // (302 through the Vite dev proxy can drop cookies in some browsers).
     return reply.type("text/html").send(`<!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>Signing in…</title></head>

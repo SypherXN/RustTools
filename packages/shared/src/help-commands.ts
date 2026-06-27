@@ -82,7 +82,7 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       value: [
         "`/status` — Rust+ connection",
         "`/devices` — paired devices",
-        "`/switch` — set on, off, or toggle by name/ID",
+        "`/switch` — set on, off, toggle, or status by name/ID",
         "`/alias` — switch chat alias (`action:status` for ON/OFF)",
         "`/alarm` — smart alarms",
         "`/storage` — storage monitor contents",
@@ -93,7 +93,7 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       name: "Team & world",
       value: [
         "`/online` `/offline` `/afk` `/alive` — roster filters",
-        "`/leader` — promote team leader (linked Rust+ account)",
+        "`/leader` — promote yourself to team leader (must be online and alive)",
         "`/time` — in-game time",
         "`/deepsea` — Deep Sea status",
         "`/upkeep` — TC upkeep report",

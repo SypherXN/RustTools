@@ -2,7 +2,7 @@ import type { CSSProperties } from "react";
 import type { MapCoordinateTransform, MapProcgenLayers, ProcgenOverlayId } from "@rusttools/shared";
 import { mapCoordinateScale } from "@rusttools/shared";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "/api";
+const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
 
 const OVERLAY_MAP: Array<{ layer: keyof MapProcgenLayers; id: ProcgenOverlayId; filter: string; opacity: number }> = [
   { layer: "buildingBlocked", id: "building-blocked", filter: "saturate(1.25) contrast(1.2)", opacity: 0.95 },

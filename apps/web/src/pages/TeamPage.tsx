@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { ParsedTeamInfo, TeamApiResponse, TeamChatMessage, TeamConnectionEvent, TeamDeathEvent, TeamRosterMember } from "@rusttools/shared";
 import {
   appendTeamChatMessage,
+  canBecomeTeamLeader,
   formatTeamAfkDuration,
   formatTeamConnectionAgo,
   formatTeamConnectionLabel,
@@ -78,6 +79,14 @@ export function TeamPage() {
     loadConnections();
   }, [applyTeamPayload, loadChat, loadDeathHistory, loadConnections]);
 
+  const refreshTeamFallback = useCallback(() => {
+    void apiFetch<TeamApiResponse>("/servers/active/team")
+      .then(applyTeamPayload)
+      .catch(() => {
+        /* keep last good roster when Rust+ is briefly unavailable */
+      });
+  }, [applyTeamPayload]);
+
   useEffect(() => {
     setLoading(true);
     loadTeam();
@@ -90,9 +99,9 @@ export function TeamPage() {
       .catch(() => {
         /* map size optional for grid labels */
       });
-    const interval = setInterval(loadTeam, 30_000);
+    const interval = setInterval(refreshTeamFallback, 60_000);
     return () => clearInterval(interval);
-  }, [loadTeam, epoch]);
+  }, [loadTeam, refreshTeamFallback, epoch]);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 30_000);
@@ -135,7 +144,11 @@ export function TeamPage() {
       if (p?.team?.members) {
         applyTeamPayload(p);
         setLoading(false);
-        loadDeathHistory();
+        if (p.deaths?.length) {
+          setDeathHistory(p.deaths);
+        } else {
+          loadDeathHistory();
+        }
       } else {
         loadTeam();
       }
@@ -145,7 +158,7 @@ export function TeamPage() {
   const promoteLeader = async (member: TeamRosterMember) => {
     if (
       !window.confirm(
-        `Make ${member.name} team leader? You will lose leader privileges on the paired Rust+ account.`,
+        `Make ${member.name} team leader? They must stay online and alive.`,
       )
     ) {
       return;
@@ -195,10 +208,10 @@ export function TeamPage() {
         <p>Live roster and team chat.</p>
         {pairedPlayerId && (
           <p className="muted team-paired-hint">
-            Rust+ paired as <code>{pairedPlayerId}</code>.
+            Master bot paired as <code>{pairedPlayerId}</code>.
             {canPromote
-              ? " You can promote teammates because this account is team leader."
-              : " Promote is only available when the paired account is team leader."}
+              ? " RustTools can promote when the current leader has companion credentials or the bot is leader."
+              : " Promote requires the current leader to link companion Rust+ in Settings, or hand leader to the bot."}
           </p>
         )}
       </header>
@@ -220,7 +233,7 @@ export function TeamPage() {
                   member={m}
                   worldSize={worldSize}
                   now={now}
-                  canPromote={canPromote && canAdmin}
+                  canPromote={canPromote && canAdmin && canBecomeTeamLeader(m)}
                   promoting={promotingId === m.steamId}
                   onPromote={() => void promoteLeader(m)}
                 />

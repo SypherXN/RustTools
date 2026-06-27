@@ -22,6 +22,7 @@ export function CameraPage() {
   const [connecting, setConnecting] = useState(false);
   const [hasFrame, setHasFrame] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const lastInputAt = useRef(0);
 
   const cctvCodes = useMemo(() => listStaticCctvCodes(), []);
 
@@ -85,6 +86,9 @@ export function CameraPage() {
 
   const sendInput = async (dx: number, dy: number, buttons = 0) => {
     if (!canSwitch || !connected) return;
+    const now = Date.now();
+    if (now - lastInputAt.current < 150) return;
+    lastInputAt.current = now;
     await apiFetch("/cameras/input", {
       method: "POST",
       body: JSON.stringify({ buttons, mouseDeltaX: dx, mouseDeltaY: dy }),
