@@ -4,7 +4,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 
 **Account model:** one **master bot** Rust+ connection (FCM on the server) powers devices and live data; each teammate optionally links **Steam ID** and **companion Rust+** in Settings for identity and leader promotion.
 
-**Full feature list:** [FEATURES.md](FEATURES.md) · **Production deploy:** [docs/SETUP.md](docs/SETUP.md)
+**Full feature list:** [FEATURES.md](FEATURES.md) · **Production deploy:** [docs/SETUP.md](docs/SETUP.md) · **Hands-off ops:** [docs/OPS-AUTOMATION.md](docs/OPS-AUTOMATION.md)
 
 ## Architecture
 
@@ -57,10 +57,11 @@ The API dev script sets `NODE_OPTIONS='--max-old-space-size=4096'` for procgen m
 1. Create application → OAuth2 redirect: `http://localhost:5173/api/auth/discord/callback` (via Vite proxy — **not** port 3000)
 2. Copy Client ID + Secret to `.env`
 3. Create bot → copy token to `DISCORD_BOT_TOKEN`
-4. Invite bot with `bot` + `applications.commands` scopes (Message Content Intent is **not** required)
-5. Set `DISCORD_GUILD_ID`, `INTERNAL_API_KEY` (32+ characters; same value in API and bot `.env`)
-6. **Production:** set at least one of `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW` — the API refuses to start without them when `NODE_ENV=production`
-7. Register slash commands (see above)
+4. **Icon** → upload `apps/discord-bot/assets/icon-512.png` · **Banner** (optional) → `apps/discord-bot/assets/discord-banner.png` — see [apps/discord-bot/assets/README.md](apps/discord-bot/assets/README.md)
+5. Invite bot with `bot` + `applications.commands` scopes (Message Content Intent is **not** required)
+6. Set `DISCORD_GUILD_ID`, `INTERNAL_API_KEY` (32+ characters; same value in API and bot `.env`)
+7. **Production:** set at least one of `DISCORD_ROLE_ADMIN`, `DISCORD_ROLE_SWITCH`, or `DISCORD_ROLE_VIEW` — the API refuses to start without them when `NODE_ENV=production`
+8. Register slash commands (see above)
 
 ### Rust+ pairing (three tiers)
 
@@ -128,6 +129,8 @@ docker compose up -d --build
 
 **GitHub Pages:** set repository variable `VITE_API_URL` to your API origin (e.g. `https://rusttools.yourdomain.com`, no trailing slash). The Pages workflow **fails the build** if this variable is missing.
 
+**VM updates:** `./scripts/update-vm.sh` (from your laptop over SSH) or enable GitHub Actions auto-deploy — see [docs/SETUP.md §16](docs/SETUP.md#16-hands-off-operations-optional) and [docs/OPS-AUTOMATION.md](docs/OPS-AUTOMATION.md).
+
 **Production startup checks:** with `NODE_ENV=production`, the API exits on boot if secrets use dev defaults, `DISCORD_GUILD_ID` is unset, no Discord role env vars are set, `INTERNAL_API_KEY` is missing/short, or `RUSTPLUS_ALLOW_UNPROMPTED_PAIR=true`.
 
 **Other services** (e.g. a household Discord bot) can run on a separate **E2.1.Micro** without using the A1 memory pool.
@@ -140,8 +143,10 @@ docker compose up -d --build
 | **Web UI** | Dashboard, devices (live ON/OFF badges, explicit On/Off controls), storage, 2D/3D map, server base zone, live team chat, automations, cameras, audit, settings |
 | **Map** | Live Rust+ map, server base overlay, optional procgen `.map` layers (heatmaps, no-build zones, 3D terrain) |
 | **Automations** | IFTTT rules, switch groups, server base + configurable proximity radius (meters) |
-| **Discord** | Slash commands with embeds, live info board, channel bindings, team chat mirror |
+| **Discord** | Slash commands with embeds, live info board, channel bindings, team chat mirror; branding assets in `apps/discord-bot/assets/` |
 | **Alerts** | Raids, TC decay, Deep Sea, world events, storage changes — Discord, team chat, push, SMS/email |
+| **Ops** | Health/backup/disk scripts, optional GHA deploy + weekly smoke, ops Discord webhook alerts — [docs/OPS-AUTOMATION.md](docs/OPS-AUTOMATION.md) |
+| **UI theme** | Orange terminal HUD aesthetic (web background, icon, Discord banner) — `apps/web/src/styles/tokens.css` |
 
 Demo the UI without a backend: `npm run dev:web:demo` or open the app with `?demo=1`.
 
@@ -149,11 +154,13 @@ Demo the UI without a backend: `npm run dev:web:demo` or open the app with `?dem
 
 ```
 apps/api/                 Fastify REST + WebSocket
-apps/web/                 React SPA
-apps/discord-bot/         Discord slash commands
+apps/web/                 React SPA (HUD-themed dashboard)
+apps/discord-bot/         Discord slash commands + branding assets
 packages/shared/          Shared types and constants
 packages/db/              Drizzle + SQLite
 packages/rustplus-client/ Rust+ manager, FCM, EventBus, cameras
+scripts/                  setup.sh, update-vm.sh, health-watch.sh, backup-vm.sh, disk-watch.sh
+docs/                     SETUP.md, OPS-AUTOMATION.md
 ```
 
 ## Clone-and-deploy

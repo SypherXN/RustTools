@@ -7,7 +7,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 ## Platform & access
 
 - **Self-hosted API** — Node.js backend on your VM (or local dev); SQLite database with auto migrations on startup
-- **Web dashboard** — React SPA (GitHub Pages or same-origin deploy)
+- **Web dashboard** — React SPA (GitHub Pages or same-origin deploy); orange terminal HUD theme (`apps/web/src/styles/tokens.css`, global circuit-grid backdrop in `background.css`)
 - **Discord OAuth login** — persistent sessions; cross-origin auth for GitHub Pages (cookies + WebSocket tokens)
 - **Role-based permissions** — three tiers mapped from Discord roles:
   - **View** — read dashboard, map, team, storage
@@ -290,6 +290,8 @@ Discord: matching slash commands (`/cargo`, `/events`, etc.) — see [Discord bo
 
 Slash commands (role-gated same as web permissions). Responses use **Discord embeds** for readable output (team roster, world events, switch results, storage, etc.).
 
+**Branding assets** (Developer Portal → Bot): `apps/discord-bot/assets/icon-512.png` (avatar) and optional `discord-banner.png` (680×240, 17:6 PCB HUD banner with centered **RUSTTOOLS** text). Matches the web app orange-on-black palette. See `apps/discord-bot/assets/README.md`.
+
 | Command | Description |
 |---------|-------------|
 | `/help` | Command reference (embed with grouped fields) |
@@ -397,7 +399,15 @@ Per-device aliases and switch group aliases are configured on the **Devices** an
 
 - **Docker Compose** deploy with Caddy reverse proxy (see [docs/SETUP.md](docs/SETUP.md))
 - **Recommended host** — Oracle Always Free **Ampere A1**: **2 OCPU · 12 GB RAM** total for A1 (one VM for RustTools is typical)
-- **Environment-based config** — Discord, Rust+, Twilio, SendGrid, VAPID, notification channels, automation defaults, `API_RATE_LIMIT_MAX`, `PROCGEN_PARSE_HEAP_MB`
+- **Environment-based config** — Discord, Rust+, Twilio, SendGrid, VAPID, notification channels, automation defaults, `API_RATE_LIMIT_MAX`, `PROCGEN_PARSE_HEAP_MB`, optional ops vars (`OPS_DISCORD_WEBHOOK_URL`, `BACKUP_*`, `DISK_WARN_PCT`) — see `.env.example`
+- **VM health watcher** — `scripts/health-watch.sh` polls `/health` (API, Rust+, FCM); Discord ops webhook; `--quiet` for state-change-only alerts
+- **Scheduled backups** — `scripts/backup-vm.sh` archives the `rusttools-data` Docker volume; `--restore` helper; optional `rclone` via `BACKUP_REMOTE`
+- **Disk monitoring** — `scripts/disk-watch.sh` alerts on full boot/docker volumes
+- **Remote deploy** — `scripts/update-vm.sh` (SSH pull + rebuild); optional deploy-finished webhook
+- **GitHub Actions auto-deploy** — `.github/workflows/deploy-vm.yml` when `VM_DEPLOY_ENABLED=true` (secrets: `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `VM_REPO_PATH`)
+- **Scheduled smoke tests** — `.github/workflows/smoke-scheduled.yml` when `SMOKE_SCHEDULED_ENABLED=true` (weekly `npm run test:smoke` against production)
+- **Bot container healthcheck** — `docker-compose.yml` verifies discord-bot PID 1 is the Node entrypoint
+- **Ops documentation** — [docs/OPS-AUTOMATION.md](docs/OPS-AUTOMATION.md) (backlog + scripts); [docs/SETUP.md §16](docs/SETUP.md#16-hands-off-operations-optional) (cron examples)
 - **Automatic data retention** — audit log prune (30 days), expired session prune (hourly); team death/connection logs bounded by configurable limits and cleared on **map wipe**
 - **Docker log rotation** — 10 MB × 3 files per service (`docker-compose.yml`)
 - **Monorepo packages** — shared types, DB schema (Drizzle), Rust+ client library

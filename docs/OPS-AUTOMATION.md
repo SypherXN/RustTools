@@ -2,7 +2,8 @@
 
 Structured backlog for making the VM stack (API + Discord bot + Caddy) mostly self-running, with clear intervention paths when needed.
 
-**Companion:** private deploy steps in `.local/DEPLOY-WALKTHROUGH.md` (Phases N & O).  
+**Companion:** private deploy steps in `.local/DEPLOY-WALKTHROUGH.md` (Phases N, O, P).  
+**Public setup:** [docs/SETUP.md §16](SETUP.md#16-hands-off-operations-optional) (cron, webhooks, GHA).  
 **Cursor plan:** `.cursor/plans/ops-hands-off.plan.md` (same #N and ids).
 
 **Reference format:** Each task has a stable **#N** (number) and **`id`** (kebab-case). Use either — e.g. “implement **#1**” or “`/implement-by-id health-watch-script`”.
@@ -13,13 +14,18 @@ Structured backlog for making the VM stack (API + Discord bot + Caddy) mostly se
 |------|---------|
 | `docker-compose.yml` `restart: unless-stopped` | Auto-restart on crash and VM reboot |
 | API Docker healthcheck | Unhealthy API detected; bot waits for healthy API |
-| `scripts/update-vm.sh` | One-command manual deploy over SSH |
+| Discord bot Docker healthcheck | Detects crashed bot entrypoint |
+| `scripts/update-vm.sh` | One-command manual deploy over SSH (+ optional deploy webhook) |
 | `scripts/health-watch.sh` | Cron `/health` poller + ops Discord alerts (FCM/Rust+) |
 | `scripts/backup-vm.sh` | Weekly Docker volume backup + restore helper |
 | `scripts/disk-watch.sh` | Disk usage alerts for small Oracle boot volumes |
-| Phase N / O walkthrough | 24/7 + update docs (manual, GitHub Actions, cron) |
+| `.github/workflows/deploy-vm.yml` | Optional push-to-main VM deploy |
+| `.github/workflows/smoke-scheduled.yml` | Optional weekly production smoke tests |
+| Phase N / O / P walkthrough | 24/7 + update + hands-off ops (`.local/`) |
 | `/health` + FCM fields | Single endpoint for uptime tools and expiry checks |
 | FCM web banner | In-app warning 14 days before FCM expiry |
+| Web HUD background | Global orange circuit-grid backdrop (`apps/web/src/styles/background.css`) |
+| Discord branding assets | `icon-512.png` + `discord-banner.png` (17:6 PCB banner) |
 
 ---
 
@@ -551,4 +557,4 @@ Note: needs Node on runner; VM can use `docker compose exec` or run from GitHub 
 
 ---
 
-**Next:** Ops backlog complete (except cancelled #15–#17). Run `/plan-status docs/OPS-AUTOMATION.md` or configure Phase P on the VM.
+**Status:** Ops backlog complete (tasks #1–#14 shipped; #15–#17 cancelled). Configure cron and webhooks per [SETUP.md §16](SETUP.md#16-hands-off-operations-optional).

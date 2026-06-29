@@ -23,6 +23,7 @@ For a quick local dev start, see the [README](../README.md).
 13. [Updating after deploy](#13-updating-after-deploy)
 14. [Troubleshooting](#14-troubleshooting)
 15. [Disk usage & data growth](#disk-usage--data-growth)
+16. [Hands-off operations (optional)](#16-hands-off-operations-optional)
 
 ---
 
@@ -108,8 +109,8 @@ Do this once in the [Discord Developer Portal](https://discord.com/developers/ap
 
 1. Go to **Bot** → **Add Bot**.
 2. Copy the **Token** → `DISCORD_BOT_TOKEN` (treat as a secret; never commit it).
-3. **Icon** → upload `apps/discord-bot/assets/icon-512.png` (same orange terminal mark as the web app).
-4. **Banner** → upload `apps/discord-bot/assets/discord-banner.png` (optional; complements the icon).
+3. **Icon** → upload `apps/discord-bot/assets/icon-512.png` (512×512 orange terminal HUD mark — same as the web app favicon).
+4. **Banner** (optional) → upload `apps/discord-bot/assets/discord-banner.png` (680×240, **17:6** aspect ratio). Full PCB circuit background with centered **RUSTTOOLS** logotype and orange HUD corner brackets; the bot avatar carries the icon so the banner is text-only. See `apps/discord-bot/assets/README.md`.
 5. Under **Privileged Gateway Intents**, you do **not** need **Message Content Intent** — the bot uses slash commands only (no reading channel messages).
 
 ### 3.4 Invite the bot to your server
@@ -321,6 +322,18 @@ nano .env             # or your preferred editor
 
 Do **not** set `RUSTPLUS_ALLOW_UNPROMPTED_PAIR=true` in production — master server pairing must go through **Settings → Server & Map → Re-pair Server**.
 
+### Optional — ops monitoring & backups
+
+For hands-off alerting and scheduled backups after deploy, see [§16 Hands-off operations](#16-hands-off-operations-optional). Common optional vars (full list in `.env.example`):
+
+| Variable | Purpose |
+|----------|---------|
+| `OPS_DISCORD_WEBHOOK_URL` | Ops channel webhook for health, FCM expiry, disk, and deploy notifications |
+| `OPS_HEALTH_STATE_FILE` | State file for `health-watch.sh --quiet` (alert only on change) |
+| `OPS_NOTIFY_RECOVERY=true` | Also ping when `/health` recovers after a failure |
+| `BACKUP_DIR` / `BACKUP_RETENTION_DAYS` | Where `backup-vm.sh` writes archives and how long to keep them |
+| `DISK_WARN_PCT` | Disk usage threshold for `disk-watch.sh` (default 85%) |
+
 ### Production example (partial)
 
 ```env
@@ -401,6 +414,8 @@ Caddy forwards these paths to the API: `/admin/*`, `/audit`, `/auth/*`, `/automa
 
 Container logs use the **json-file** driver with rotation (**10 MB × 3 files** per service) — see `docker-compose.yml`.
 
+The **discord-bot** service has a Docker healthcheck (verifies the bot Node process is PID 1). It detects a crashed entrypoint but not a hung event loop.
+
 ### Check status
 
 ```bash
@@ -420,7 +435,19 @@ Expected: `"status": "ok"`. `rustplus.connected` may be `false` until you pair a
 
 ### Data persistence
 
-SQLite and FCM config live in the Docker volume `rusttools-data`, mounted at `/app/data` inside the API container. Back up this volume before major changes:
+SQLite and FCM config live in the Docker volume `rusttools-data`, mounted at `/app/data` inside the API container.
+
+**Recommended — use the backup script:**
+
+```bash
+./scripts/backup-vm.sh
+# Weekly cron example (Sunday 03:15):
+# 15 3 * * 0 cd /home/ubuntu/RustTools && ./scripts/backup-vm.sh >>/tmp/rusttools-backup.log 2>&1
+```
+
+Creates `~/backups/rusttools-YYYYMMDD-HHMM.tar.gz`, prunes old archives, optional restore with `--restore`. See [§16](#16-hands-off-operations-optional) and `scripts/backup-vm.sh --help`.
+
+**Manual one-off backup** (same volume):
 
 ```bash
 docker run --rm -v rusttools_rusttools-data:/data -v $(pwd):/backup alpine \
@@ -654,18 +681,40 @@ Use this checklist after deploy:
 | Discord bot | `/status` responds in your server |
 | Notifications | Trigger an alarm in-game → message in notification channel |
 | Live info board | `/channel set purpose:information` → embed updates within ~60s |
+| Ops health (optional) | `./scripts/health-watch.sh` exits 0; with webhook configured, no false alerts |
+| Backup (optional) | `./scripts/backup-vm.sh` creates archive under `~/backups/` |
+
+After first deploy, configure optional hands-off ops in [§16](#16-hands-off-operations-optional).
 
 ---
 
 ## 13. Updating after deploy
 
-On the VM:
+### Manual update on the VM
 
 ```bash
 cd RustTools
 git pull
 docker compose up -d --build
 ```
+
+### Update from your laptop (SSH)
+
+```bash
+./scripts/update-vm.sh
+```
+
+Runs `git pull`, `docker compose up -d --build`, prints `/health`, and posts to `OPS_DISCORD_WEBHOOK_URL` on success or failure (if configured). Pass host/user/path via env or `~/.rusttools-deploy.env`.
+
+### GitHub Actions auto-deploy (optional)
+
+Workflow: `.github/workflows/deploy-vm.yml` — runs on push to `main` when paths under `apps/api`, `apps/discord-bot`, `packages/`, etc. change.
+
+1. Set repository variable `VM_DEPLOY_ENABLED=true`
+2. Add secrets: `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `VM_REPO_PATH`
+3. Push to `main` — workflow SSHs to the VM and runs `scripts/update-vm.sh`
+
+The web UI on GitHub Pages is **not** redeployed by this workflow; push any `apps/web` change to `main` for the Pages workflow separately.
 
 Database migrations run automatically when the API container starts (`node packages/db/dist/migrate.js` before the API process).
 
@@ -837,6 +886,72 @@ PROCGEN_PARSE_HEAP_MB=2048
 ```
 
 Parsing may take **5–15 minutes** and will be slow. Prefer moving RustTools to **A1 12 GB** and keeping other bots on micro.
+
+---
+
+## 16. Hands-off operations (optional)
+
+After the stack is live, you can reduce day-to-day SSH with the ops tooling in `scripts/` and optional GitHub Actions workflows. Full task index and acceptance criteria: **[docs/OPS-AUTOMATION.md](OPS-AUTOMATION.md)**.
+
+### Minimum recommended stack
+
+| Tool | What it does |
+|------|----------------|
+| External uptime monitor | Ping `https://YOUR_DOMAIN/health` (e.g. UptimeRobot) — detects VM/network down |
+| `scripts/health-watch.sh` | Cron poller for API, Rust+, and FCM nuance; Discord ops webhook |
+| `scripts/backup-vm.sh` | Weekly `rusttools-data` volume backup + restore helper |
+
+### Ops Discord webhook
+
+Create a **private ops channel** in your Discord server (separate from raid/alarm channels). Channel settings → **Integrations** → **Webhooks** → copy URL → set in `.env`:
+
+```env
+OPS_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+```
+
+Used by `health-watch.sh`, `disk-watch.sh`, and deploy notifications from `update-vm.sh`.
+
+### Example crontab (on the VM)
+
+```cron
+# Health + FCM/Rust+ alerts (state-change only with --quiet)
+*/10 * * * * cd /home/ubuntu/RustTools && ./scripts/health-watch.sh --quiet >>/tmp/rusttools-health-watch.log 2>&1
+
+# Weekly backup (Sunday 03:15)
+15 3 * * 0 cd /home/ubuntu/RustTools && ./scripts/backup-vm.sh >>/tmp/rusttools-backup.log 2>&1
+
+# Optional: disk usage (daily)
+0 8 * * * cd /home/ubuntu/RustTools && ./scripts/disk-watch.sh --quiet >>/tmp/rusttools-disk-watch.log 2>&1
+```
+
+Install `jq` on the VM if missing: `sudo apt install -y jq`.
+
+### Scripts reference
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/health-watch.sh` | `curl` `/health`; alert on API/Rust+/FCM issues; `--quiet` uses `OPS_HEALTH_STATE_FILE` |
+| `scripts/backup-vm.sh` | Tar `rusttools-data` volume; `--restore` for interactive restore |
+| `scripts/disk-watch.sh` | Alert when disk usage exceeds `DISK_WARN_PCT` |
+| `scripts/update-vm.sh` | Pull + rebuild on VM (local or over SSH); deploy webhook |
+
+### GitHub Actions (optional)
+
+| Workflow | Enable | Secrets / variables |
+|----------|--------|---------------------|
+| `.github/workflows/deploy-vm.yml` | Variable `VM_DEPLOY_ENABLED=true` | `VM_HOST`, `VM_USER`, `VM_SSH_KEY`, `VM_REPO_PATH` |
+| `.github/workflows/smoke-scheduled.yml` | Variable `SMOKE_SCHEDULED_ENABLED=true` | `SMOKE_API_URL`, `SMOKE_INTERNAL_API_KEY` |
+
+### What still needs manual intervention
+
+| Task | Cadence |
+|------|---------|
+| FCM re-register | ~90 days (Chrome + bot Steam login) |
+| Slash command register | When `commands.ts` changes |
+| Server re-pair after wipe | Per wipe |
+| Discord icon/banner | Rare — assets in `apps/discord-bot/assets/` |
+
+Private maintainer notes (Phase P walkthrough, ops runbook) may also exist in `.local/` if you use the extended deploy walkthrough.
 
 ---
 

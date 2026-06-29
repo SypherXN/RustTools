@@ -118,12 +118,26 @@ Required:
 Optional:
   VITE_LIVE_CAMERAS = false   (hide Cameras page in the Pages build)
 
+Optional VM auto-deploy (GitHub Actions):
+  VM_DEPLOY_ENABLED = true
+  Secrets: VM_HOST, VM_USER, VM_SSH_KEY, VM_REPO_PATH
+  See docs/SETUP.md section 16 and docs/OPS-AUTOMATION.md
+
+Optional scheduled smoke (GitHub Actions):
+  SMOKE_SCHEDULED_ENABLED = true
+  Secrets: SMOKE_API_URL, SMOKE_INTERNAL_API_KEY
+
 After setting VITE_API_URL, push to main or re-run "Deploy GitHub Pages" workflow.
 Pages UI URL (from FRONTEND_URL): ${PAGES_URL:-<set FRONTEND_URL in .env>}
 
 == Discord Developer Portal ==
 OAuth redirect (production): ${REDIRECT:-https://YOUR_DOMAIN/auth/discord/callback}
 Must match DISCORD_REDIRECT_URI in .env exactly.
+
+Bot branding (optional but recommended):
+  Icon: apps/discord-bot/assets/icon-512.png
+  Banner: apps/discord-bot/assets/discord-banner.png (680x240, 17:6)
+  See apps/discord-bot/assets/README.md
 
 == After VM deploy ==
 1. docker compose up -d --build
@@ -133,7 +147,13 @@ Must match DISCORD_REDIRECT_URI in .env exactly.
 4. npm run register-commands --workspace=@rusttools/discord-bot
 5. npm run test:smoke   (optional; set SMOKE_API_URL=https://YOUR_DOMAIN)
 
+== Optional hands-off ops (see docs/SETUP.md section 16) ==
+- OPS_DISCORD_WEBHOOK_URL in .env (ops channel webhook)
+- Cron: scripts/health-watch.sh --quiet, scripts/backup-vm.sh
+- ./scripts/update-vm.sh for SSH deploys from laptop
+
 Full guide: docs/SETUP.md
+Ops backlog: docs/OPS-AUTOMATION.md
 EOF
 
 echo ""
