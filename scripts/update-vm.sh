@@ -60,6 +60,31 @@ else
 fi
 
 echo "==> Rebuilding and restarting containers..."
+
+chmod +x scripts/render-caddyfile.sh
+./scripts/render-caddyfile.sh
+
+if [[ -n "${WEB_DOMAIN:-}" ]]; then
+  if [[ -z "${API_PUBLIC_URL:-}" ]]; then
+    echo "WEB_DOMAIN is set but API_PUBLIC_URL is missing — needed to build the web UI." >&2
+    exit 1
+  fi
+  echo "==> Building web UI (${WEB_DOMAIN} → API ${API_PUBLIC_URL})..."
+  docker run --rm \
+    -v "$ROOT:/app" -w /app \
+    -e VITE_API_URL="$API_PUBLIC_URL" \
+    -e VITE_BASE_PATH=/ \
+    -e "VITE_LIVE_CAMERAS=${VITE_LIVE_CAMERAS:-}" \
+    node:20-bookworm-slim \
+    bash -c "npm ci && npm run build --workspace=@rusttools/shared && npm run build --workspace=@rusttools/web"
+else
+  echo "WEB_DOMAIN unset — skipping VM web build (API-only or use GitHub Pages for UI)."
+  mkdir -p apps/web/dist
+  if [[ ! -f apps/web/dist/index.html ]]; then
+    echo '<!DOCTYPE html><html><body><p>Set WEB_DOMAIN in .env and re-run update-vm.sh to build the dashboard.</p></body></html>' > apps/web/dist/index.html
+  fi
+fi
+
 docker compose up -d --build
 
 echo ""

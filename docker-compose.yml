@@ -53,9 +53,11 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:-localhost}
+      WEB_DOMAIN: ${WEB_DOMAIN:-}
       ACME_EMAIL: ${ACME_EMAIL:-admin@localhost}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.generated:/etc/caddy/Caddyfile:ro
+      - ./apps/web/dist:/srv/web:ro
       - caddy-data:/data
       - caddy-config:/config
     logging: *default-logging

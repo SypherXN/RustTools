@@ -62,12 +62,17 @@ check_env "DISCORD_CLIENT_ID" "Discord application client ID"
 check_env "DISCORD_CLIENT_SECRET" "Discord OAuth client secret"
 check_env "DISCORD_BOT_TOKEN" "Discord bot token"
 check_env "DISCORD_GUILD_ID" "Discord server/guild ID"
-check_env "DOMAIN" "Public domain for Caddy HTTPS"
+check_env "DOMAIN" "API hostname for Caddy HTTPS (e.g. rusttools-api.example.com)"
 check_env "ACME_EMAIL" "Let's Encrypt contact email"
-check_env "API_PUBLIC_URL" "Public API URL (https://your-domain)"
-check_env "DISCORD_REDIRECT_URI" "Discord OAuth redirect (https://your-domain/auth/discord/callback)"
-check_env "CORS_ORIGINS" "GitHub Pages origin for CORS (https://user.github.io)"
-check_env "FRONTEND_URL" "GitHub Pages app URL with repo path"
+check_env "API_PUBLIC_URL" "Public API URL (https://rusttools-api.example.com)"
+check_env "DISCORD_REDIRECT_URI" "Discord OAuth redirect (https://rusttools-api.example.com/auth/discord/callback)"
+check_env "CORS_ORIGINS" "Web UI origin for CORS (https://rusttools.example.com — no path)"
+check_env "FRONTEND_URL" "Web UI URL after OAuth (https://rusttools.example.com)"
+
+WEB_DOMAIN_VAL="$(env_value WEB_DOMAIN)"
+if ! is_blank "$WEB_DOMAIN_VAL"; then
+  check_env "WEB_DOMAIN" "Web UI hostname for Caddy (e.g. rusttools.example.com)"
+fi
 
 ROLE_ADMIN="$(env_value DISCORD_ROLE_ADMIN)"
 ROLE_SWITCH="$(env_value DISCORD_ROLE_SWITCH)"
@@ -98,41 +103,40 @@ if ! is_blank "$REDIRECT" && ! is_blank "$DOMAIN_VAL"; then
   fi
 fi
 
-# --- GitHub Actions reminder (not stored in .env) ----------------------------
+FRONTEND="$(env_value FRONTEND_URL)"
+WEB_DOMAIN_VAL="$(env_value WEB_DOMAIN)"
+if ! is_blank "$WEB_DOMAIN_VAL"; then
+  WARNINGS+=("WEB_DOMAIN is set — UI will be built on VM. Leave unset if using GitHub Pages at FRONTEND_URL ($FRONTEND)")
+fi
+
+# --- Deploy reminders (not all stored in .env) ----------------------------
 
 GITHUB_REPO="${GITHUB_REPOSITORY:-SypherXN/RustTools}"
-PAGES_URL="$(env_value FRONTEND_URL)"
-SUGGESTED_VITE_API_URL="${API_URL:-https://rusttools.yourdomain.com}"
+WEB="$(env_value WEB_DOMAIN)"
 
 cat > "$REMINDERS_FILE" <<EOF
 RustTools deploy reminders
 Generated: $(date -u +"%Y-%m-%d %H:%M UTC")
 
-== GitHub Actions (repository variables) ==
-Repo: https://github.com/${GITHUB_REPO}/settings/variables/actions
+== Domains ==
+API (DOMAIN): ${DOMAIN_VAL:-<set DOMAIN in .env>}
+API_PUBLIC_URL: ${API_URL:-<set in .env>}
+FRONTEND_URL: ${FRONTEND:-<set in .env>}
 
-Required:
-  VITE_API_URL = ${SUGGESTED_VITE_API_URL}
-    (API origin only — no trailing slash. Must match your live Caddy/API domain.)
+GitHub Pages (web UI — recommended):
+  Repo: https://github.com/${GITHUB_REPO}/settings/variables/actions
+  VITE_API_URL = ${API_URL:-https://rusttools-api.yourdomain.com}
+  VITE_BASE_PATH = /   (required for custom domain at subdomain root; omit only for github.io/RepoName/)
+  Custom domain: set in Settings → Pages (e.g. rusttools.yourdomain.com)
+  After setting variables, push to main or re-run "Deploy GitHub Pages" workflow.
 
-Optional:
-  VITE_LIVE_CAMERAS = false   (hide Cameras page in the Pages build)
-
-Optional VM auto-deploy (GitHub Actions):
-  VM_DEPLOY_ENABLED = true
-  Secrets: VM_HOST, VM_USER, VM_SSH_KEY, VM_REPO_PATH
-  See docs/SETUP.md section 16 and docs/OPS-AUTOMATION.md
-
-Optional scheduled smoke (GitHub Actions):
-  SMOKE_SCHEDULED_ENABLED = true
-  Secrets: SMOKE_API_URL, SMOKE_INTERNAL_API_KEY
-
-After setting VITE_API_URL, push to main or re-run "Deploy GitHub Pages" workflow.
-Pages UI URL (from FRONTEND_URL): ${PAGES_URL:-<set FRONTEND_URL in .env>}
+VM-hosted UI (alternative — omit WEB_DOMAIN if using Pages):
+  WEB_DOMAIN: ${WEB:-<unset for GitHub Pages>}
+  If set: ./scripts/update-vm.sh builds web on VM with VITE_API_URL=\$API_PUBLIC_URL
 
 == Discord Developer Portal ==
-OAuth redirect (production): ${REDIRECT:-https://YOUR_DOMAIN/auth/discord/callback}
-Must match DISCORD_REDIRECT_URI in .env exactly.
+OAuth redirect (production): ${REDIRECT:-https://YOUR_API_DOMAIN/auth/discord/callback}
+Must match DISCORD_REDIRECT_URI in .env exactly (API hostname).
 
 Bot branding (optional but recommended):
   Icon: apps/discord-bot/assets/icon-512.png
@@ -140,12 +144,13 @@ Bot branding (optional but recommended):
   See apps/discord-bot/assets/README.md
 
 == After VM deploy ==
-1. docker compose up -d --build
-2. curl https://YOUR_DOMAIN/health
-3. Register FCM: npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json
+1. ./scripts/update-vm.sh   (or: ./scripts/render-caddyfile.sh && docker compose up -d --build)
+2. curl https://YOUR_API_DOMAIN/health
+3. Open FRONTEND_URL (GitHub Pages custom domain)
+4. Register FCM: npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json
    (or upload via Settings → Admin)
-4. npm run register-commands --workspace=@rusttools/discord-bot
-5. npm run test:smoke   (optional; set SMOKE_API_URL=https://YOUR_DOMAIN)
+5. npm run register-commands --workspace=@rusttools/discord-bot
+6. npm run test:smoke   (optional; set SMOKE_API_URL=https://YOUR_API_DOMAIN)
 
 == Optional hands-off ops (see docs/SETUP.md section 16) ==
 - OPS_DISCORD_WEBHOOK_URL in .env (ops channel webhook)
@@ -178,6 +183,6 @@ if ((${#WARNINGS[@]} > 0)); then
   echo ""
 fi
 
-echo "GitHub Pages: set Actions variable VITE_API_URL (see $REMINDERS_FILE)"
+echo "Deploy checklist: see $REMINDERS_FILE (GitHub Pages VITE_API_URL + VITE_BASE_PATH=/ for custom domain)"
 echo ""
 echo "Next: edit .env, then npm install && npm run db:migrate"

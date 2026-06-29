@@ -1,17 +1,26 @@
+# Generated at deploy time by scripts/render-caddyfile.sh → Caddyfile.generated
+# Edit scripts/render-caddyfile.sh or .env (DOMAIN, WEB_DOMAIN) — not this file.
+#
+# Split-domain example (matthewgtran.com):
+#   WEB_DOMAIN=rusttools.matthewgtran.com      → React dashboard (static files)
+#   DOMAIN=rusttools-api.matthewgtran.com      → API + WebSocket + OAuth callback
+#
+# API-only (GitHub Pages UI): leave WEB_DOMAIN unset; DOMAIN = API hostname.
+
+{$WEB_DOMAIN} {
+	email {$ACME_EMAIL}
+	encode gzip
+	root * /srv/web
+	try_files {path} /index.html
+	file_server
+}
+
 {$DOMAIN} {
 	email {$ACME_EMAIL}
 	encode gzip
-
-	@api path /admin/* /audit /auth/* /automation-* /cameras/* /device-library* /devices* /health /push/* /servers* /storage* /switch-groups* /vending/* /ws
-	handle @api {
-		reverse_proxy api:3000
-	}
-
-	handle {
-		respond "RustTools API — use the GitHub Pages frontend." 200
-	}
+	reverse_proxy api:3000
 }
 
 :80 {
-	respond "RustTools — set DOMAIN in .env for HTTPS." 200
+	respond "RustTools — run ./scripts/render-caddyfile.sh after editing .env" 200
 }

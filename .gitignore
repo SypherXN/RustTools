@@ -13,4 +13,5 @@ build/
 fcm-credentials.json
 coverage/
 .vite/
+Caddyfile.generated
 *.tsbuildinfo

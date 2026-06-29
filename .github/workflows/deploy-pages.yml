@@ -3,6 +3,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -38,10 +39,13 @@ jobs:
           fi
         env:
           VITE_API_URL: ${{ vars.VITE_API_URL }}
-      - run: npm run build --workspace=@rusttools/web
+      - name: Build web UI
+        run: |
+          export VITE_API_URL="${{ vars.VITE_API_URL }}"
+          export VITE_BASE_PATH="${{ vars.VITE_BASE_PATH }}"
+          if [ -z "$VITE_BASE_PATH" ]; then export VITE_BASE_PATH="/RustTools/"; fi
+          npm run build --workspace=@rusttools/web
         env:
-          VITE_API_URL: ${{ vars.VITE_API_URL }}
-          VITE_BASE_PATH: /RustTools/
           VITE_LIVE_CAMERAS: ${{ vars.VITE_LIVE_CAMERAS }}
 
       - uses: actions/upload-pages-artifact@v3
