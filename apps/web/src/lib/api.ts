@@ -1,7 +1,11 @@
 import { demoHandleApi, isDemoMode } from "./demo";
 import { cachedApiFetch } from "./api-cache";
 
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
+const API_BASE = (import.meta.env.VITE_API_URL?.trim() || "/api").replace(/\/$/, "");
+
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   if (isDemoMode()) {
@@ -19,7 +23,7 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     credentials: "include",
     headers,
@@ -42,7 +46,7 @@ export async function apiUpload<T>(
     throw new Error("Uploads are disabled in demo mode");
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...init,
     method: init?.method ?? "POST",
     credentials: "include",
@@ -58,5 +62,5 @@ export async function apiUpload<T>(
 }
 
 export function getDiscordLoginUrl(): string {
-  return `${API_BASE}/auth/discord`;
+  return apiUrl("/auth/discord");
 }

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getDiscordLoginUrl } from "../lib/api";
+import { apiUrl, getDiscordLoginUrl } from "../lib/api";
 import { assetUrl } from "../lib/asset-url";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -12,7 +12,7 @@ export function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) {
-      window.location.replace(`/api/auth/discord/callback?${params.toString()}`);
+      window.location.replace(apiUrl(`/auth/discord/callback?${params.toString()}`));
     }
   }, []);
 
