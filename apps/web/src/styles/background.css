@@ -1,0 +1,80 @@
+/* ── Global HUD backdrop (matches icon / Discord banner) ── */
+
+html {
+  min-height: 100%;
+  background-color: var(--bg);
+}
+
+body {
+  background: transparent;
+}
+
+/* Radial glows + circuit mesh */
+html::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 55% at 96% 4%, rgba(255, 107, 26, 0.16), transparent 52%),
+    radial-gradient(ellipse 65% 45% at 4% 96%, rgba(255, 107, 26, 0.08), transparent 48%),
+    radial-gradient(ellipse 45% 35% at 50% 42%, rgba(255, 107, 26, 0.04), transparent 65%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ff6b1a' stroke-opacity='0.07' stroke-width='0.6'%3E%3Cpath d='M0 60h40M80 60h40M60 0v40M60 80v40'/%3E%3Cpath d='M20 20l12 12M88 20l-12 12M20 100l12-12M88 100l-12-12'/%3E%3Cpolygon points='60,28 72,46 48,46'/%3E%3Cpolygon points='60,92 72,74 48,74'/%3E%3C/g%3E%3C/svg%3E"),
+  linear-gradient(rgba(255, 107, 26, 0.035) 1px, transparent 1px),
+  linear-gradient(90deg, rgba(255, 107, 26, 0.035) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    auto,
+    120px 120px,
+    56px 56px,
+    56px 56px;
+  mask-image: radial-gradient(ellipse 92% 82% at 50% 48%, black 15%, transparent 78%);
+}
+
+/* Corner HUD brackets */
+html::after {
+  content: "";
+  position: fixed;
+  inset: 1.15rem;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.32;
+  background:
+    linear-gradient(var(--accent), var(--accent)) 0 0 / 30px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 0 0 / 2px 30px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 100% 0 / 30px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 100% 0 / 2px 30px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 0 100% / 30px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 0 100% / 2px 30px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 100% 100% / 30px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) 100% 100% / 2px 30px no-repeat;
+}
+
+/* Subtle scanlines across the viewport */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255, 107, 26, 0.012) 3px,
+    rgba(255, 107, 26, 0.012) 4px
+  );
+}
+
+body {
+  position: relative;
+  z-index: 1;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}

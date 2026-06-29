@@ -6,10 +6,6 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(255, 107, 26, 0.08), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 0% 100%, rgba(255, 107, 26, 0.04), transparent 50%),
-    var(--bg);
 }
 
 a {
@@ -356,35 +352,7 @@ button:active,
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background:
-    radial-gradient(circle at top right, rgba(255, 107, 26, 0.12), transparent 45%),
-    radial-gradient(circle at bottom left, rgba(255, 107, 26, 0.05), transparent 40%),
-    var(--bg);
   position: relative;
-}
-
-.login-page::before,
-.login-page::after {
-  content: "";
-  position: fixed;
-  width: 24px;
-  height: 24px;
-  border-color: var(--accent);
-  border-style: solid;
-  opacity: 0.4;
-  pointer-events: none;
-}
-
-.login-page::before {
-  top: 2rem;
-  left: 2rem;
-  border-width: 2px 0 0 2px;
-}
-
-.login-page::after {
-  bottom: 2rem;
-  right: 2rem;
-  border-width: 0 2px 2px 0;
 }
 
 .login-card {
@@ -951,7 +919,8 @@ legend {
   z-index: 9999;
   display: grid;
   place-items: center;
-  background: var(--bg);
+  background: rgba(6, 8, 9, 0.9);
+  backdrop-filter: blur(6px);
   transition: opacity 0.45s ease, visibility 0.45s ease;
 }
 

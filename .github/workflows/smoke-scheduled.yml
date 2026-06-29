@@ -1,0 +1,55 @@
+name: Scheduled smoke test
+
+on:
+  schedule:
+    # Weekly — Monday 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    if: vars.SMOKE_SCHEDULED_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm install
+
+      - name: Build packages required by smoke-test.mjs
+        run: |
+          npm run build --workspace=@rusttools/shared
+          npm run build --workspace=@rusttools/rustplus-client
+
+      - name: Require smoke secrets
+        env:
+          SMOKE_API_URL: ${{ secrets.SMOKE_API_URL }}
+          SMOKE_INTERNAL_API_KEY: ${{ secrets.SMOKE_INTERNAL_API_KEY }}
+        run: |
+          missing=()
+          [[ -z "$SMOKE_API_URL" ]] && missing+=(SMOKE_API_URL)
+          [[ -z "$SMOKE_INTERNAL_API_KEY" ]] && missing+=(SMOKE_INTERNAL_API_KEY)
+          if ((${#missing[@]} > 0)); then
+            echo "Missing secrets: ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - name: Run smoke tests against production API
+        run: npm run test:smoke
+        env:
+          SMOKE_API_URL: ${{ secrets.SMOKE_API_URL }}
+          INTERNAL_API_KEY: ${{ secrets.SMOKE_INTERNAL_API_KEY }}
+
+  skipped:
+    runs-on: ubuntu-latest
+    if: vars.SMOKE_SCHEDULED_ENABLED != 'true'
+    steps:
+      - name: Scheduled smoke disabled
+        run: |
+          echo "Scheduled smoke is disabled (SMOKE_SCHEDULED_ENABLED is not 'true')."
+          echo "To enable: set repository variable SMOKE_SCHEDULED_ENABLED=true"
+          echo "and secrets SMOKE_API_URL, SMOKE_INTERNAL_API_KEY (production INTERNAL_API_KEY)."

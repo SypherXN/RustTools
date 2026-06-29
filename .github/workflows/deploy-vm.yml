@@ -1,0 +1,64 @@
+name: Deploy VM (API + bot)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - 'apps/discord-bot/**'
+      - 'packages/**'
+      - 'docker-compose.yml'
+      - 'package-lock.json'
+      - 'patches/**'
+      - 'scripts/update-vm.sh'
+      - '.github/workflows/deploy-vm.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-vm
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: vars.VM_DEPLOY_ENABLED == 'true'
+    steps:
+      - name: Require deploy secrets
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER }}
+          VM_SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          VM_REPO_PATH: ${{ secrets.VM_REPO_PATH }}
+        run: |
+          missing=()
+          [[ -z "$VM_HOST" ]] && missing+=(VM_HOST)
+          [[ -z "$VM_USER" ]] && missing+=(VM_USER)
+          [[ -z "$VM_SSH_KEY" ]] && missing+=(VM_SSH_KEY)
+          [[ -z "$VM_REPO_PATH" ]] && missing+=(VM_REPO_PATH)
+          if ((${#missing[@]} > 0)); then
+            echo "Missing GitHub Actions secrets: ${missing[*]}" >&2
+            echo "Set VM_HOST, VM_USER, VM_SSH_KEY, VM_REPO_PATH under Settings → Secrets and variables → Actions." >&2
+            echo "See docs/OPS-AUTOMATION.md (#6 deploy-vm-workflow) or DEPLOY-WALKTHROUGH Phase O.2." >&2
+            exit 1
+          fi
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.VM_REPO_PATH }}"
+            ./scripts/update-vm.sh
+
+  skipped:
+    runs-on: ubuntu-latest
+    if: vars.VM_DEPLOY_ENABLED != 'true'
+    steps:
+      - name: VM deploy disabled
+        run: |
+          echo "VM auto-deploy is disabled (VM_DEPLOY_ENABLED is not 'true')."
+          echo "To enable: set repository variable VM_DEPLOY_ENABLED=true and configure secrets VM_HOST, VM_USER, VM_SSH_KEY, VM_REPO_PATH."
+          echo "Manual deploy: ssh to the VM and run ./scripts/update-vm.sh"

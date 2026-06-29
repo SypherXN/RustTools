@@ -108,7 +108,9 @@ Do this once in the [Discord Developer Portal](https://discord.com/developers/ap
 
 1. Go to **Bot** → **Add Bot**.
 2. Copy the **Token** → `DISCORD_BOT_TOKEN` (treat as a secret; never commit it).
-3. Under **Privileged Gateway Intents**, you do **not** need **Message Content Intent** — the bot uses slash commands only (no reading channel messages).
+3. **Icon** → upload `apps/discord-bot/assets/icon-512.png` (same orange terminal mark as the web app).
+4. **Banner** → upload `apps/discord-bot/assets/discord-banner.png` (optional; complements the icon).
+5. Under **Privileged Gateway Intents**, you do **not** need **Message Content Intent** — the bot uses slash commands only (no reading channel messages).
 
 ### 3.4 Invite the bot to your server
 
