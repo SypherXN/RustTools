@@ -81,11 +81,13 @@ export async function listStorageMonitorMetadata(
 
   await runWithConcurrency(rows, STORAGE_MONITOR_READ_CONCURRENCY, async (monitor) => {
     let parsed = null;
-    try {
-      const info = await rustPlus.getEntityInfo(monitor.entityId);
-      parsed = parseStorageEntityInfo(info);
-    } catch {
-      // Rust+ offline or entity unreachable — fall back to saved icon / unknown kind.
+    if (!monitor.icon) {
+      try {
+        const info = await rustPlus.getEntityInfo(monitor.entityId);
+        parsed = parseStorageEntityInfo(info);
+      } catch {
+        // Rust+ offline or entity unreachable — fall back to saved icon / unknown kind.
+      }
     }
 
     const resolved = resolveStorageMonitorIcon({ savedIcon: monitor.icon, parsed });

@@ -16,22 +16,41 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return cachedApiFetch(path, () => fetchJson<T>(path, init), init);
 }
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(path: string, init?: RequestInit, permissionRetry = false): Promise<T> {
   const hasBody = init?.body != null && init.body !== "";
   const headers = new Headers(init?.headers);
   if (hasBody && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(apiUrl(path), {
-    ...init,
-    credentials: "include",
-    headers,
-  });
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(path), {
+      ...init,
+      credentials: "include",
+      headers,
+    });
+  } catch (err) {
+    if (err instanceof TypeError) {
+      throw new Error("Could not reach the API — check your connection or sign in again.");
+    }
+    throw err;
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request failed: ${res.status}`);
+    const message = body.error ?? `Request failed: ${res.status}`;
+    if (
+      !permissionRetry &&
+      res.status === 403 &&
+      typeof message === "string" &&
+      message.startsWith("Missing ") &&
+      message.endsWith(" permission")
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return fetchJson<T>(path, init, true);
+    }
+    throw new Error(message);
   }
 
   return res.json() as Promise<T>;

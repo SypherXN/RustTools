@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { StorageContainerIconOption, StorageContainerKind } from "@rusttools/shared";
 import { iconOptionsForKind } from "@rusttools/shared";
 
@@ -19,6 +20,7 @@ export function StorageIconPicker({
 }: StorageIconPickerProps) {
   const [filter, setFilter] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const options = useMemo(() => iconOptionsForKind(kind), [kind]);
   const filtered = useMemo(() => {
@@ -30,27 +32,40 @@ export function StorageIconPicker({
   }, [filter, options]);
 
   const pick = async (opt: StorageContainerIconOption) => {
+    if (saving) return;
     setSaving(true);
+    setError(null);
     try {
       await onSave(opt.shortname);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save icon");
     } finally {
       setSaving(false);
     }
   };
 
   const reset = async () => {
+    if (saving) return;
     setSaving(true);
+    setError(null);
     try {
       await onSave(null);
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reset icon");
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <div className="storage-icon-picker-backdrop" onClick={onClose}>
+  return createPortal(
+    <div
+      className="storage-icon-picker-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         className="storage-icon-picker card"
         onClick={(e) => e.stopPropagation()}
@@ -68,6 +83,7 @@ export function StorageIconPicker({
             Auto-detected from Rust+. Pick a skin if this monitor is on a different container.
           </p>
         )}
+        {error && <p className="alert alert-error">{error}</p>}
         <input
           type="text"
           value={filter}
@@ -85,7 +101,7 @@ export function StorageIconPicker({
               disabled={saving}
               onClick={() => void pick(opt)}
             >
-              <img src={opt.iconUrl} alt="" />
+              <img src={opt.iconUrl} alt="" draggable={false} />
               <span>{opt.name}</span>
             </button>
           ))}
@@ -97,6 +113,7 @@ export function StorageIconPicker({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

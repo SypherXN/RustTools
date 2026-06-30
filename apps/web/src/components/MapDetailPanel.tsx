@@ -4,6 +4,7 @@ import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
 import { apiFetch, apiUpload } from "../lib/api";
+import { useAuthenticatedImageSrc } from "../hooks/useAuthenticatedImageSrc";
 import type { MapSelection } from "../lib/map-clusters";
 import type { MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
 
@@ -225,16 +226,16 @@ function PinDetails({
   canSetServerBase?: boolean;
   onSetAsServerBase?: (pin: MapPin) => void;
 }) {
-  const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
+  const screenshotSrc = useAuthenticatedImageSrc(pin.screenshotUrl);
   return (
     <>
       <p className="map-detail-meta">{formatCoords(pin.x, pin.y, worldSize)}</p>
       {isServerBase && <p className="map-detail-badge">Server automation base</p>}
       {pin.notes && <p>{pin.notes}</p>}
-      {pin.screenshotUrl && (
+      {screenshotSrc && (
         <img
           className="map-pin-screenshot"
-          src={`${API_BASE}${pin.screenshotUrl}`}
+          src={screenshotSrc}
           alt={`Screenshot for ${pin.label}`}
           loading="lazy"
         />

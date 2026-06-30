@@ -1,8 +1,7 @@
 import type { CSSProperties } from "react";
 import type { MapCoordinateTransform, MapProcgenLayers, ProcgenOverlayId } from "@rusttools/shared";
 import { mapCoordinateScale } from "@rusttools/shared";
-
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
+import { useAuthenticatedImageSrc } from "../hooks/useAuthenticatedImageSrc";
 
 const OVERLAY_MAP: Array<{ layer: keyof MapProcgenLayers; id: ProcgenOverlayId; filter: string; opacity: number }> = [
   { layer: "buildingBlocked", id: "building-blocked", filter: "saturate(1.25) contrast(1.2)", opacity: 0.95 },
@@ -17,6 +16,13 @@ interface MapProcgenOverlaysProps {
   transform: MapCoordinateTransform;
   layers: MapProcgenLayers;
   procgenReady: boolean;
+}
+
+function ProcgenOverlayImage({ id, style }: { id: ProcgenOverlayId; style: CSSProperties }) {
+  const src = useAuthenticatedImageSrc(`/servers/active/map/procgen/overlays/${id}`);
+  if (!src) return null;
+
+  return <img className="map-procgen-overlay" src={src} alt="" style={style} draggable={false} />;
 }
 
 export function MapProcgenOverlays({ transform, layers, procgenReady }: MapProcgenOverlaysProps) {
@@ -36,14 +42,7 @@ export function MapProcgenOverlays({ transform, layers, procgenReady }: MapProcg
   return (
     <>
       {OVERLAY_MAP.filter(({ layer }) => layers[layer]).map(({ id, filter, opacity }) => (
-        <img
-          key={id}
-          className="map-procgen-overlay"
-          src={`${API_BASE}/servers/active/map/procgen/overlays/${id}`}
-          alt=""
-          style={{ ...overlayStyle, filter, opacity }}
-          draggable={false}
-        />
+        <ProcgenOverlayImage key={id} id={id} style={{ ...overlayStyle, filter, opacity }} />
       ))}
     </>
   );

@@ -3,6 +3,7 @@ import type { Database } from "@rusttools/db";
 import { env } from "../config.js";
 import { configuredGuildId } from "./discord-channels.js";
 import { isDiscordBlacklisted } from "./discord-blacklist.js";
+import { getDiscordMemberRoles } from "./discord-member-roles-cache.js";
 
 export type DiscordCapability = "admin" | "switch" | "view";
 
@@ -18,24 +19,6 @@ export function rolesConfigured(): boolean {
     env.discord.roleSwitch.length > 0 ||
     env.discord.roleView.length > 0
   );
-}
-
-export async function getDiscordMemberRoles(discordUserId: string): Promise<string[]> {
-  if (!env.discord.botToken || !env.discord.guildId) {
-    return [];
-  }
-
-  const res = await fetch(
-    `https://discord.com/api/guilds/${env.discord.guildId}/members/${discordUserId}`,
-    { headers: { Authorization: `Bot ${env.discord.botToken}` } },
-  );
-
-  if (!res.ok) {
-    return [];
-  }
-
-  const member = (await res.json()) as { roles?: string[] };
-  return member.roles ?? [];
 }
 
 function memberHasCapability(roles: string[], capability: DiscordCapability): boolean {

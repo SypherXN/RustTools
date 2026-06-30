@@ -69,13 +69,21 @@ async function main() {
 
   const app = Fastify({
     logger: { level: env.isDev ? "info" : "warn" },
+    // Map drawings can include thousands of points; default 1 MB is too small.
+    bodyLimit: 10 * 1024 * 1024,
   });
 
-  await app.register(cors, { origin: env.corsOrigins, credentials: true });
+  await app.register(cors, {
+    origin: env.corsOrigins,
+    credentials: true,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  });
   await app.register(cookie, { secret: env.sessionSecret });
   await app.register(rateLimit, {
     max: env.apiRateLimitMax,
     timeWindow: "1 minute",
+    allowList: (req) => req.method === "OPTIONS",
   });
   await app.register(websocket);
 

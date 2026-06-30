@@ -131,11 +131,30 @@ export function StoragePage() {
 
   const saveIcon = async (shortname: string | null) => {
     if (!selectedMonitor) return;
-    await apiFetch(`/devices/${selectedMonitor.id}`, {
+    const id = selectedMonitor.id;
+    await apiFetch(`/devices/${id}`, {
       method: "PATCH",
       body: JSON.stringify({ icon: shortname }),
     });
-    await loadMonitors();
+    const resolved = resolveStorageMonitorIcon({
+      savedIcon: shortname,
+      parsed: storage?.parsed ?? null,
+    });
+    setMonitors((prev) =>
+      prev.map((m) =>
+        m.id === id
+          ? {
+              ...m,
+              icon: shortname,
+              containerKind: resolved.kind,
+              iconShortname: resolved.shortname,
+              iconUrl: resolved.iconUrl,
+              iconName: resolved.name,
+              iconAutoDetected: resolved.autoDetected,
+            }
+          : m,
+      ),
+    );
   };
 
   const runItemSearch = async (query = itemSearch) => {
@@ -155,12 +174,7 @@ export function StoragePage() {
   };
 
   const parsed = storage?.parsed ?? null;
-  const showIconPicker =
-    selectedMonitor &&
-    (selectedMonitor.containerKind === "large_box" ||
-      selectedMonitor.containerKind === "unknown" ||
-      selectedMonitor.containerKind === "tool_cupboard" ||
-      selectedMonitor.containerKind === "small_box");
+  const showIconPicker = Boolean(selectedMonitor && canAdmin);
 
   return (
     <div>

@@ -1,11 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { apiFetch } from "../lib/api";
+import { fetchDiscordGuildRoles, type DiscordGuildRole } from "../lib/discord-roles";
 
-export interface DiscordGuildRole {
-  id: string;
-  name: string;
-  color: number;
-}
+export type { DiscordGuildRole };
 
 interface DiscordRolePickerProps {
   selectedIds: string[];
@@ -37,10 +33,10 @@ export function DiscordRolePicker({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void apiFetch<{ roles: DiscordGuildRole[] }>("/discord/roles")
+    void fetchDiscordGuildRoles()
       .then((data) => {
         if (!cancelled) {
-          setRoles(data.roles);
+          setRoles(data);
           setError(null);
         }
       })

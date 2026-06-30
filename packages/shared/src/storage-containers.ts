@@ -76,6 +76,19 @@ export function detectStorageContainerKind(
   return "unknown";
 }
 
+/** Infer container kind from a manually saved icon shortname. */
+export function kindFromSavedIcon(shortname: string | null | undefined): StorageContainerKind | null {
+  if (!shortname?.trim()) return null;
+  for (const key of Object.keys(STORAGE_CONTAINER_ICON_CATALOG) as Array<
+    keyof StorageContainerIconCatalog
+  >) {
+    if (STORAGE_CONTAINER_ICON_CATALOG[key].some((opt) => opt.shortname === shortname)) {
+      return key;
+    }
+  }
+  return null;
+}
+
 function lookupIconName(shortname: string): string {
   for (const key of Object.keys(STORAGE_CONTAINER_ICON_CATALOG) as Array<
     keyof StorageContainerIconCatalog
@@ -106,7 +119,8 @@ export function resolveStorageMonitorIcon(opts: {
   savedIcon: string | null | undefined;
   parsed: ParsedStorage | null;
 }): ResolvedStorageMonitorIcon {
-  const kind = detectStorageContainerKind(opts.parsed);
+  const kind =
+    kindFromSavedIcon(opts.savedIcon) ?? detectStorageContainerKind(opts.parsed);
 
   if (opts.savedIcon) {
     return {

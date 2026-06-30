@@ -11,6 +11,7 @@ import type {
   ResolvedAutomationBase,
 } from "@rusttools/shared";
 import { gridCellCount, gridColumnLabel, MAP_GRID_CELL_SIZE, mapCoordinateScale } from "@rusttools/shared";
+import { fetchAuthenticatedBlob } from "../lib/authenticated-media";
 import { apiFetch } from "../lib/api";
 import type { MapLayers, MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
 import { isMapEventMarkerVisible } from "./MapOverlay";
@@ -18,7 +19,6 @@ import type { MapFocusTarget, MapTrackTarget } from "./MapViewport";
 import type { MapClusterContext, MapSelection, MarkerSelection } from "../lib/map-clusters";
 import { resolveMapSelection } from "../lib/map-clusters";
 
-const API_BASE = import.meta.env.VITE_API_URL?.trim() || "/api";
 const SEA_LEVEL = 0;
 const WATER_LIFT = 0.35;
 const SHOW_WATER = true;
@@ -647,6 +647,25 @@ function addEventTrails3D(
   return lines;
 }
 
+async function loadAuthenticatedTexture(
+  path: string,
+  onLoaded: (texture: THREE.Texture) => void,
+): Promise<void> {
+  const blob = await fetchAuthenticatedBlob(path);
+  if (!blob) return;
+
+  const url = URL.createObjectURL(blob);
+  new THREE.TextureLoader().load(
+    url,
+    (texture) => {
+      URL.revokeObjectURL(url);
+      onLoaded(texture);
+    },
+    undefined,
+    () => URL.revokeObjectURL(url),
+  );
+}
+
 function addProcgenTerrainOverlays3D(
   scene: THREE.Scene,
   terrainGeo: THREE.BufferGeometry,
@@ -683,20 +702,16 @@ function addProcgenTerrainOverlays3D(
       polygonOffsetFactor: offsetFactor,
       side: THREE.DoubleSide,
     });
-    const texture = new THREE.TextureLoader().load(
-      `${API_BASE}/servers/active/map/procgen/overlays/${overlay.id}`,
-      (loaded) => {
-        boostTextureAlpha(loaded, overlay.layer === "buildingBlocked" ? 1.6 : 3.2);
-        material.map = loaded;
-        material.opacity = overlay.opacity;
-        material.needsUpdate = true;
-        onTextureReady?.();
-      },
-    );
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.wrapS = THREE.ClampToEdgeWrapping;
-    texture.wrapT = THREE.ClampToEdgeWrapping;
-    material.map = texture;
+    void loadAuthenticatedTexture(`/servers/active/map/procgen/overlays/${overlay.id}`, (loaded) => {
+      boostTextureAlpha(loaded, overlay.layer === "buildingBlocked" ? 1.6 : 3.2);
+      loaded.colorSpace = THREE.SRGBColorSpace;
+      loaded.wrapS = THREE.ClampToEdgeWrapping;
+      loaded.wrapT = THREE.ClampToEdgeWrapping;
+      material.map = loaded;
+      material.opacity = overlay.opacity;
+      material.needsUpdate = true;
+      onTextureReady?.();
+    });
     const mesh = new THREE.Mesh(overlayGeo, material);
     mesh.renderOrder = 20 + materials.length;
     scene.add(mesh);
