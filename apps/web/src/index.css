@@ -159,7 +159,7 @@
   --map-viewport-height: min(72vh, 820px);
   --map-toolbar-offset: 2.85rem;
   display: grid;
-  grid-template-columns: 240px 1fr 300px;
+  grid-template-columns: 280px 1fr 300px;
   gap: 1rem;
   align-items: start;
 }
@@ -170,6 +170,8 @@
   height: var(--map-viewport-height);
   min-height: var(--map-viewport-height);
   max-height: var(--map-viewport-height);
+  width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
@@ -233,11 +235,24 @@
 .map-layer-row,
 .map-layer-summary-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.45rem;
   cursor: pointer;
   font-size: 0.88rem;
   padding: 0.15rem 0;
+}
+
+.map-layer-row input,
+.map-layer-summary-row input {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.map-layer-row span,
+.map-layer-summary-row span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .map-layers-refresh {
@@ -1796,12 +1811,6 @@
   margin-top: 0.75rem;
 }
 
-.map-overlay-list-item {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
 .map-pin-form {
   position: absolute;
   z-index: 4;
@@ -1875,10 +1884,10 @@
 }
 
 .map-overlay-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.35rem 0.5rem;
   padding: 0.35rem 0;
   border-bottom: 1px solid var(--border);
 }
@@ -1891,14 +1900,34 @@
   text-align: left;
   padding: 0;
   display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.map-overlay-list-item strong {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.map-overlay-list-item .muted {
+  font-size: 0.75rem;
+  flex-basis: 100%;
+  padding-left: 1.15rem;
+  line-height: 1.25;
+}
+
+.map-overlay-list-item:not(:has(.map-drawing-color-preview)) .muted {
+  flex-basis: auto;
+  padding-left: 0;
 }
 
 .map-overlay-delete {
   flex-shrink: 0;
   padding: 0.2rem 0.5rem;
   font-size: 0.75rem;
+  align-self: center;
 }
 
 .map-pin-delete {

@@ -278,7 +278,7 @@ export function MapLayersPanel({
           <LayerCheckbox
             checked={showTeamOverlays}
             onChange={() => onShowTeamOverlaysChange(!showTeamOverlays)}
-            label={`Team annotations (${drawings.length} drawings, ${pins.length} pins)`}
+            label={`Annotations (${drawings.length} drawings, ${pins.length} pins)`}
           />
           {showTeamOverlays && (drawings.length > 0 || pins.length > 0) && (
             <div className="map-overlay-list">
