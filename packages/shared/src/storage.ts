@@ -100,7 +100,9 @@ export function readUpkeepSeconds(
     if (value > 0 && value <= MAX_UPKEEP_SECONDS) return Math.floor(value);
   }
 
-  const expiry = Number(payload.protectionExpiry ?? payload.ProtectionExpiry ?? 0);
+  const expiry = Number(
+    payload.protectionExpiry ?? payload.ProtectionExpiry ?? payload.protection_expiry ?? 0,
+  );
   if (expiry > nowSec) return Math.floor(expiry - nowSec);
   // Some servers send seconds remaining in protectionExpiry instead of a unix timestamp.
   if (expiry > 0 && expiry <= MAX_UPKEEP_SECONDS) return Math.floor(expiry);
@@ -178,7 +180,10 @@ export function parseStorageEntityInfo(
   const rawItems = extractContainerItems(info);
 
   const hasProtection = readBool(
-    payload.hasProtection ?? payload.HasProtection ?? payload.isBuildingPrivilege,
+    payload.hasProtection ??
+      payload.HasProtection ??
+      payload.isBuildingPrivilege ??
+      payload.has_protection,
   );
   const capacityRaw = payload.capacity ?? payload.Capacity;
   const capacity = capacityRaw != null ? Number(capacityRaw) : null;
@@ -212,7 +217,9 @@ export function parseStorageEntityInfo(
         level: upkeepLevel(secondsRemaining),
       };
     } else {
-      const expiry = Number(payload.protectionExpiry ?? payload.ProtectionExpiry ?? 0);
+      const expiry = Number(
+        payload.protectionExpiry ?? payload.ProtectionExpiry ?? payload.protection_expiry ?? 0,
+      );
       upkeep = {
         secondsRemaining: 0,
         expiresAt: expiry > nowSec ? expiry : expiry > 0 ? nowSec + expiry : null,

@@ -9,14 +9,36 @@ export function teamChatMessageKey(message: TeamChatMessage): string {
   return `${message.steamId}:${message.sentAt}:${message.message}`;
 }
 
-export function parseTeamChatMessage(raw: unknown): TeamChatMessage | null {
-  const m = raw as {
+function teamChatRawFields(raw: unknown): {
+  steamId?: number | string;
+  name?: string;
+  message?: string;
+  time?: number;
+  sentAt?: number;
+} {
+  const source = raw as Record<string, unknown>;
+  const nested = source.message;
+  const m = (nested && typeof nested === "object" ? nested : source) as {
     steamId?: number | string;
+    userId?: number | string;
     name?: string;
+    userName?: string;
+    username?: string;
     message?: string;
     time?: number;
     sentAt?: number;
   };
+  return {
+    steamId: m.steamId ?? m.userId,
+    name: m.name ?? m.userName ?? m.username,
+    message: m.message,
+    time: m.time,
+    sentAt: m.sentAt,
+  };
+}
+
+export function parseTeamChatMessage(raw: unknown): TeamChatMessage | null {
+  const m = teamChatRawFields(raw);
   if (!m.message?.trim()) return null;
   return {
     steamId: String(m.steamId ?? ""),
@@ -24,6 +46,18 @@ export function parseTeamChatMessage(raw: unknown): TeamChatMessage | null {
     message: m.message,
     sentAt: m.sentAt ?? m.time ?? 0,
   };
+}
+
+/** Prefer in-message name; fall back to team roster when Rust+ omits it. */
+export function resolveTeamChatSenderName(
+  message: TeamChatMessage,
+  roster?: ReadonlyArray<{ steamId: string; name: string }>,
+): string {
+  const direct = message.name?.trim();
+  if (direct && direct !== "Unknown") return direct;
+  const fromRoster = roster?.find((member) => member.steamId === message.steamId)?.name?.trim();
+  if (fromRoster) return fromRoster;
+  return direct || "Unknown";
 }
 
 export function parseTeamChatMessages(raw: unknown): TeamChatMessage[] {

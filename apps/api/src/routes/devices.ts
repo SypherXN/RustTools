@@ -233,7 +233,7 @@ export async function registerDeviceRoutes(
     if (!user) return;
 
     const serverId = await getActiveServerId(deps.db);
-    const monitors = await listStorageMonitorMetadata(deps.db, serverId);
+    const monitors = await listStorageMonitorMetadata(deps.db, deps.rustPlus, serverId);
     return { monitors };
   });
 

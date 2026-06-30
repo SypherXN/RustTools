@@ -39,6 +39,7 @@ import {
   formatWorldEventAnnouncement,
 } from "@rusttools/shared";
 import { getEntitySettings, updateEntitySettings } from "../lib/entity-settings.js";
+import { buildTeamChatMirrorEmbed } from "../lib/team-chat-discord-embeds.js";
 import { recycleFromEntityInfo } from "../lib/vending.js";
 import { buildStorageChangeDiscordPayload } from "../lib/storage-discord-embed.js";
 import { evaluateSwitchAutoModes } from "../lib/switch-auto-modes.js";
@@ -65,6 +66,7 @@ function entityInfoFromChangedPayload(payload: unknown): unknown | null {
     "capacity" in p ||
     "hasProtection" in p ||
     "HasProtection" in p ||
+    "has_protection" in p ||
     "value" in p
   ) {
     return { payload: p };
@@ -402,11 +404,7 @@ export function startPhase2Listeners(
 
     await notifications.discord({
       channelId: channel,
-      embed: {
-        title: "Team Chat",
-        description: event.message,
-        color: 0x5865f2,
-      },
+      embed: buildTeamChatMirrorEmbed(event.name, event.message),
     });
   });
 

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import type { ParsedTeamInfo, TeamApiResponse, TeamChatMessage, TeamConnectionEvent, TeamDeathEvent, TeamRosterMember } from "@rusttools/shared";
 import {
   appendTeamChatMessage,
+  resolveTeamChatSenderName,
   canBecomeTeamLeader,
   formatTeamAfkDuration,
   formatTeamConnectionAgo,
@@ -251,7 +252,7 @@ export function TeamPage() {
             {messages.length === 0 && <p className="muted">No messages yet.</p>}
             {messages.map((msg) => (
               <p key={`${msg.steamId}-${msg.sentAt}-${msg.message}`} className="chat-line">
-                <strong>{msg.name}</strong>: {msg.message}
+                <strong>{resolveTeamChatSenderName(msg, teamInfo?.members)}</strong>: {msg.message}
               </p>
             ))}
           </div>

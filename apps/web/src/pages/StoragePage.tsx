@@ -4,7 +4,7 @@ import type {
   StorageContainerKind,
   StorageItemSearchMatch,
 } from "@rusttools/shared";
-import { parseStorageEntityInfo } from "@rusttools/shared";
+import { parseStorageEntityInfo, resolveStorageMonitorIcon } from "@rusttools/shared";
 import { StorageContentsGrid, StorageUpkeepBanner } from "../components/StorageContentsGrid";
 import { StorageIconPicker } from "../components/StorageIconPicker";
 import { apiFetch } from "../lib/api";
@@ -100,10 +100,28 @@ export function StoragePage() {
         parsed?: ParsedStorage | null;
         recycle?: StorageInfo["recycle"];
       }>(`/devices/${id}/info`);
+      const parsed = data.parsed ?? parseStorageEntityInfo(data.info);
       setStorage({
         info: data.info,
-        parsed: data.parsed ?? parseStorageEntityInfo(data.info),
+        parsed,
         recycle: data.recycle,
+      });
+      setMonitors((prev) => {
+        const monitor = prev.find((entry) => entry.id === id);
+        if (!monitor) return prev;
+        const resolved = resolveStorageMonitorIcon({ savedIcon: monitor.icon, parsed });
+        return prev.map((entry) =>
+          entry.id === id
+            ? {
+                ...entry,
+                containerKind: resolved.kind,
+                iconShortname: resolved.shortname,
+                iconUrl: resolved.iconUrl,
+                iconName: resolved.name,
+                iconAutoDetected: resolved.autoDetected,
+              }
+            : entry,
+        );
       });
       setError(null);
     } catch (err) {

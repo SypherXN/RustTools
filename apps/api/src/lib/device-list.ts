@@ -2,11 +2,12 @@ import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustEntities } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import { resolveStorageMonitorIcon } from "@rusttools/shared";
+import { parseStorageEntityInfo, resolveStorageMonitorIcon } from "@rusttools/shared";
 import { runWithConcurrency } from "./concurrency.js";
 import { getSwitchState } from "./vending.js";
 
 const SWITCH_STATE_READ_CONCURRENCY = 5;
+const STORAGE_MONITOR_READ_CONCURRENCY = 5;
 
 export async function listDeviceRows(db: Database, serverId: string | null) {
   return serverId
@@ -54,7 +55,11 @@ export function mergeSwitchStates<T extends { id: string; entityType: string }>(
   });
 }
 
-export async function listStorageMonitorMetadata(db: Database, serverId: string | null) {
+export async function listStorageMonitorMetadata(
+  db: Database,
+  rustPlus: RustPlusManager,
+  serverId: string | null,
+) {
   const rows = await db
     .select()
     .from(rustEntities)
@@ -64,15 +69,35 @@ export async function listStorageMonitorMetadata(db: Database, serverId: string 
         : eq(rustEntities.entityType, "storage_monitor"),
     );
 
-  return rows.map((monitor) => {
-    const resolved = resolveStorageMonitorIcon({ savedIcon: monitor.icon, parsed: null });
-    return {
+  const enriched: Array<
+    (typeof rows)[number] & {
+      containerKind: ReturnType<typeof resolveStorageMonitorIcon>["kind"];
+      iconShortname: string;
+      iconUrl: string;
+      iconName: string;
+      iconAutoDetected: boolean;
+    }
+  > = [];
+
+  await runWithConcurrency(rows, STORAGE_MONITOR_READ_CONCURRENCY, async (monitor) => {
+    let parsed = null;
+    try {
+      const info = await rustPlus.getEntityInfo(monitor.entityId);
+      parsed = parseStorageEntityInfo(info);
+    } catch {
+      // Rust+ offline or entity unreachable — fall back to saved icon / unknown kind.
+    }
+
+    const resolved = resolveStorageMonitorIcon({ savedIcon: monitor.icon, parsed });
+    enriched.push({
       ...monitor,
       containerKind: resolved.kind,
       iconShortname: resolved.shortname,
       iconUrl: resolved.iconUrl,
       iconName: resolved.name,
       iconAutoDetected: resolved.autoDetected,
-    };
+    });
   });
+
+  return enriched;
 }

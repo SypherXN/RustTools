@@ -338,6 +338,19 @@ export function buildDeepSeaEmbed(status: DeepSeaStatus): DiscordEmbedPayload {
   };
 }
 
+export function buildTeamChatMirrorEmbed(
+  senderName: string,
+  message: string,
+): DiscordEmbedPayload {
+  const name = senderName.trim() || "Unknown";
+  return {
+    title: name,
+    description: message,
+    color: EMBED_COLORS.primary,
+    footer: { text: "RustTools" },
+  };
+}
+
 export function buildHelpTeamChatEmbed(): DiscordEmbedPayload {
   return {
     title: "Team chat commands",
