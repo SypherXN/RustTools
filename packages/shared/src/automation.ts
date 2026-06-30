@@ -93,6 +93,7 @@ export interface AutomationAction {
   switchValue?: boolean;
   message?: string;
   pingEveryone?: boolean;
+  pingRoleIds?: string[];
 }
 
 export interface AutomationRuleRecord {

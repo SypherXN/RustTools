@@ -5,6 +5,7 @@ import type { RustPlusManager, NotificationService } from "@rusttools/rustplus-c
 import {
   formatTcDecayAlertMessage,
   parseStorageEntityInfo,
+  buildDiscordPingContent,
 } from "@rusttools/shared";
 import { getEntitySettings, updateEntitySettings } from "./entity-settings.js";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
@@ -64,7 +65,10 @@ export async function evaluateTcDecayAlerts(
       if (channel) {
         await notifications.discord({
           channelId: channel,
-          content: tcDecay.pingEveryone ? "@everyone" : undefined,
+          content: buildDiscordPingContent(message, {
+            pingEveryone: tcDecay.pingEveryone,
+            pingRoleIds: tcDecay.pingRoleIds,
+          }),
           embed: {
             title: alertLevel === "critical" ? "TC decay critical" : "TC decay warning",
             description: message,

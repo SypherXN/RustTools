@@ -14,6 +14,7 @@ import type {
 import { activeAllAwayFromBaseCondition, formatProximityRadiusMeters, proximityRadiusPatch, resolveProximityRadiusMeters } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { DeviceMemberPicker } from "../components/DeviceMemberPicker";
+import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { LIVE_CAMERAS_ENABLED } from "../lib/features";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
@@ -341,14 +342,22 @@ function ActionFields({
             />
           </label>
           {action.type === "send_discord" && (
-            <label className="automation-checkbox">
-              <input
-                type="checkbox"
-                checked={action.pingEveryone === true}
-                onChange={(e) => onChange({ ...action, pingEveryone: e.target.checked })}
+            <>
+              <label className="automation-checkbox">
+                <input
+                  type="checkbox"
+                  checked={action.pingEveryone === true}
+                  onChange={(e) => onChange({ ...action, pingEveryone: e.target.checked })}
+                />
+                Ping @everyone
+              </label>
+              <DiscordRolePicker
+                selectedIds={action.pingRoleIds ?? []}
+                onChange={(pingRoleIds) => onChange({ ...action, pingRoleIds })}
+                label="Ping roles"
+                hint="Optional role mentions for this automation action."
               />
-              Ping @everyone
-            </label>
+            </>
           )}
         </>
       )}

@@ -8,6 +8,7 @@ import {
   type SwitchGroupRecord,
 } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { LIVE_CAMERAS_ENABLED } from "../lib/features";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
@@ -459,6 +460,17 @@ export function DevicesPage() {
                               />
                               Ping @everyone on Discord
                             </label>
+                            <DiscordRolePicker
+                              selectedIds={settingsDraft.alarm?.pingRoleIds ?? []}
+                              onChange={(pingRoleIds) =>
+                                setSettingsDraft({
+                                  ...settingsDraft,
+                                  alarm: { ...settingsDraft.alarm, pingRoleIds },
+                                })
+                              }
+                              label="Ping roles for this alarm"
+                              hint="Merged with global role pings from Settings → Smart Alarm."
+                            />
                           </>
                         )}
                         <button type="button" onClick={() => void saveSettings(device.id)}>

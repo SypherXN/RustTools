@@ -3,6 +3,8 @@ export interface SmartAlarmNotificationSettings {
   teamChat: boolean;
   /** Prefix Discord content with @everyone when enabled (#45). */
   pingEveryone: boolean;
+  /** Discord role IDs to mention (in addition to @everyone when enabled). */
+  pingRoleIds: string[];
   /** In-browser notification + optional siren when tab open (#124). */
   webPush: boolean;
   browserSiren: boolean;
@@ -21,6 +23,8 @@ export interface TcDecayNotificationSettings {
   discord: boolean;
   teamChat: boolean;
   pingEveryone: boolean;
+  /** Discord role IDs to mention (in addition to @everyone when enabled). */
+  pingRoleIds: string[];
   /** Alert when upkeep drops below this many hours (#48–49). */
   warningHours: number;
   /** Critical alert threshold (hours). */
@@ -62,6 +66,7 @@ import {
   DEFAULT_LEGACY_AUTOMATION_SETTINGS,
   legacyAutomationsFromEnv,
 } from "./legacy-automations.js";
+import { normalizeDiscordRoleIds } from "./discord-ping.js";
 import type { TeamChatBotSettings } from "./team-chat-control.js";
 import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
 import type { EventTimerSettings } from "./world-events.js";
@@ -110,6 +115,7 @@ export const DEFAULT_TC_DECAY_SETTINGS: TcDecayNotificationSettings = {
   discord: true,
   teamChat: true,
   pingEveryone: false,
+  pingRoleIds: [],
   warningHours: 24,
   criticalHours: 6,
   pollIntervalMinutes: 15,
@@ -120,6 +126,7 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
     discord: true,
     teamChat: false,
     pingEveryone: false,
+    pingRoleIds: [],
     webPush: true,
     browserSiren: true,
     escalation: { ...DEFAULT_SMART_ALARM_ESCALATION },
@@ -158,6 +165,9 @@ export function mergeNotificationSettings(
     smartAlarm: {
       ...current.smartAlarm,
       ...patch.smartAlarm,
+      pingRoleIds: normalizeDiscordRoleIds(
+        patch.smartAlarm?.pingRoleIds ?? current.smartAlarm.pingRoleIds,
+      ),
       escalation: {
         ...current.smartAlarm.escalation,
         ...patch.smartAlarm?.escalation,
@@ -170,6 +180,9 @@ export function mergeNotificationSettings(
     tcDecay: {
       ...current.tcDecay,
       ...patch.tcDecay,
+      pingRoleIds: normalizeDiscordRoleIds(
+        patch.tcDecay?.pingRoleIds ?? current.tcDecay.pingRoleIds,
+      ),
     },
     teamChatBot: {
       ...current.teamChatBot,

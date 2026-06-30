@@ -11,6 +11,8 @@ export type SwitchAutoMode =
 export interface SmartAlarmDeviceSettings {
   customMessage?: string | null;
   pingEveryone?: boolean;
+  /** Extra Discord role IDs to mention for this alarm (merged with server defaults). */
+  pingRoleIds?: string[];
   lastTriggeredAt?: number | null;
 }
 

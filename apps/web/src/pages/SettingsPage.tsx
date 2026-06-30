@@ -9,6 +9,7 @@ import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
+import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { ProcgenMapUpload } from "../components/ProcgenMapUpload";
 import { FcmConfigUpload } from "../components/FcmConfigUpload";
 
@@ -152,6 +153,32 @@ export function SettingsPage() {
     });
   };
 
+  const updateSmartAlarmPingRoles = (pingRoleIds: string[]) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        smartAlarm: { ...notifications.settings.smartAlarm, pingRoleIds },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ smartAlarm: { pingRoleIds } });
+  };
+
+  const updateTcDecayPingRoles = (pingRoleIds: string[]) => {
+    if (!notifications) return;
+    const next = {
+      ...notifications,
+      settings: {
+        ...notifications.settings,
+        tcDecay: { ...notifications.settings.tcDecay, pingRoleIds },
+      },
+    };
+    setNotifications(next);
+    void saveNotifications({ tcDecay: { pingRoleIds } });
+  };
+
   const updateLegacyAutomations = (
     section: "nightLights" | "teamOfflineSam" | "mapEvents",
     patch: Record<string, unknown>,
@@ -171,7 +198,7 @@ export function SettingsPage() {
 
   const updateTcDecay = (
     key: keyof NotificationSettingsResponse["settings"]["tcDecay"],
-    value: boolean | number,
+    value: boolean | number | string[],
   ) => {
     if (!notifications) return;
     const next = {
@@ -599,8 +626,15 @@ export function SettingsPage() {
                 disabled={notificationsSaving || !canAdmin}
                 onChange={(e) => updateSmartAlarm("pingEveryone", e.target.checked)}
               />
-              <span>Ping @everyone on Discord (global default; per-alarm override on Devices)</span>
+              <span>Ping @everyone on Discord (optional; use role pings below instead)</span>
             </label>
+            <DiscordRolePicker
+              selectedIds={notifications.settings.smartAlarm.pingRoleIds}
+              onChange={updateSmartAlarmPingRoles}
+              disabled={notificationsSaving || !canAdmin}
+              label="Ping roles on smart alarms"
+              hint="Global default for raid alerts. Per-alarm role overrides can be set on the Devices page."
+            />
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -720,8 +754,14 @@ export function SettingsPage() {
                 disabled={notificationsSaving || !canAdmin}
                 onChange={(e) => updateTcDecay("pingEveryone", e.target.checked)}
               />
-              <span>Ping @everyone on Discord</span>
+              <span>Ping @everyone on Discord (optional)</span>
             </label>
+            <DiscordRolePicker
+              selectedIds={notifications.settings.tcDecay.pingRoleIds}
+              onChange={updateTcDecayPingRoles}
+              disabled={notificationsSaving || !canAdmin}
+              label="Ping roles on TC decay alerts"
+            />
             </div>
             <label>
               Warning threshold (hours)

@@ -26,6 +26,7 @@ import {
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
+import { listDiscordGuildRoles } from "../lib/discord-guild.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
 export async function registerServerRoutes(
@@ -290,6 +291,20 @@ export async function registerServerRoutes(
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",
+      });
+    }
+  });
+
+  app.get("/discord/roles", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    try {
+      const roles = await listDiscordGuildRoles();
+      return { roles };
+    } catch (err) {
+      return reply.status(502).send({
+        error: err instanceof Error ? err.message : "Failed to load Discord roles",
       });
     }
   });

@@ -14,6 +14,7 @@ import {
   evaluateTeamProximityCheck,
   isLocalTimeInScheduleWindow,
   parseStorageEntityInfo,
+  buildDiscordPingContent,
 } from "@rusttools/shared";
 import { resolveAutomationPoint } from "./automation-base.js";
 import { getServerNotificationSettings } from "./server-notification-settings.js";
@@ -233,7 +234,10 @@ async function runActions(
         if (!channel) break;
         await notifications.discord({
           channelId: channel,
-          content: action.pingEveryone ? `@everyone ${action.message}` : action.message,
+          content: buildDiscordPingContent(action.message.trim(), {
+            pingEveryone: action.pingEveryone,
+            pingRoleIds: action.pingRoleIds,
+          }),
         });
         break;
       }

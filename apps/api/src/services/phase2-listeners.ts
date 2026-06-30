@@ -37,6 +37,8 @@ import {
   formatDeepSeaTeamChatMessage,
   formatSmartAlarmTeamChatMessage,
   formatWorldEventAnnouncement,
+  buildDiscordPingContent,
+  resolveDiscordPingOptions,
 } from "@rusttools/shared";
 import { getEntitySettings, updateEntitySettings } from "../lib/entity-settings.js";
 import { buildTeamChatMirrorEmbed } from "../lib/team-chat-discord-embeds.js";
@@ -189,8 +191,18 @@ export function startPhase2Listeners(
       : null;
     const customMessage = entitySettings?.alarm?.customMessage ?? null;
     const entityName = matchedEntity?.displayName ?? matchedEntity?.name ?? null;
-    const pingEveryone =
-      entitySettings?.alarm?.pingEveryone === true || settings.smartAlarm.pingEveryone;
+    const ping = resolveDiscordPingOptions(
+      {
+        pingEveryone: settings.smartAlarm.pingEveryone,
+        pingRoleIds: settings.smartAlarm.pingRoleIds,
+      },
+      entitySettings?.alarm
+        ? {
+            pingEveryone: entitySettings.alarm.pingEveryone,
+            pingRoleIds: entitySettings.alarm.pingRoleIds,
+          }
+        : null,
+    );
 
     if (matchedEntity) {
       await updateEntitySettings(db, matchedEntity.id, {
@@ -210,7 +222,7 @@ export function startPhase2Listeners(
       if (channel) {
         await notifications.discord({
           channelId: channel,
-          content: pingEveryone ? `@everyone ${alarmText}` : alarmText,
+          content: buildDiscordPingContent(alarmText, ping),
           embed: {
             title: alarmTitle,
             description: alarmText,
