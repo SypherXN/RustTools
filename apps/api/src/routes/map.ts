@@ -54,10 +54,10 @@ export async function registerServerRoutes(
     const wantImage = includeImage === "1" || includeImage === "true";
 
     try {
-      // Fetch map image first — Rust+ struggles with concurrent getMap + other reads.
+      // Warm server info before the large map image transfer; Rust+ reads are serialized.
+      const info = await deps.rustPlus.getServerInfo();
       const map = await deps.rustPlus.getMap();
-      const [info, team, markersRaw] = await Promise.all([
-        deps.rustPlus.getServerInfo(),
+      const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),
       ]);

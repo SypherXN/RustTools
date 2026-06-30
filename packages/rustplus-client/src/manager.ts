@@ -38,18 +38,18 @@ interface ActiveConnection {
 
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_MS = 5000;
-const REQUEST_TIMEOUT_MS = 15_000;
+const REQUEST_TIMEOUT_MS = 30_000;
 const MAP_REQUEST_TIMEOUT_MS = 90_000;
-/** Serve last good map for up to 30 minutes if Rust+ is slow or unreachable. */
-const STALE_MAP_MAX_MS = 30 * 60 * 1000;
+/** Serve last good Rust+ reads for up to 30 minutes when the socket is slow. */
+const STALE_READ_MAX_MS = 30 * 60 * 1000;
 
 /** Avoid hammering Rust+ when the UI and background jobs request the same data. */
 const READ_CACHE_TTL_MS = {
-  serverInfo: 20_000,
-  teamInfo: 15_000,
-  mapMarkers: 15_000,
+  serverInfo: 60_000,
+  teamInfo: 30_000,
+  mapMarkers: 30_000,
   map: 300_000,
-  time: 15_000,
+  time: 30_000,
   teamChat: 30_000,
 } as const;
 
@@ -199,6 +199,8 @@ export class RustPlusManager {
   private readCache = new Map<ReadCacheKey, { at: number; value: unknown }>();
   private readInflight = new Map<ReadCacheKey, Promise<unknown>>();
   private entityInfoCache = new Map<number, { at: number; value: unknown }>();
+  /** Rust+ websocket handles one request poorly when several are in flight. */
+  private rustRequestQueue: Promise<void> = Promise.resolve();
 
   constructor(private options: RustPlusManagerOptions = {}) {
     this.notifications = options.notificationService ?? new NotificationService();
@@ -225,11 +227,40 @@ export class RustPlusManager {
     return (this.readCache.get("map")?.value as CachedMap | undefined) ?? null;
   }
 
-  private getStaleMap(): CachedMap | null {
-    const cached = this.readCache.get("map");
+  private getStaleRead(key: ReadCacheKey): unknown | null {
+    const cached = this.readCache.get(key);
     if (!cached) return null;
-    if (Date.now() - cached.at > STALE_MAP_MAX_MS) return null;
-    return cached.value as CachedMap;
+    if (Date.now() - cached.at > STALE_READ_MAX_MS) return null;
+    return cached.value;
+  }
+
+  private enqueueRustRequest<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.rustRequestQueue.then(fn, fn);
+    this.rustRequestQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async cachedReadWithStale<T>(
+    key: ReadCacheKey,
+    fetch: () => Promise<T>,
+    isUsable: (value: T) => boolean = () => true,
+  ): Promise<T> {
+    try {
+      return await this.cachedRead(key, fetch);
+    } catch (err) {
+      const stale = this.getStaleRead(key) as T | null;
+      if (stale != null && isUsable(stale)) {
+        console.warn(
+          `[RustPlus] ${key} failed — serving stale cache:`,
+          err instanceof Error ? err.message : err,
+        );
+        return stale;
+      }
+      throw err;
+    }
   }
 
   private cachedRead<T>(key: ReadCacheKey, fetch: () => Promise<T>): Promise<T> {
@@ -286,6 +317,7 @@ export class RustPlusManager {
       this.readCache.clear();
       this.readInflight.clear();
       this.entityInfoCache.clear();
+      this.rustRequestQueue = Promise.resolve();
       this.lastMapMarkers = null;
       this.eventBus.emit({
         type: "connectionLost",
@@ -561,29 +593,33 @@ export class RustPlusManager {
   }
 
   async getServerInfo(): Promise<unknown> {
-    return this.cachedRead("serverInfo", async () => {
+    return this.cachedReadWithStale("serverInfo", async () => {
       const conn = this.getActiveConnection();
-      return withRustRetry("getInfo", () =>
-        withRustTimeout("getInfo", (cb) => conn.client.getInfo(cb), (m) => m.response?.info),
+      return this.enqueueRustRequest(() =>
+        withRustRetry("getInfo", () =>
+          withRustTimeout("getInfo", (cb) => conn.client.getInfo(cb), (m) => m.response?.info),
+        ),
       );
     });
   }
 
   async getTeamInfo(): Promise<unknown> {
-    return this.cachedRead("teamInfo", async () => {
+    return this.cachedReadWithStale("teamInfo", async () => {
       const conn = this.getActiveConnection();
-      return withRustRetry("getTeamInfo", () =>
-        withRustTimeout(
-          "getTeamInfo",
-          (cb) => conn.client.getTeamInfo(cb),
-          (m) => m.response?.teamInfo,
+      return this.enqueueRustRequest(() =>
+        withRustRetry("getTeamInfo", () =>
+          withRustTimeout(
+            "getTeamInfo",
+            (cb) => conn.client.getTeamInfo(cb),
+            (m) => m.response?.teamInfo,
+          ),
         ),
       );
     });
   }
 
   async getTeamChat(): Promise<unknown[]> {
-    return this.cachedRead("teamChat", async () => {
+    return this.cachedReadWithStale("teamChat", async () => {
       const conn = this.getActiveConnection();
       type RequestClient = {
         sendRequest: (
@@ -591,44 +627,51 @@ export class RustPlusManager {
           callback: (message: RustPlusMessage) => boolean | void,
         ) => void;
       };
-      return withRustRetry("getTeamChat", () =>
-        withRustTimeout(
-          "getTeamChat",
-          (cb) => {
-            (conn.client as unknown as RequestClient).sendRequest({ getTeamChat: {} }, (message) => {
-              cb(message);
-              return true;
-            });
-          },
-          (m) => {
-            const teamChat = (m.response as { teamChat?: { messages?: unknown[] } } | undefined)
-              ?.teamChat;
-            return teamChat?.messages ?? [];
-          },
+      return this.enqueueRustRequest(() =>
+        withRustRetry("getTeamChat", () =>
+          withRustTimeout(
+            "getTeamChat",
+            (cb) => {
+              (conn.client as unknown as RequestClient).sendRequest({ getTeamChat: {} }, (message) => {
+                cb(message);
+                return true;
+              });
+            },
+            (m) => {
+              const teamChat = (m.response as { teamChat?: { messages?: unknown[] } } | undefined)
+                ?.teamChat;
+              return teamChat?.messages ?? [];
+            },
+          ),
         ),
       );
     });
   }
 
   async getTime(): Promise<unknown> {
-    return this.cachedRead("time", async () => {
+    return this.cachedReadWithStale("time", async () => {
       const conn = this.getActiveConnection();
-      return withRustRetry("getTime", () =>
-        withRustTimeout("getTime", (cb) => conn.client.getTime(cb), (m) => m.response?.time),
+      return this.enqueueRustRequest(() =>
+        withRustRetry("getTime", () =>
+          withRustTimeout("getTime", (cb) => conn.client.getTime(cb), (m) => m.response?.time),
+        ),
       );
     });
   }
 
   async getMap(): Promise<CachedMap> {
-    try {
-      return await this.cachedRead("map", async () => {
+    return this.cachedReadWithStale(
+      "map",
+      async () => {
         const conn = this.getActiveConnection();
-        const map = await withRustRetry("getMap", () =>
-          withRustTimeout(
-            "getMap",
-            (cb) => conn.client.getMap(cb),
-            (m) => m.response?.map,
-            MAP_REQUEST_TIMEOUT_MS,
+        const map = await this.enqueueRustRequest(() =>
+          withRustRetry("getMap", () =>
+            withRustTimeout(
+              "getMap",
+              (cb) => conn.client.getMap(cb),
+              (m) => m.response?.map,
+              MAP_REQUEST_TIMEOUT_MS,
+            ),
           ),
         );
         const data = map as {
@@ -645,28 +688,21 @@ export class RustPlusManager {
           oceanMargin: data?.oceanMargin,
           monuments: data?.monuments,
         };
-      });
-    } catch (err) {
-      const stale = this.getStaleMap();
-      if (stale?.width != null && stale.jpgImage) {
-        console.warn(
-          "[RustPlus] getMap failed — serving stale cached map:",
-          err instanceof Error ? err.message : err,
-        );
-        return stale;
-      }
-      throw err;
-    }
+      },
+      (map) => map.width != null && map.jpgImage != null,
+    );
   }
 
   async getMapMarkers(): Promise<unknown> {
-    const markers = await this.cachedRead("mapMarkers", async () => {
+    const markers = await this.cachedReadWithStale("mapMarkers", async () => {
       const conn = this.getActiveConnection();
-      return withRustRetry("getMapMarkers", () =>
-        withRustTimeout(
-          "getMapMarkers",
-          (cb) => conn.client.getMapMarkers(cb),
-          (m) => m.response?.mapMarkers,
+      return this.enqueueRustRequest(() =>
+        withRustRetry("getMapMarkers", () =>
+          withRustTimeout(
+            "getMapMarkers",
+            (cb) => conn.client.getMapMarkers(cb),
+            (m) => m.response?.mapMarkers,
+          ),
         ),
       );
     });
