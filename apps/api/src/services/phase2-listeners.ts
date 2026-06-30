@@ -502,6 +502,8 @@ const lastAllOfflineByServer = new Map<string, boolean>();
     run: async () => {
       const activeServer = await getActiveServer(db);
       if (!activeServer) return;
+      const rustStatus = rustPlus.getStatus();
+      if (!rustStatus.connected || rustStatus.reconnectPending) return;
       try {
         const info = await rustPlus.getServerInfo();
         const result = await checkServerWipe(db, rustPlus, activeServer.id, info);

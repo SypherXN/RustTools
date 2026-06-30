@@ -25,6 +25,9 @@ const entityRemovedListeners = new Set<(entityDbId: string) => void>();
 const entityLastValidated = new Map<string, number>();
 const RECONCILE_SKIP_MS = 9 * 60 * 1000;
 const RECONCILE_CONCURRENCY = 5;
+/** Ignore mass stale results — usually a dead socket, not a real wipe/unpair. */
+const MAX_STALE_REMOVAL_FRACTION = 0.25;
+const MIN_STALE_REMOVALS_FOR_GUARD = 3;
 
 export function onEntityRemoved(listener: (entityDbId: string) => void): () => void {
   entityRemovedListeners.add(listener);
@@ -47,6 +50,17 @@ export function markEntityValidated(serverId: string, rustEntityId: number): voi
 
 export function isStaleEntityError(err: unknown): boolean {
   const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (
+    msg.includes("not connected") ||
+    msg.includes("connection not found") ||
+    msg.includes("no active rust+") ||
+    msg.includes("timed out") ||
+    msg.includes("timeout") ||
+    msg.includes("econnreset") ||
+    msg.includes("socket")
+  ) {
+    return false;
+  }
   return (
     msg.includes("not found") ||
     msg.includes("invalid entity") ||
@@ -54,6 +68,18 @@ export function isStaleEntityError(err: unknown): boolean {
     msg.includes("no entity") ||
     msg.includes("unknown entity")
   );
+}
+
+/** True when Rust+ is healthy enough to trust entity lookups for cleanup. */
+export async function canReconcileEntities(rustPlus: RustPlusManager): Promise<boolean> {
+  const status = rustPlus.getStatus();
+  if (!status.connected || status.reconnectPending) return false;
+  try {
+    await rustPlus.getServerInfo();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function pruneEmptySwitchGroups(db: Database, serverId: string): Promise<number> {
@@ -160,12 +186,16 @@ export async function reconcileStaleEntities(
   rustPlus: RustPlusManager,
   serverId: string,
 ): Promise<number> {
+  if (!(await canReconcileEntities(rustPlus))) {
+    return 0;
+  }
+
   const entities = await db
     .select()
     .from(rustEntities)
     .where(eq(rustEntities.serverId, serverId));
 
-  let removed = 0;
+  const staleEntityDbIds: string[] = [];
 
   await runWithConcurrency(entities, RECONCILE_CONCURRENCY, async (entity) => {
     const key = entityValidationKey(serverId, entity.entityId);
@@ -177,10 +207,28 @@ export async function reconcileStaleEntities(
       entityLastValidated.set(key, Date.now());
     } catch (err) {
       if (!isStaleEntityError(err)) return;
-      const deleted = await removeEntityRecord(db, rustPlus, serverId, entity.id);
-      if (deleted) removed += 1;
+      staleEntityDbIds.push(entity.id);
     }
   });
+
+  if (staleEntityDbIds.length === 0) return 0;
+
+  const removalCap = Math.max(
+    MIN_STALE_REMOVALS_FOR_GUARD,
+    Math.floor(entities.length * MAX_STALE_REMOVAL_FRACTION),
+  );
+  if (staleEntityDbIds.length > removalCap) {
+    console.warn(
+      `[EntityLifecycle] Skipping stale purge (${staleEntityDbIds.length}/${entities.length} looked stale — likely Rust+ outage, not unpair)`,
+    );
+    return 0;
+  }
+
+  let removed = 0;
+  for (const entityDbId of staleEntityDbIds) {
+    const deleted = await removeEntityRecord(db, rustPlus, serverId, entityDbId);
+    if (deleted) removed += 1;
+  }
 
   return removed;
 }
