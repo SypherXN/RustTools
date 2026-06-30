@@ -15,14 +15,38 @@ const REFRESH_COOKIE = "rusttools_refresh";
 const ACCESS_COOKIE = "rusttools_access";
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+function registrableDomain(host: string): string {
+  const normalized = host.toLowerCase().replace(/\.$/, "");
+  const parts = normalized.split(".");
+  if (parts.length <= 2) return normalized;
+  return parts.slice(-2).join(".");
+}
+
 function cookieOptions() {
-  const crossOrigin = env.crossOriginFrontend;
   const apiHttps = env.apiPublicUrl.startsWith("https://");
-  // SameSite=None + Secure only when frontend and API are on different HTTPS origins.
-  const crossSite = crossOrigin && apiHttps;
+  let apiHost = "";
+  try {
+    apiHost = new URL(env.apiPublicUrl).hostname;
+  } catch {
+    apiHost = "";
+  }
+
+  // UI on rusttools.example.com + API on rusttools-api.example.com share a registrable
+  // domain — SameSite=Lax works and is more reliable than None for credentialed fetches.
+  const sameRegistrableDomain =
+    apiHost.length > 0 &&
+    env.corsOrigins.some((origin) => {
+      try {
+        return registrableDomain(new URL(origin).hostname) === registrableDomain(apiHost);
+      } catch {
+        return false;
+      }
+    });
+
+  const crossSite = env.crossOriginFrontend && apiHttps && !sameRegistrableDomain;
   return {
     httpOnly: true,
-    secure: crossSite,
+    secure: apiHttps,
     sameSite: crossSite ? ("none" as const) : ("lax" as const),
     path: "/",
   };
@@ -47,8 +71,9 @@ export function setAuthCookies(
 }
 
 export function clearAuthCookies(reply: FastifyReply): void {
-  reply.clearCookie(ACCESS_COOKIE, { path: "/" });
-  reply.clearCookie(REFRESH_COOKIE, { path: "/" });
+  const opts = SESSION_COOKIE_OPTIONS;
+  reply.clearCookie(ACCESS_COOKIE, { path: "/", sameSite: opts.sameSite, secure: opts.secure });
+  reply.clearCookie(REFRESH_COOKIE, { path: "/", sameSite: opts.sameSite, secure: opts.secure });
 }
 
 async function loadUserFromRefreshToken(
@@ -74,11 +99,10 @@ async function loadUserFromRefreshToken(
   return { user, session };
 }
 
-/** Rotate refresh token on each authenticated request. */
-export async function rotateSessionIfNeeded(
+export async function getSessionUser(
   db: Database,
   request: FastifyRequest,
-  reply: FastifyReply,
+  reply?: FastifyReply,
 ): Promise<typeof users.$inferSelect | null> {
   const refreshToken = request.cookies[REFRESH_COOKIE];
   if (!refreshToken) return null;
@@ -86,34 +110,14 @@ export async function rotateSessionIfNeeded(
   const loaded = await loadUserFromRefreshToken(db, refreshToken);
   if (!loaded) return null;
 
-  const newRefresh = generateRefreshToken();
-  const expiresAt = new Date(Date.now() + REFRESH_TTL_MS);
-
-  await db
-    .update(sessions)
-    .set({
-      refreshTokenHash: hashToken(newRefresh),
-      expiresAt,
-    })
-    .where(eq(sessions.id, loaded.session.id));
-
-  setAuthCookies(reply, loaded.session.id, newRefresh, expiresAt);
-  return loaded.user;
-}
-
-export async function getSessionUser(
-  db: Database,
-  request: FastifyRequest,
-  reply?: FastifyReply,
-): Promise<typeof users.$inferSelect | null> {
+  // Re-emit cookies to refresh max-age. Do not rotate the refresh token on every
+  // request — that invalidates the browser cookie when Set-Cookie from cross-origin
+  // XHR is not persisted (GitHub Pages UI + API subdomain).
   if (reply) {
-    return rotateSessionIfNeeded(db, request, reply);
+    setAuthCookies(reply, loaded.session.id, refreshToken, loaded.session.expiresAt);
   }
 
-  const refreshToken = request.cookies[REFRESH_COOKIE];
-  if (!refreshToken) return null;
-  const loaded = await loadUserFromRefreshToken(db, refreshToken);
-  return loaded?.user ?? null;
+  return loaded.user;
 }
 
 export async function requireAuth(

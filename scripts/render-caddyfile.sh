@@ -18,10 +18,17 @@ ACME="${ACME_EMAIL:-admin@localhost}"
 OUT="${ROOT}/Caddyfile.generated"
 
 {
+  # Caddy v2: email belongs in the global options block, not inside site blocks.
+  cat <<EOF
+{
+	email ${ACME}
+}
+
+EOF
+
   if [[ -n "$WEB_DOMAIN" ]]; then
     cat <<EOF
 ${WEB_DOMAIN} {
-	email ${ACME}
 	encode gzip
 	root * /srv/web
 	try_files {path} /index.html
@@ -33,7 +40,6 @@ EOF
 
   cat <<EOF
 ${API_DOMAIN} {
-	email ${ACME}
 	encode gzip
 	reverse_proxy api:3000
 }

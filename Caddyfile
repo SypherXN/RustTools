@@ -7,8 +7,11 @@
 #
 # API-only (GitHub Pages UI): leave WEB_DOMAIN unset; DOMAIN = API hostname.
 
-{$WEB_DOMAIN} {
+{
 	email {$ACME_EMAIL}
+}
+
+{$WEB_DOMAIN} {
 	encode gzip
 	root * /srv/web
 	try_files {path} /index.html
@@ -16,7 +19,6 @@
 }
 
 {$DOMAIN} {
-	email {$ACME_EMAIL}
 	encode gzip
 	reverse_proxy api:3000
 }
