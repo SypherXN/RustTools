@@ -28,6 +28,7 @@ export async function registerRoutes(
       uptime: process.uptime(),
       rustplus: {
         connected: rustStatus.connected,
+        reconnectPending: rustStatus.reconnectPending,
         activeServerId: rustStatus.activeServerId,
       },
       fcm: {

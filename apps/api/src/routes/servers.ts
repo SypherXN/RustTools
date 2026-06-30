@@ -27,6 +27,7 @@ import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
 import { listDiscordGuildRoles } from "../lib/discord-guild.js";
+import { reconnectRustServer } from "../services/rustplus-bootstrap.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
 export async function registerServerRoutes(
@@ -394,6 +395,41 @@ export async function registerServerRoutes(
     }
 
     return { ok: true, activeServerId: id };
+  });
+
+  app.post("/servers/active/rustplus/reconnect", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const active = await getActiveServer(deps.db);
+    if (!active) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    const [server] = await deps.db
+      .select()
+      .from(rustServers)
+      .where(eq(rustServers.id, active.id))
+      .limit(1);
+
+    if (!server) {
+      return reply.status(404).send({ error: "Server not found" });
+    }
+
+    try {
+      await reconnectRustServer(deps.db, deps.rustPlus, server);
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "rustplus_reconnect",
+        targetType: "server",
+        targetId: server.id,
+      });
+      return { ok: true, rustplus: deps.rustPlus.getStatus() };
+    } catch (err) {
+      return reply.status(502).send({
+        error: err instanceof Error ? err.message : "Failed to reconnect Rust+",
+      });
+    }
   });
 
   app.delete("/servers/:id", async (request, reply) => {

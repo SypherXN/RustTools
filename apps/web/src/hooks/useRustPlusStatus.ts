@@ -7,7 +7,7 @@ const POLL_MS = 15_000;
 
 export interface HealthResponse {
   status: string;
-  rustplus: { connected: boolean; activeServerId: string | null };
+  rustplus: { connected: boolean; reconnectPending?: boolean; activeServerId: string | null };
   fcm: { listening: boolean };
 }
 

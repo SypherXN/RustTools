@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { apiFetch } from "../lib/api";
 import { ServerSwitcher } from "../components/ServerSwitcher";
+import { RustPlusConnectionCard } from "../components/RustPlusConnectionCard";
 import { DataResetPanel } from "../components/DataResetPanel";
 import { AdminUsersPanel } from "../components/AdminUsersPanel";
 import type { NotificationSettingsResponse } from "@rusttools/shared";
@@ -369,6 +370,7 @@ export function SettingsPage() {
       {tab === "server" && (
         <>
       <ServerSwitcher />
+      <RustPlusConnectionCard />
 
       {canAdmin && (
         <section className="card">

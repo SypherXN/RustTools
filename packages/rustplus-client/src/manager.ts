@@ -32,12 +32,11 @@ interface ActiveConnection {
   credentials: ServerCredentials;
   client: InstanceType<typeof RustPlus>;
   subscribedEntities: Set<number>;
-  reconnectAttempts: number;
-  reconnectTimer?: ReturnType<typeof setTimeout>;
 }
 
-const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_MS = 5000;
+const MAX_RECONNECT_DELAY_MS = 5 * 60 * 1000;
+const WATCHDOG_INTERVAL_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAP_REQUEST_TIMEOUT_MS = 90_000;
 /** Serve last good Rust+ reads for up to 30 minutes when the socket is slow. */
@@ -201,18 +200,49 @@ export class RustPlusManager {
   private entityInfoCache = new Map<number, { at: number; value: unknown }>();
   /** Rust+ websocket handles one request poorly when several are in flight. */
   private rustRequestQueue: Promise<void> = Promise.resolve();
+  /** Keep credentials so reconnect works after the socket entry is torn down. */
+  private storedCredentials = new Map<string, ServerCredentials>();
+  private subscribedEntitiesByServer = new Map<string, Set<number>>();
+  private reconnectAttemptsByServer = new Map<string, number>();
+  private reconnectTimersByServer = new Map<string, ReturnType<typeof setTimeout>>();
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private options: RustPlusManagerOptions = {}) {
     this.notifications = options.notificationService ?? new NotificationService();
   }
 
   getStatus() {
+    const connected =
+      this.activeServerId != null && this.connections.has(this.activeServerId);
     return {
-      connected: this.connections.size > 0,
+      connected,
+      reconnectPending: this.storedCredentials.size > 0 && !connected,
       activeServerId: this.activeServerId,
       fcmListening: this.fcmListening,
       serverCount: this.connections.size,
     };
+  }
+
+  /** Periodically retry when the bot should be connected but the socket dropped. */
+  startConnectionWatchdog(): void {
+    if (this.watchdogTimer) return;
+    this.watchdogTimer = setInterval(() => {
+      for (const serverId of this.storedCredentials.keys()) {
+        if (this.connections.has(serverId) || this.reconnectTimersByServer.has(serverId)) {
+          continue;
+        }
+        console.warn(`[RustPlus] Watchdog reconnecting to ${serverId}…`);
+        this.reconnectAttemptsByServer.set(serverId, 0);
+        this.scheduleReconnect(serverId);
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  stopConnectionWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
   }
 
   getLastMapMarkers(): unknown {
@@ -301,7 +331,12 @@ export class RustPlusManager {
 
   async connectServer(credentials: ServerCredentials): Promise<void> {
     if (this.connections.has(credentials.id)) {
-      await this.disconnectServer(credentials.id);
+      await this.disconnectServer(credentials.id, { dropCredentials: false });
+    }
+
+    this.storedCredentials.set(credentials.id, credentials);
+    if (!this.subscribedEntitiesByServer.has(credentials.id)) {
+      this.subscribedEntitiesByServer.set(credentials.id, new Set());
     }
 
     const client = new RustPlus(
@@ -338,9 +373,15 @@ export class RustPlusManager {
     this.connections.set(credentials.id, {
       credentials,
       client,
-      subscribedEntities: new Set(),
-      reconnectAttempts: 0,
+      subscribedEntities: this.subscribedEntitiesByServer.get(credentials.id)!,
     });
+
+    this.reconnectAttemptsByServer.set(credentials.id, 0);
+    const pendingTimer = this.reconnectTimersByServer.get(credentials.id);
+    if (pendingTimer) {
+      clearTimeout(pendingTimer);
+      this.reconnectTimersByServer.delete(credentials.id);
+    }
 
     if (!this.activeServerId) {
       this.activeServerId = credentials.id;
@@ -428,51 +469,67 @@ export class RustPlusManager {
   }
 
   private scheduleReconnect(serverId: string): void {
-    const conn = this.connections.get(serverId);
-    if (!conn) return;
+    if (!this.storedCredentials.has(serverId)) return;
 
-    if (conn.reconnectTimer) {
-      clearTimeout(conn.reconnectTimer);
-    }
+    const existingTimer = this.reconnectTimersByServer.get(serverId);
+    if (existingTimer) clearTimeout(existingTimer);
 
-    if (conn.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error(`[RustPlus] Max reconnect attempts reached for ${serverId}`);
-      return;
-    }
+    const attempts = this.reconnectAttemptsByServer.get(serverId) ?? 0;
+    const delay = Math.min(BASE_RECONNECT_MS * 2 ** Math.min(attempts, 8), MAX_RECONNECT_DELAY_MS);
+    this.reconnectAttemptsByServer.set(serverId, attempts + 1);
 
-    const delay = BASE_RECONNECT_MS * 2 ** conn.reconnectAttempts;
-    conn.reconnectAttempts += 1;
-
-    conn.reconnectTimer = setTimeout(() => {
+    const timer = setTimeout(() => {
+      this.reconnectTimersByServer.delete(serverId);
       void this.reconnectServer(serverId).catch((err) => {
         console.error(`[RustPlus] Reconnect failed for ${serverId}:`, err);
         this.scheduleReconnect(serverId);
       });
     }, delay);
+
+    this.reconnectTimersByServer.set(serverId, timer);
   }
 
   private async reconnectServer(serverId: string): Promise<void> {
-    const conn = this.connections.get(serverId);
-    if (!conn) return;
+    const credentials = this.storedCredentials.get(serverId);
+    if (!credentials) return;
 
-    const { credentials, subscribedEntities } = conn;
-    conn.client.disconnect();
-    this.connections.delete(serverId);
+    const oldConn = this.connections.get(serverId);
+    if (oldConn) {
+      oldConn.client.disconnect();
+      this.connections.delete(serverId);
+    }
 
     await this.connectServer(credentials);
     const newConn = this.connections.get(serverId);
     if (!newConn) return;
 
-    newConn.reconnectAttempts = 0;
-    for (const entityId of subscribedEntities) {
-      await this.subscribeEntity(entityId);
+    const entityIds = [...newConn.subscribedEntities];
+    newConn.subscribedEntities.clear();
+    for (const entityId of entityIds) {
+      try {
+        await this.subscribeEntity(entityId);
+      } catch (err) {
+        console.error(`[RustPlus] Failed to re-subscribe entity ${entityId}:`, err);
+      }
     }
   }
 
-  async disconnectServer(serverId: string): Promise<void> {
+  async disconnectServer(
+    serverId: string,
+    opts?: { dropCredentials?: boolean },
+  ): Promise<void> {
     const conn = this.connections.get(serverId);
+    const timer = this.reconnectTimersByServer.get(serverId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimersByServer.delete(serverId);
+    }
+    this.reconnectAttemptsByServer.delete(serverId);
+    if (opts?.dropCredentials !== false) {
+      this.storedCredentials.delete(serverId);
+      this.subscribedEntitiesByServer.delete(serverId);
+    }
     if (!conn) return;
-    if (conn.reconnectTimer) clearTimeout(conn.reconnectTimer);
     conn.client.disconnect();
     this.connections.delete(serverId);
     if (this.activeServerId === serverId) {
@@ -481,6 +538,7 @@ export class RustPlusManager {
   }
 
   async disconnectAll(): Promise<void> {
+    this.stopConnectionWatchdog();
     this.stopFcmListener();
     for (const serverId of [...this.connections.keys()]) {
       await this.disconnectServer(serverId);

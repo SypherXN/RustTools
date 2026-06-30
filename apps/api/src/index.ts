@@ -121,6 +121,7 @@ async function main() {
   await registerRoutes(app, { db, rustPlus });
 
   await reconnectStoredServers(db, rustPlus);
+  rustPlus.startConnectionWatchdog();
 
   startPhase2Listeners(db, rustPlus, notifications);
   startInformationEmbedUpdater(db, rustPlus);
