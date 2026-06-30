@@ -50,16 +50,18 @@ export async function registerServerRoutes(
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
+    const { includeImage } = request.query as { includeImage?: string };
+    const wantImage = includeImage === "1" || includeImage === "true";
+
     try {
-      const [map, info] = await Promise.all([
-        deps.rustPlus.getMap(),
+      // Fetch map image first — Rust+ struggles with concurrent getMap + other reads.
+      const map = await deps.rustPlus.getMap();
+      const [info, team, markersRaw] = await Promise.all([
         deps.rustPlus.getServerInfo(),
-      ]);
-      const worldSize = getWorldSize(info);
-      const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),
       ]);
+      const worldSize = getWorldSize(info);
       const transform = buildMapTransform(map, info as { mapSize?: number });
       const parsed = parseTeamRoster(team, worldSize);
       const activeServerId = deps.rustPlus.getStatus().activeServerId;
@@ -68,6 +70,7 @@ export async function registerServerRoutes(
         map: {
           width: map.width,
           height: map.height,
+          ...(wantImage ? { imageBase64: map.jpgImage?.toString("base64") ?? null } : {}),
         },
         transform,
         team: tracked.team.members,

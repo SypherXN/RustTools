@@ -719,9 +719,9 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     } as T;
   }
 
-  if (path === "/servers/active/map") {
+  if (path === "/servers/active/map" || path.startsWith("/servers/active/map?")) {
     return {
-      map: { width: demoMapSize.width, height: demoMapSize.height },
+      map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null },
       transform: demoMapTransform,
       team: demoTeam,
       monuments: demoMonuments,

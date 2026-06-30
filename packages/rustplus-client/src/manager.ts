@@ -39,14 +39,16 @@ interface ActiveConnection {
 const MAX_RECONNECT_ATTEMPTS = 10;
 const BASE_RECONNECT_MS = 5000;
 const REQUEST_TIMEOUT_MS = 15_000;
-const MAP_REQUEST_TIMEOUT_MS = 60_000;
+const MAP_REQUEST_TIMEOUT_MS = 90_000;
+/** Serve last good map for up to 30 minutes if Rust+ is slow or unreachable. */
+const STALE_MAP_MAX_MS = 30 * 60 * 1000;
 
 /** Avoid hammering Rust+ when the UI and background jobs request the same data. */
 const READ_CACHE_TTL_MS = {
   serverInfo: 20_000,
   teamInfo: 15_000,
   mapMarkers: 15_000,
-  map: 120_000,
+  map: 300_000,
   time: 15_000,
   teamChat: 30_000,
 } as const;
@@ -221,6 +223,13 @@ export class RustPlusManager {
 
   getCachedMap(): CachedMap | null {
     return (this.readCache.get("map")?.value as CachedMap | undefined) ?? null;
+  }
+
+  private getStaleMap(): CachedMap | null {
+    const cached = this.readCache.get("map");
+    if (!cached) return null;
+    if (Date.now() - cached.at > STALE_MAP_MAX_MS) return null;
+    return cached.value as CachedMap;
   }
 
   private cachedRead<T>(key: ReadCacheKey, fetch: () => Promise<T>): Promise<T> {
@@ -611,31 +620,43 @@ export class RustPlusManager {
   }
 
   async getMap(): Promise<CachedMap> {
-    return this.cachedRead("map", async () => {
-      const conn = this.getActiveConnection();
-      const map = await withRustRetry("getMap", () =>
-        withRustTimeout(
-          "getMap",
-          (cb) => conn.client.getMap(cb),
-          (m) => m.response?.map,
-          MAP_REQUEST_TIMEOUT_MS,
-        ),
-      );
-      const data = map as {
-        jpgImage?: Uint8Array | Buffer;
-        width?: number;
-        height?: number;
-        oceanMargin?: number;
-        monuments?: Array<{ token?: string; x?: number; y?: number }>;
-      };
-      return {
-        jpgImage: data?.jpgImage ? Buffer.from(data.jpgImage) : undefined,
-        width: data?.width,
-        height: data?.height,
-        oceanMargin: data?.oceanMargin,
-        monuments: data?.monuments,
-      };
-    });
+    try {
+      return await this.cachedRead("map", async () => {
+        const conn = this.getActiveConnection();
+        const map = await withRustRetry("getMap", () =>
+          withRustTimeout(
+            "getMap",
+            (cb) => conn.client.getMap(cb),
+            (m) => m.response?.map,
+            MAP_REQUEST_TIMEOUT_MS,
+          ),
+        );
+        const data = map as {
+          jpgImage?: Uint8Array | Buffer;
+          width?: number;
+          height?: number;
+          oceanMargin?: number;
+          monuments?: Array<{ token?: string; x?: number; y?: number }>;
+        };
+        return {
+          jpgImage: data?.jpgImage ? Buffer.from(data.jpgImage) : undefined,
+          width: data?.width,
+          height: data?.height,
+          oceanMargin: data?.oceanMargin,
+          monuments: data?.monuments,
+        };
+      });
+    } catch (err) {
+      const stale = this.getStaleMap();
+      if (stale?.width != null && stale.jpgImage) {
+        console.warn(
+          "[RustPlus] getMap failed — serving stale cached map:",
+          err instanceof Error ? err.message : err,
+        );
+        return stale;
+      }
+      throw err;
+    }
   }
 
   async getMapMarkers(): Promise<unknown> {

@@ -231,17 +231,18 @@ export function MapPage() {
     setTrackEventId(null);
     setMapImage(null);
     Promise.all([
-      apiFetch<Omit<MapData, "map"> & { map: { width: number; height: number } }>(
-        "/servers/active/map",
-      ),
-      apiFetch<{ map: MapData["map"] }>("/servers/active/map/image"),
+      apiFetch<
+        Omit<MapData, "map"> & {
+          map: { width: number; height: number; imageBase64: string | null };
+        }
+      >("/servers/active/map?includeImage=1"),
       apiFetch<MapOverlaysResponse>("/servers/active/map/overlays").catch(() => ({
         drawings: [],
         pins: [],
       })),
     ])
-      .then(([data, imageRes, overlays]) => {
-        setMapImage(imageRes.map);
+      .then(([data, overlays]) => {
+        setMapImage(data.map);
         setTransform(data.transform);
         setTeam(data.team);
         setMonuments(data.monuments);

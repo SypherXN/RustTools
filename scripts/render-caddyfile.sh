@@ -41,7 +41,12 @@ EOF
   cat <<EOF
 ${API_DOMAIN} {
 	encode gzip
-	reverse_proxy api:3000
+	reverse_proxy api:3000 {
+		transport http {
+			read_timeout 2m
+			write_timeout 2m
+		}
+	}
 }
 
 :80 {
