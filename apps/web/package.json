@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:demo": "VITE_DEMO_MODE=true vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node -e \"require('fs').copyFileSync('dist/index.html','dist/404.html')\"",
     "typecheck": "tsc -b --noEmit",
     "preview": "vite preview"
   },
