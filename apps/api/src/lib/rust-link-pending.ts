@@ -162,6 +162,18 @@ export async function assignSteamId(
   return { ok: true };
 }
 
+export async function clearSteamId(db: Database, userId: string): Promise<void> {
+  await db
+    .update(users)
+    .set({
+      steamId: null,
+      pendingLinkType: null,
+      pendingRustLink: false,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
 export async function assignCompanionPlayerId(
   db: Database,
   userId: string,

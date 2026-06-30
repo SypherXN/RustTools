@@ -12,6 +12,7 @@ export function AdminUsersPanel({ disabled }: { disabled: boolean }) {
   const [blockDiscordId, setBlockDiscordId] = useState("");
   const [blockSteamId, setBlockSteamId] = useState("");
   const [blockReason, setBlockReason] = useState("");
+  const [steamDraft, setSteamDraft] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -24,6 +25,7 @@ export function AdminUsersPanel({ disabled }: { disabled: boolean }) {
         })),
       ]);
       setUsers(usersRes.users);
+      setSteamDraft(Object.fromEntries(usersRes.users.map((user) => [user.id, user.steamId ?? ""])));
       setBlacklist(blacklistRes.entries);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load users");
@@ -35,6 +37,30 @@ export function AdminUsersPanel({ disabled }: { disabled: boolean }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const saveSteamId = async (user: AdminUserSummary, steamIdOverride?: string | null) => {
+    const steamId =
+      steamIdOverride !== undefined ? (steamIdOverride?.trim() ?? "") : (steamDraft[user.id]?.trim() ?? "");
+    setBusy(`steam-${user.id}`);
+    setMessage(null);
+    setError(null);
+    try {
+      await apiFetch<{ ok: boolean; steamId: string | null }>(`/admin/users/${user.id}/steam-id`, {
+        method: "PATCH",
+        body: JSON.stringify({ steamId: steamId || null }),
+      });
+      setMessage(
+        steamId
+          ? `Steam ID saved for ${user.discordUsername}`
+          : `Steam ID cleared for ${user.discordUsername}`,
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save Steam ID");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const removeUser = async (user: AdminUserSummary) => {
     if (
@@ -140,18 +166,55 @@ export function AdminUsersPanel({ disabled }: { disabled: boolean }) {
       {!loading && (
         <>
           <p className="muted">
-            Remove accounts or block Discord/Steam IDs from the web app and bot commands.
+            Remove accounts, assign Steam IDs for teammates, or block Discord/Steam IDs from the web app and bot
+            commands.
           </p>
-          <ul className="server-list">
+          <ul className="server-list admin-users-list">
             {users.map((user) => (
               <li key={user.id}>
-                <div>
-                  <strong>{user.discordUsername}</strong>
-                  <span className="muted">
-                    Discord {user.discordId}
-                    {user.steamId ? ` · Steam ${user.steamId}` : ""}
-                  </span>
-                  {user.blocked && <span className="badge">Blocked</span>}
+                <div className="admin-user-main">
+                  <div>
+                    <strong>{user.discordUsername}</strong>
+                    <span className="muted">Discord {user.discordId}</span>
+                    {user.blocked && <span className="badge">Blocked</span>}
+                  </div>
+                  <div className="admin-user-steam">
+                    <label className="admin-user-steam-label">
+                      Steam ID
+                      <input
+                        value={steamDraft[user.id] ?? ""}
+                        onChange={(e) =>
+                          setSteamDraft((prev) => ({ ...prev, [user.id]: e.target.value }))
+                        }
+                        disabled={disabled || busy !== null}
+                        placeholder="7656119… (F1 → player.id)"
+                        inputMode="numeric"
+                        pattern="\d{17}"
+                      />
+                    </label>
+                    <div className="inline-actions">
+                      <button
+                        type="button"
+                        disabled={disabled || busy !== null}
+                        onClick={() => void saveSteamId(user)}
+                      >
+                        {busy === `steam-${user.id}` ? "Saving…" : "Save Steam ID"}
+                      </button>
+                      {user.steamId && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={disabled || busy !== null}
+                          onClick={() => {
+                            setSteamDraft((prev) => ({ ...prev, [user.id]: "" }));
+                            void saveSteamId(user, null);
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="inline-actions">
                   {!user.blocked && (

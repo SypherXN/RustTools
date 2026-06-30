@@ -604,6 +604,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { entries: [] } as T;
   }
 
+  if (path.startsWith("/admin/users/") && method === "PATCH") {
+    return { ok: true, steamId: body?.steamId ?? null } as T;
+  }
+
   if (path.startsWith("/admin/users/") && method === "DELETE") {
     return { ok: true } as T;
   }

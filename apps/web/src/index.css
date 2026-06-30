@@ -771,6 +771,33 @@
   border-radius: 8px;
 }
 
+.admin-users-list li {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 0.85rem 0;
+}
+
+.admin-user-main {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.admin-user-steam {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.admin-user-steam-label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.admin-users-list > li > .inline-actions {
+  justify-content: flex-end;
+}
+
 .stat-big {
   font-size: 1.5rem;
   margin: 0;

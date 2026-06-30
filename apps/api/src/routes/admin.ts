@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
+import { users } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   getFcmCredentialStatus,
@@ -16,6 +18,11 @@ import {
   removeDiscordBlacklistEntry,
 } from "../lib/discord-blacklist.js";
 import { replaceFcmConfigFile } from "../lib/fcm-config-upload.js";
+import {
+  assignSteamId,
+  clearSteamId,
+  validateManualSteamId,
+} from "../lib/rust-link-pending.js";
 import { deleteUserAccount, listAdminUsers } from "../lib/user-admin.js";
 import { revokeBlockedUserAccess } from "../lib/user-access.js";
 
@@ -105,6 +112,58 @@ export async function registerAdminRoutes(
     const user = await requireCapability(deps.db, request, reply, "admin");
     if (!user) return;
     return { users: await listAdminUsers(deps.db) };
+  });
+
+  app.patch("/admin/users/:userId/steam-id", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { userId } = request.params as { userId: string };
+    const body = (request.body ?? {}) as { steamId?: string | null };
+    const raw = body.steamId;
+
+    const [target] = await deps.db
+      .select({ id: users.id, discordUsername: users.discordUsername })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!target) {
+      return reply.status(404).send({ error: "User not found" });
+    }
+
+    if (raw == null || String(raw).trim() === "") {
+      await clearSteamId(deps.db, userId);
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "user_steam_clear",
+        targetType: "user",
+        targetId: userId,
+        metadata: { discordUsername: target.discordUsername },
+      });
+      return { ok: true, steamId: null };
+    }
+
+    const steamId = String(raw).trim();
+    const formatError = validateManualSteamId(steamId);
+    if (formatError) {
+      return reply.status(400).send({ error: formatError });
+    }
+
+    const result = await assignSteamId(deps.db, userId, steamId);
+    if (!result.ok) {
+      return reply.status(409).send({ error: result.error });
+    }
+
+    await logAudit(deps.db, {
+      userId: user.id,
+      action: "user_steam_assign",
+      targetType: "user",
+      targetId: userId,
+      metadata: { discordUsername: target.discordUsername, steamId },
+    });
+
+    return { ok: true, steamId };
   });
 
   app.delete("/admin/users/:userId", async (request, reply) => {

@@ -80,6 +80,15 @@ export async function apiUpload<T>(
   return res.json() as Promise<T>;
 }
 
-export function getDiscordLoginUrl(): string {
-  return apiUrl("/auth/discord");
+export function getDiscordLoginUrl(opts?: { preferApp?: boolean }): string {
+  const base = apiUrl("/auth/discord");
+  if (opts?.preferApp) {
+    return `${base}?app=1`;
+  }
+  return base;
+}
+
+export function isMobileLoginDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 }

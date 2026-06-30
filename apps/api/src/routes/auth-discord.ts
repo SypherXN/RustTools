@@ -24,11 +24,29 @@ function generateOAuthState(): string {
   return randomBytes(24).toString("hex");
 }
 
+function buildDiscordAuthorizeParams(state: string): URLSearchParams {
+  return new URLSearchParams({
+    client_id: env.discord.clientId,
+    redirect_uri: env.discord.redirectUri,
+    response_type: "code",
+    scope: "identify",
+    state,
+  });
+}
+
+function discordAuthorizeUrl(params: URLSearchParams, preferApp: boolean): string {
+  const query = params.toString();
+  if (preferApp) {
+    return `discord://-/oauth2/authorize?${query}`;
+  }
+  return `https://discord.com/api/oauth2/authorize?${query}`;
+}
+
 export async function registerDiscordOAuth(
   app: FastifyInstance,
   db: Database,
 ): Promise<void> {
-  app.get("/auth/discord", async (_request, reply) => {
+  app.get("/auth/discord", async (request, reply) => {
     if (!env.discordOAuthConfigured) {
       return reply.status(503).send({
         error: "Discord OAuth is not configured. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET.",
@@ -42,15 +60,9 @@ export async function registerDiscordOAuth(
       signed: true,
     });
 
-    const params = new URLSearchParams({
-      client_id: env.discord.clientId,
-      redirect_uri: env.discord.redirectUri,
-      response_type: "code",
-      scope: "identify",
-      state,
-    });
-
-    return reply.redirect(`https://discord.com/api/oauth2/authorize?${params}`);
+    const preferApp = (request.query as { app?: string }).app === "1";
+    const params = buildDiscordAuthorizeParams(state);
+    return reply.redirect(discordAuthorizeUrl(params, preferApp));
   });
 
   app.get("/auth/discord/callback", async (request, reply) => {
