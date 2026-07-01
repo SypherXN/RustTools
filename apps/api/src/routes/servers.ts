@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { desc, eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
@@ -28,6 +28,7 @@ import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
 import { listDiscordGuildRoles } from "../lib/discord-guild.js";
 import { reconnectRustServer } from "../services/rustplus-bootstrap.js";
+import { getActiveFcmCredential } from "../lib/fcm-credentials.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
 export async function registerServerRoutes(
@@ -38,17 +39,21 @@ export async function registerServerRoutes(
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
 
-    const servers = await deps.db
-      .select({
-        id: rustServers.id,
-        name: rustServers.name,
-        ip: rustServers.ip,
-        port: rustServers.port,
-        isActive: rustServers.isActive,
-        createdAt: rustServers.createdAt,
-      })
-      .from(rustServers)
-      .orderBy(desc(rustServers.createdAt));
+    const activeFcm = await getActiveFcmCredential(deps.db);
+    const servers = activeFcm
+      ? await deps.db
+          .select({
+            id: rustServers.id,
+            name: rustServers.name,
+            ip: rustServers.ip,
+            port: rustServers.port,
+            isActive: rustServers.isActive,
+            createdAt: rustServers.createdAt,
+          })
+          .from(rustServers)
+          .where(eq(rustServers.fcmCredentialId, activeFcm.id))
+          .orderBy(desc(rustServers.createdAt))
+      : [];
 
     return { servers };
   });
@@ -379,7 +384,19 @@ export async function registerServerRoutes(
       return reply.status(404).send({ error: "Server not found" });
     }
 
-    await deps.db.update(rustServers).set({ isActive: false });
+    const activeFcm = await getActiveFcmCredential(deps.db);
+    if (!activeFcm || server.fcmCredentialId !== activeFcm.id) {
+      return reply.status(400).send({ error: "Server belongs to a different master account" });
+    }
+
+    if (server.fcmCredentialId) {
+      await deps.db
+        .update(rustServers)
+        .set({ isActive: false })
+        .where(eq(rustServers.fcmCredentialId, server.fcmCredentialId));
+    } else {
+      await deps.db.update(rustServers).set({ isActive: false });
+    }
     await deps.db.update(rustServers).set({ isActive: true }).where(eq(rustServers.id, id));
 
     try {

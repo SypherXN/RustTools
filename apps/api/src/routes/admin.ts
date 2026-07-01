@@ -3,10 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { users } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import {
-  getFcmCredentialStatus,
-  validateFcmConfigPayload,
-} from "@rusttools/rustplus-client";
+import { validateFcmConfigPayload } from "@rusttools/rustplus-client";
 import { DATA_RESET_SCOPES, isDataResetScope } from "@rusttools/shared";
 import { env } from "../config.js";
 import { logAudit } from "../lib/audit.js";
@@ -17,7 +14,15 @@ import {
   listDiscordBlacklist,
   removeDiscordBlacklistEntry,
 } from "../lib/discord-blacklist.js";
-import { replaceFcmConfigFile } from "../lib/fcm-config-upload.js";
+import {
+  activateFcmCredential,
+  createFcmCredential,
+  deleteFcmCredential,
+  getActiveFcmCredentialStatus,
+  listFcmCredentialSummaries,
+  renameFcmCredential,
+  replaceFcmCredentialConfig,
+} from "../lib/fcm-credentials.js";
 import {
   assignSteamId,
   clearSteamId,
@@ -34,10 +39,166 @@ export async function registerAdminRoutes(
     const user = await requireCapability(deps.db, request, reply, "admin");
     if (!user) return;
 
-    const rustStatus = deps.rustPlus.getStatus();
-    return getFcmCredentialStatus(env.rustplus.resolvedFcmConfigPath, rustStatus.fcmListening);
+    return getActiveFcmCredentialStatus(deps.db, deps.rustPlus);
   });
 
+  app.get("/admin/fcm-credentials", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const credentials = await listFcmCredentialSummaries(deps.db, deps.rustPlus);
+    return { credentials };
+  });
+
+  app.post("/admin/fcm-credentials", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { label: labelQuery } = request.query as { label?: string };
+    const file = await request.file();
+    if (!file) return reply.status(400).send({ error: "Missing fcm-config.json upload" });
+
+    const label = (labelQuery ?? "").trim() || file.filename.replace(/\.json$/i, "") || "Master bot";
+
+    let parsed: unknown;
+    try {
+      const text = (await file.toBuffer()).toString("utf8");
+      parsed = JSON.parse(text);
+    } catch {
+      return reply.status(400).send({ error: "Invalid JSON file" });
+    }
+
+    const validated = validateFcmConfigPayload(parsed);
+    if (!validated.ok) {
+      return reply.status(400).send({ error: validated.error });
+    }
+
+    try {
+      const credential = await createFcmCredential(
+        deps.db,
+        deps.rustPlus,
+        label,
+        validated.config,
+      );
+
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "fcm_credential_created",
+        targetType: "fcm_credential",
+        targetId: credential.id,
+        metadata: { label: credential.label },
+      });
+
+      return { ok: true, credential };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add FCM credential";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.post("/admin/fcm-credentials/:id/replace", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const file = await request.file();
+    if (!file) return reply.status(400).send({ error: "Missing fcm-config.json upload" });
+
+    let parsed: unknown;
+    try {
+      const text = (await file.toBuffer()).toString("utf8");
+      parsed = JSON.parse(text);
+    } catch {
+      return reply.status(400).send({ error: "Invalid JSON file" });
+    }
+
+    const validated = validateFcmConfigPayload(parsed);
+    if (!validated.ok) {
+      return reply.status(400).send({ error: validated.error });
+    }
+
+    try {
+      const credential = await replaceFcmCredentialConfig(
+        deps.db,
+        deps.rustPlus,
+        id,
+        validated.config,
+      );
+
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "fcm_credential_replaced",
+        targetType: "fcm_credential",
+        targetId: id,
+      });
+
+      return { ok: true, credential };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to replace FCM credential";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.post("/admin/fcm-credentials/:id/activate", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+
+    try {
+      const credential = await activateFcmCredential(deps.db, deps.rustPlus, id);
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "fcm_credential_activated",
+        targetType: "fcm_credential",
+        targetId: id,
+        metadata: { label: credential.label },
+      });
+      return { ok: true, credential };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to activate FCM credential";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.patch("/admin/fcm-credentials/:id", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+    const { label } = request.body as { label?: string };
+    if (!label?.trim()) {
+      return reply.status(400).send({ error: "label is required" });
+    }
+
+    try {
+      await renameFcmCredential(deps.db, id, label);
+      const credentials = await listFcmCredentialSummaries(deps.db, deps.rustPlus);
+      const credential = credentials.find((row) => row.id === id);
+      return { ok: true, credential };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to rename FCM credential";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.delete("/admin/fcm-credentials/:id", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const { id } = request.params as { id: string };
+
+    try {
+      await deleteFcmCredential(deps.db, deps.rustPlus, id, { userId: user.id });
+      const credentials = await listFcmCredentialSummaries(deps.db, deps.rustPlus);
+      return { ok: true, credentials };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete FCM credential";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  /** @deprecated use POST /admin/fcm-credentials — adds or replaces active slot */
   app.post("/admin/fcm-config/upload", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "admin");
     if (!user) return;
@@ -58,26 +219,32 @@ export async function registerAdminRoutes(
       return reply.status(400).send({ error: validated.error });
     }
 
-    const configPath = env.rustplus.resolvedFcmConfigPath;
+    const existing = await listFcmCredentialSummaries(deps.db, deps.rustPlus);
+    const active = existing.find((row) => row.isActive);
+
     try {
-      await replaceFcmConfigFile(deps.rustPlus, configPath, validated.config);
+      const credential = active
+        ? await replaceFcmCredentialConfig(deps.db, deps.rustPlus, active.id, validated.config)
+        : await createFcmCredential(deps.db, deps.rustPlus, "Default master", validated.config, {
+            activate: true,
+          });
+
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "fcm_config_upload",
+        targetType: "fcm_credential",
+        targetId: credential.id,
+      });
+
+      return {
+        ok: true,
+        status: await getActiveFcmCredentialStatus(deps.db, deps.rustPlus),
+        credential,
+      };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to start FCM listener";
       return reply.status(400).send({ error: message });
     }
-
-    await logAudit(deps.db, {
-      userId: user.id,
-      action: "fcm_config_upload",
-      targetType: "fcm_config",
-      targetId: configPath,
-    });
-
-    const rustStatus = deps.rustPlus.getStatus();
-    return {
-      ok: true,
-      status: getFcmCredentialStatus(configPath, rustStatus.fcmListening),
-    };
   });
 
   app.get("/admin/data-reset/scopes", async (request, reply) => {

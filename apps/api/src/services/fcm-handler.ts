@@ -11,6 +11,7 @@ import {
   applySteamLinkFromPair,
 } from "../lib/promote-leader.js";
 import { takeExclusivePendingLinkUser } from "../lib/rust-link-pending.js";
+import { requireActiveFcmCredentialId } from "../lib/fcm-credentials.js";
 
 function mapEntityType(entityName?: string): EntityType {
   const value = (entityName ?? "").toLowerCase();
@@ -57,10 +58,22 @@ export async function handleFcmNotification(
   if (data.type === "entity" || data.entityId != null) {
     await applySteamLinkFromPair(db, playerId, now);
 
+    const activeFcmId = await requireActiveFcmCredentialId(db);
+    if (!activeFcmId) {
+      console.warn("[FCM] Entity paired but no active FCM credential");
+      return;
+    }
+
     const [server] = await db
       .select()
       .from(rustServers)
-      .where(and(eq(rustServers.ip, data.ip), eq(rustServers.port, port)))
+      .where(
+        and(
+          eq(rustServers.ip, data.ip),
+          eq(rustServers.port, port),
+          eq(rustServers.fcmCredentialId, activeFcmId),
+        ),
+      )
       .limit(1);
 
     if (!server) {
@@ -146,10 +159,22 @@ async function pairMasterServer(
   playerToken: string,
   now: Date,
 ): Promise<void> {
+  const activeFcmId = await requireActiveFcmCredentialId(db);
+  if (!activeFcmId) {
+    console.warn("[FCM] Cannot pair server — no active FCM credential");
+    return;
+  }
+
   const [existing] = await db
     .select()
     .from(rustServers)
-    .where(and(eq(rustServers.ip, data.ip!), eq(rustServers.port, port)))
+    .where(
+      and(
+        eq(rustServers.ip, data.ip!),
+        eq(rustServers.port, port),
+        eq(rustServers.fcmCredentialId, activeFcmId),
+      ),
+    )
     .limit(1);
 
   const credentials = {
@@ -167,13 +192,14 @@ async function pairMasterServer(
     await db
       .update(rustServers)
       .set({ isActive: false })
-      .where(eq(rustServers.id, existing.id));
+      .where(eq(rustServers.fcmCredentialId, activeFcmId));
     await db
       .update(rustServers)
       .set({
         name: credentials.name,
         playerId: credentials.playerId,
         playerTokenEncrypted: encrypt(credentials.playerToken),
+        fcmCredentialId: activeFcmId,
         isActive: true,
         updatedAt: now,
       })
@@ -181,9 +207,13 @@ async function pairMasterServer(
     console.log(`[FCM] Updated existing server: ${credentials.name}`);
   } else {
     serverId = generateId();
-    await db.update(rustServers).set({ isActive: false });
+    await db
+      .update(rustServers)
+      .set({ isActive: false })
+      .where(eq(rustServers.fcmCredentialId, activeFcmId));
     await db.insert(rustServers).values({
       id: serverId,
+      fcmCredentialId: activeFcmId,
       name: credentials.name,
       ip: credentials.ip,
       port: credentials.port,

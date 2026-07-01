@@ -12,7 +12,7 @@ import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
 import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { ProcgenMapUpload } from "../components/ProcgenMapUpload";
-import { FcmConfigUpload } from "../components/FcmConfigUpload";
+import { FcmCredentialsPanel } from "../components/FcmCredentialsPanel";
 
 type SettingsTab =
   | "server"
@@ -1154,7 +1154,7 @@ export function SettingsPage() {
           <DataResetPanel disabled={notificationsSaving || linking} />
         </section>
 
-        <FcmConfigUpload />
+        <FcmCredentialsPanel />
         </>
       )}
     </div>

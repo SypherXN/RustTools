@@ -13,10 +13,10 @@ export function FcmWarningBanner() {
 
   const severity = !status.configured || status.expired ? "critical" : "warning";
   const message = !status.configured
-    ? "FCM credentials are missing. Open Settings → Admin and follow the setup wizard."
+    ? "No active FCM master. Open Settings → Admin and add a master account."
     : status.expired
-      ? "FCM credentials have expired. Settings → Admin → renew and upload a new fcm-config.json."
-      : `FCM credentials expire in ${status.daysRemaining ?? 0} day(s) (${status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : "unknown"}). Re-register soon in Settings → Admin.`;
+      ? "Active FCM has expired. Settings → Admin → renew or switch to another master."
+      : `Active FCM expires in ${status.daysRemaining ?? 0} day(s) (${status.expiresAt ? new Date(status.expiresAt).toLocaleDateString() : "unknown"}). Renew in Settings → Admin.`;
 
   return (
     <div className={`fcm-warning-banner fcm-warning-banner--${severity}`} role="alert">

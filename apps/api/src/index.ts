@@ -16,6 +16,8 @@ import { isUserBlocked } from "./lib/user-access.js";
 import { consumeWsToken } from "./lib/ws-tokens.js";
 import { registerRoutes } from "./routes/index.js";
 import { handleFcmNotification } from "./services/fcm-handler.js";
+import { bootstrapActiveFcmListener } from "./lib/fcm-credentials.js";
+import { startFcmExpiryCleanup } from "./services/fcm-expiry-cleanup.js";
 import { startPhase2Listeners } from "./services/phase2-listeners.js";
 import { startInformationEmbedUpdater } from "./services/information-embed-updater.js";
 import { startDataRetention } from "./services/data-retention.js";
@@ -64,7 +66,6 @@ async function main() {
   });
 
   const rustPlus = new RustPlusManager({
-    fcmConfigPath: env.rustplus.resolvedFcmConfigPath,
     notificationService: notifications,
   });
 
@@ -126,17 +127,17 @@ async function main() {
   startPhase2Listeners(db, rustPlus, notifications);
   startInformationEmbedUpdater(db, rustPlus);
   startDataRetention(db);
+  startFcmExpiryCleanup(db, rustPlus);
 
-  const fcmPath = env.rustplus.resolvedFcmConfigPath;
-  if (fs.existsSync(fcmPath)) {
-    rustPlus.startFcmListener((notification) => {
-      void handleFcmNotification(db, rustPlus, notification, notifications).catch((err) => {
-        app.log.error(err, "FCM notification handler failed");
-      });
+  rustPlus.startFcmListener((notification) => {
+    void handleFcmNotification(db, rustPlus, notification, notifications).catch((err) => {
+      app.log.error(err, "FCM notification handler failed");
     });
-  } else {
-    app.log.warn("FCM config not found — pairing listener disabled until fcm-register completes");
-  }
+  });
+
+  await bootstrapActiveFcmListener(db, rustPlus).catch((err) => {
+    app.log.warn(err, "FCM bootstrap failed — configure credentials in Settings → Admin");
+  });
 
   await app.listen({ port: env.apiPort, host: env.apiHost });
   app.log.info(`API listening on ${env.apiPublicUrl}`);

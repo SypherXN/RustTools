@@ -9,8 +9,7 @@ import { registerServerRoutes } from "./map.js";
 import { registerInternalRoutes } from "./internal.js";
 import { registerAdminRoutes } from "./admin.js";
 import { registerPushRoutes } from "./push.js";
-import { env } from "../config.js";
-import { getFcmCredentialStatus } from "@rusttools/rustplus-client";
+import { getActiveFcmCredentialStatus } from "../lib/fcm-credentials.js";
 
 export async function registerRoutes(
   app: FastifyInstance,
@@ -18,10 +17,7 @@ export async function registerRoutes(
 ): Promise<void> {
   app.get("/health", { config: { rateLimit: false } }, async () => {
     const rustStatus = deps.rustPlus.getStatus();
-    const fcmStatus = getFcmCredentialStatus(
-      env.rustplus.resolvedFcmConfigPath,
-      rustStatus.fcmListening,
-    );
+    const fcmStatus = await getActiveFcmCredentialStatus(deps.db, deps.rustPlus);
     return {
       status: "ok",
       version: "0.1.0",

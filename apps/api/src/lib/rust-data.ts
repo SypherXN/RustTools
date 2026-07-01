@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { isHiddenTeamPosition, type ParsedTeamInfo, type TeamRosterMember } from "@rusttools/shared";
+import { getActiveFcmCredential } from "./fcm-credentials.js";
 
 export type { TeamRosterMember, ParsedTeamInfo };
 
@@ -14,10 +15,15 @@ export async function getActiveServerId(db: Database): Promise<string | null> {
 export async function getActiveServer(
   db: Database,
 ): Promise<{ id: string; playerId: string } | null> {
+  const activeFcm = await getActiveFcmCredential(db);
+  if (!activeFcm) return null;
+
   const [server] = await db
     .select({ id: rustServers.id, playerId: rustServers.playerId })
     .from(rustServers)
-    .where(eq(rustServers.isActive, true))
+    .where(
+      and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+    )
     .limit(1);
   return server ?? null;
 }

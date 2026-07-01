@@ -555,6 +555,62 @@ button:active,
   content: "[CRIT] ";
 }
 
+.fcm-credential-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.fcm-credential-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
+
+.fcm-credential-card--active {
+  border-color: var(--accent);
+}
+
+.fcm-credential-card__header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.fcm-credential-card__title {
+  margin: 0;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fcm-credential-card__status {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+}
+
+.fcm-credential-card__actions {
+  flex-wrap: wrap;
+}
+
+.fcm-add-row,
+.fcm-rename-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.75rem;
+}
+
+.fcm-add-row .input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
 .fcm-status-dl .fcm-status--ok {
   color: var(--ok);
 }

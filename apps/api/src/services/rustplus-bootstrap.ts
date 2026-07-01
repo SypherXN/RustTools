@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustEntities, rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { decrypt } from "../lib/crypto.js";
 import { markEntityValidated } from "../lib/entity-lifecycle.js";
 import { checkServerWipe } from "../lib/wipe-tracker.js";
+import { getActiveFcmCredential } from "../lib/fcm-credentials.js";
 
 function scheduleEntityResubscribe(
   db: Database,
@@ -60,14 +61,23 @@ export async function reconnectStoredServers(
   db: Database,
   rustPlus: RustPlusManager,
 ): Promise<void> {
-  const servers = await db.select().from(rustServers).where(eq(rustServers.isActive, true));
+  const activeFcm = await getActiveFcmCredential(db);
+  if (!activeFcm) return;
 
-  for (const server of servers) {
-    try {
-      await reconnectRustServer(db, rustPlus, server);
-      console.log(`[RustPlus] Reconnected to server: ${server.name}`);
-    } catch (err) {
-      console.error(`[RustPlus] Failed to reconnect to ${server.name}:`, err);
-    }
+  const [server] = await db
+    .select()
+    .from(rustServers)
+    .where(
+      and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+    )
+    .limit(1);
+
+  if (!server) return;
+
+  try {
+    await reconnectRustServer(db, rustPlus, server);
+    console.log(`[RustPlus] Reconnected to server: ${server.name}`);
+  } catch (err) {
+    console.error(`[RustPlus] Failed to reconnect to ${server.name}:`, err);
   }
 }

@@ -17,6 +17,26 @@ export interface FcmCredentialStatus {
   expired: boolean;
 }
 
+export function computeFcmCredentialStatus(
+  registeredAtMs: number,
+  listening: boolean,
+  configured = true,
+): FcmCredentialStatus {
+  const expiresAtMs =
+    registeredAtMs + FCM_CREDENTIAL_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
+  const daysRemaining = Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000));
+
+  return {
+    configured,
+    listening,
+    registeredAt: new Date(registeredAtMs).toISOString(),
+    expiresAt: new Date(expiresAtMs).toISOString(),
+    daysRemaining,
+    warning: daysRemaining <= FCM_WARNING_DAYS_BEFORE,
+    expired: daysRemaining <= 0,
+  };
+}
+
 export function validateFcmConfigPayload(
   data: unknown,
 ): { ok: true; config: Record<string, unknown> } | { ok: false; error: string } {
@@ -113,17 +133,5 @@ export function getFcmCredentialStatus(
     registeredAtMs = fs.statSync(resolved).mtimeMs;
   }
 
-  const expiresAtMs =
-    registeredAtMs + FCM_CREDENTIAL_LIFETIME_DAYS * 24 * 60 * 60 * 1000;
-  const daysRemaining = Math.ceil((expiresAtMs - Date.now()) / (24 * 60 * 60 * 1000));
-
-  return {
-    configured: true,
-    listening,
-    registeredAt: new Date(registeredAtMs).toISOString(),
-    expiresAt: new Date(expiresAtMs).toISOString(),
-    daysRemaining,
-    warning: daysRemaining <= FCM_WARNING_DAYS_BEFORE,
-    expired: daysRemaining <= 0,
-  };
+  return computeFcmCredentialStatus(registeredAtMs, listening, true);
 }

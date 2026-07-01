@@ -26,8 +26,21 @@ export const sessions = sqliteTable("sessions", {
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
 });
 
+export const fcmCredentials = sqliteTable("fcm_credentials", {
+  id: text("id").primaryKey(),
+  label: text("label").notNull(),
+  configEncrypted: text("config_encrypted").notNull(),
+  registeredAt: integer("registered_at", { mode: "timestamp" }).notNull(),
+  isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 export const rustServers = sqliteTable("rust_servers", {
   id: text("id").primaryKey(),
+  fcmCredentialId: text("fcm_credential_id").references(() => fcmCredentials.id, {
+    onDelete: "cascade",
+  }),
   name: text("name").notNull(),
   ip: text("ip").notNull(),
   port: integer("port").notNull(),

@@ -60,12 +60,19 @@ export class FcmListener {
   private client: InstanceType<typeof PushReceiverClient> | null = null;
 
   constructor(
-    private configPath: string,
+    private configPath: string | null,
     private onNotification: (notification: ParsedFcmNotification) => void,
   ) {}
 
   async start(): Promise<void> {
+    if (!this.configPath) {
+      throw new Error("FCM config path not set");
+    }
     const config = readFcmConfig(this.configPath);
+    await this.startFromConfig(config);
+  }
+
+  async startFromConfig(config: FcmConfig): Promise<void> {
     const gcm = config.fcm_credentials?.gcm;
     const androidId = gcm?.androidId ?? gcm?.android_id;
     const securityToken = gcm?.securityToken ?? gcm?.security_token;

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
@@ -10,6 +10,7 @@ import {
   type ServerNotificationSettings,
   type TeamChatBotSettings,
 } from "@rusttools/shared";
+import { getActiveFcmCredential } from "./fcm-credentials.js";
 import { trimTeamTrackerDeaths } from "./team-tracker.js";
 import { pruneTeamEventLogsToLimits } from "./team-event-store.js";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
@@ -43,13 +44,18 @@ export async function getActiveNotificationSettings(
   db: Database,
   rustPlus: RustPlusManager,
 ): Promise<NotificationSettingsResponse | null> {
+  const activeFcm = await getActiveFcmCredential(db);
+  if (!activeFcm) return null;
+
   const [server] = await db
     .select({
       id: rustServers.id,
       notificationSettingsJson: rustServers.notificationSettingsJson,
     })
     .from(rustServers)
-    .where(eq(rustServers.isActive, true))
+    .where(
+      and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+    )
     .limit(1);
 
   if (!server) return null;
@@ -73,13 +79,18 @@ export async function updateActiveNotificationSettings(
     legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
   },
 ): Promise<ServerNotificationSettings | null> {
+  const activeFcm = await getActiveFcmCredential(db);
+  if (!activeFcm) return null;
+
   const [server] = await db
     .select({
       id: rustServers.id,
       notificationSettingsJson: rustServers.notificationSettingsJson,
     })
     .from(rustServers)
-    .where(eq(rustServers.isActive, true))
+    .where(
+      and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+    )
     .limit(1);
 
   if (!server) return null;

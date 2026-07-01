@@ -2,7 +2,7 @@ import fs from "node:fs";
 import RustPlus from "@liamcottle/rustplus.js";
 import type { EntityType, RustPlusEvent } from "@rusttools/shared";
 import { EventBus } from "./event-bus.js";
-import { FcmListener, type ParsedFcmNotification } from "./fcm-listener.js";
+import { FcmListener, type FcmConfig, type ParsedFcmNotification } from "./fcm-listener.js";
 import { JobScheduler } from "./job-scheduler.js";
 import { NotificationService } from "./notification-service.js";
 
@@ -885,26 +885,31 @@ export class RustPlusManager {
   }
 
   startFcmListener(onNotification: (notification: ParsedFcmNotification) => void): void {
-    if (!this.options.fcmConfigPath) {
-      console.warn("[RustPlusManager] FCM config path not set; pairing listener disabled");
-      return;
-    }
-
     this.fcmNotificationHandler = this.options.onFcmNotification ?? onNotification;
-    void this.ensureFcmStarted().catch((err) => {
-      console.error("[RustPlusManager] FCM listener failed:", err);
-    });
+    if (this.options.fcmConfigPath) {
+      void this.ensureFcmStarted().catch((err) => {
+        console.error("[RustPlusManager] FCM listener failed:", err);
+      });
+    }
   }
 
-  async reloadFcmListener(configPathOverride?: string): Promise<void> {
+  async reloadFcmListener(options?: {
+    configPath?: string;
+    config?: Record<string, unknown>;
+  }): Promise<void> {
     this.stopFcmListener();
-    const configPath = configPathOverride ?? this.options.fcmConfigPath;
-    if (!configPath || !this.fcmNotificationHandler) return;
-    if (!fs.existsSync(configPath)) return;
+    const configPath = options?.configPath ?? this.options.fcmConfigPath;
+    const inlineConfig = options?.config;
+    if (!this.fcmNotificationHandler) return;
+    if (!inlineConfig && (!configPath || !fs.existsSync(configPath))) return;
 
-    this.fcmListener = new FcmListener(configPath, this.fcmNotificationHandler);
+    this.fcmListener = new FcmListener(configPath ?? null, this.fcmNotificationHandler);
     try {
-      await this.fcmListener.start();
+      if (inlineConfig) {
+        await this.fcmListener.startFromConfig(inlineConfig as FcmConfig);
+      } else {
+        await this.fcmListener.start();
+      }
       this.fcmListening = true;
     } catch (err) {
       this.fcmListening = false;

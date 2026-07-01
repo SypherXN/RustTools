@@ -625,6 +625,24 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     } as T;
   }
 
+  if (path === "/admin/fcm-credentials") {
+    const demoCredential = {
+      id: "demo-fcm",
+      label: "Demo master",
+      isActive: true,
+      registeredAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+      daysRemaining: 45,
+      warning: false,
+      expired: false,
+      listening: true,
+      serverCount: 1,
+      activeServerName: "Demo Server",
+      masterPlayerId: "76561198000000000",
+    };
+    return { credentials: [demoCredential] } as T;
+  }
+
   if (path === "/admin/fcm-status") {
     return {
       configured: true,

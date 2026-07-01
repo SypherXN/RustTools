@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers, users } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
@@ -13,6 +13,7 @@ import {
   validateCompanionCredentials,
   validateRustPlusPlayerId,
 } from "./rust-link-pending.js";
+import { getActiveFcmCredential } from "./fcm-credentials.js";
 
 export type ActiveServerRow = {
   id: string;
@@ -22,6 +23,9 @@ export type ActiveServerRow = {
 };
 
 export async function getActiveServerRow(db: Database): Promise<ActiveServerRow | null> {
+  const activeFcm = await getActiveFcmCredential(db);
+  if (!activeFcm) return null;
+
   const [server] = await db
     .select({
       id: rustServers.id,
@@ -30,7 +34,9 @@ export async function getActiveServerRow(db: Database): Promise<ActiveServerRow 
       port: rustServers.port,
     })
     .from(rustServers)
-    .where(eq(rustServers.isActive, true))
+    .where(
+      and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+    )
     .limit(1);
   return server ?? null;
 }

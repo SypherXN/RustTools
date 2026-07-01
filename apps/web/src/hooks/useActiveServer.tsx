@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { invalidateApiCache } from "../lib/api-cache";
 
 interface ActiveServerContextValue {
@@ -15,6 +15,12 @@ export function ActiveServerProvider({ children }: { children: ReactNode }) {
     invalidateApiCache();
     setEpoch((e) => e + 1);
   }, []);
+
+  useEffect(() => {
+    const onChanged = () => notifyActivated();
+    window.addEventListener("rusttools:active-server-changed", onChanged);
+    return () => window.removeEventListener("rusttools:active-server-changed", onChanged);
+  }, [notifyActivated]);
 
   return (
     <ActiveServerContext.Provider value={{ epoch, notifyActivated }}>

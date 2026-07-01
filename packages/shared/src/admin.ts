@@ -8,6 +8,21 @@ export interface FcmCredentialStatus {
   expired: boolean;
 }
 
+export interface FcmCredentialSummary {
+  id: string;
+  label: string;
+  isActive: boolean;
+  registeredAt: string;
+  expiresAt: string;
+  daysRemaining: number;
+  warning: boolean;
+  expired: boolean;
+  listening: boolean;
+  serverCount: number;
+  activeServerName: string | null;
+  masterPlayerId: string | null;
+}
+
 /** GCM push credentials from rustplus.js typically need refresh after ~90 days. */
 export const FCM_CREDENTIAL_LIFETIME_DAYS = 90;
 export const FCM_WARNING_DAYS_BEFORE = 14;

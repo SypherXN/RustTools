@@ -169,6 +169,13 @@
       "when": 1740000022000,
       "tag": "0022_rust_map_size",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1740000023000,
+      "tag": "0023_fcm_credentials",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ export type { DiscordNotification, WebSocketNotification } from "./notification-
 export { FcmListener, parseFcmData } from "./fcm-listener.js";
 export type { ParsedFcmNotification, FcmConfig } from "./fcm-listener.js";
 export {
+  computeFcmCredentialStatus,
   getFcmCredentialStatus,
   validateFcmConfigPayload,
   prepareFcmConfigForSave,
