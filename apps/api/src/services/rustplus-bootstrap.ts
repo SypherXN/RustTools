@@ -3,11 +3,30 @@ import type { Database } from "@rusttools/db";
 import { rustEntities, rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { decrypt } from "../lib/crypto.js";
-import { runWithConcurrency } from "../lib/concurrency.js";
 import { markEntityValidated } from "../lib/entity-lifecycle.js";
 import { checkServerWipe } from "../lib/wipe-tracker.js";
 
-const SUBSCRIBE_CONCURRENCY = 5;
+function scheduleEntityResubscribe(
+  db: Database,
+  rustPlus: RustPlusManager,
+  serverId: string,
+): void {
+  void (async () => {
+    const entities = await db
+      .select()
+      .from(rustEntities)
+      .where(eq(rustEntities.serverId, serverId));
+
+    for (const entity of entities) {
+      try {
+        await rustPlus.subscribeEntity(entity.entityId);
+        markEntityValidated(serverId, entity.entityId);
+      } catch (err) {
+        console.error(`[RustPlus] Failed to subscribe entity ${entity.entityId}:`, err);
+      }
+    }
+  })();
+}
 
 export async function reconnectRustServer(
   db: Database,
@@ -24,26 +43,14 @@ export async function reconnectRustServer(
   });
   rustPlus.setActiveServer(server.id);
 
-  const entities = await db
-    .select()
-    .from(rustEntities)
-    .where(eq(rustEntities.serverId, server.id));
-
-  await runWithConcurrency(entities, SUBSCRIBE_CONCURRENCY, async (entity) => {
-    try {
-      await rustPlus.subscribeEntity(entity.entityId);
-      markEntityValidated(server.id, entity.entityId);
-    } catch (err) {
-      console.error(`[RustPlus] Failed to subscribe entity ${entity.entityId}:`, err);
-    }
-  });
-
   try {
     const info = await rustPlus.getServerInfo();
     await checkServerWipe(db, rustPlus, server.id, info);
   } catch (err) {
     console.error(`[RustPlus] Wipe check failed for ${server.name}:`, err);
   }
+
+  scheduleEntityResubscribe(db, rustPlus, server.id);
 }
 
 export async function reconnectStoredServers(

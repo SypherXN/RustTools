@@ -164,9 +164,10 @@ function withRustTimeout<T>(
   });
 }
 
-function isRateLimitError(err: unknown): boolean {
+function isRetriableRustError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.toLowerCase().includes("rate limit");
+  const lower = msg.toLowerCase();
+  return lower.includes("rate limit") || lower.includes("timed out");
 }
 
 async function withRustRetry<T>(label: string, fn: () => Promise<T>, maxAttempts = 3): Promise<T> {
@@ -176,9 +177,9 @@ async function withRustRetry<T>(label: string, fn: () => Promise<T>, maxAttempts
       return await fn();
     } catch (err) {
       lastErr = err;
-      if (!isRateLimitError(err) || attempt === maxAttempts - 1) throw err;
+      if (!isRetriableRustError(err) || attempt === maxAttempts - 1) throw err;
       await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-      console.warn(`[RustPlus] ${label} rate limited — retry ${attempt + 2}/${maxAttempts}`);
+      console.warn(`[RustPlus] ${label} failed — retry ${attempt + 2}/${maxAttempts}`);
     }
   }
   throw lastErr;
@@ -199,7 +200,8 @@ export class RustPlusManager {
   private readInflight = new Map<ReadCacheKey, Promise<unknown>>();
   private entityInfoCache = new Map<number, { at: number; value: unknown }>();
   /** Rust+ websocket handles one request poorly when several are in flight. */
-  private rustRequestQueue: Promise<void> = Promise.resolve();
+  private rustQueue: Array<{ priority: number; run: () => Promise<void> }> = [];
+  private rustQueueDraining = false;
   /** Keep credentials so reconnect works after the socket entry is torn down. */
   private storedCredentials = new Map<string, ServerCredentials>();
   private subscribedEntitiesByServer = new Map<string, Set<number>>();
@@ -264,13 +266,41 @@ export class RustPlusManager {
     return cached.value;
   }
 
-  private enqueueRustRequest<T>(fn: () => Promise<T>): Promise<T> {
-    const run = this.rustRequestQueue.then(fn, fn);
-    this.rustRequestQueue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
+  private enqueueRustRequest<T>(fn: () => Promise<T>, priority = 10): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.rustQueue.push({
+        priority,
+        run: async () => {
+          try {
+            resolve(await fn());
+          } catch (err) {
+            reject(err);
+          }
+        },
+      });
+      this.rustQueue.sort((a, b) => b.priority - a.priority);
+      void this.drainRustQueue();
+    });
+  }
+
+  /** Device subscribe/read — lower priority so team/map/info stay responsive. */
+  private enqueueEntityRustRequest<T>(fn: () => Promise<T>): Promise<T> {
+    return this.enqueueRustRequest(fn, 1);
+  }
+
+  private async drainRustQueue(): Promise<void> {
+    if (this.rustQueueDraining) return;
+    this.rustQueueDraining = true;
+    while (this.rustQueue.length > 0) {
+      const task = this.rustQueue.shift()!;
+      await task.run();
+    }
+    this.rustQueueDraining = false;
+  }
+
+  private clearRustQueue(): void {
+    this.rustQueue = [];
+    this.rustQueueDraining = false;
   }
 
   private async cachedReadWithStale<T>(
@@ -352,7 +382,7 @@ export class RustPlusManager {
       this.readCache.clear();
       this.readInflight.clear();
       this.entityInfoCache.clear();
-      this.rustRequestQueue = Promise.resolve();
+      this.clearRustQueue();
       this.lastMapMarkers = null;
       this.eventBus.emit({
         type: "connectionLost",
@@ -568,7 +598,7 @@ export class RustPlusManager {
     const conn = this.getActiveConnection();
     if (conn.subscribedEntities.has(entityId)) return;
 
-    await this.enqueueRustRequest(() => {
+    await this.enqueueEntityRustRequest(() => {
       const activeConn = this.getActiveConnection();
       if (activeConn.subscribedEntities.has(entityId)) return Promise.resolve();
       return withRustRetry("subscribeEntity", () =>
@@ -596,7 +626,7 @@ export class RustPlusManager {
     const afterSubscribe = this.readEntityInfoCache(entityId);
     if (afterSubscribe != null) return afterSubscribe;
 
-    const info = await this.enqueueRustRequest(() => {
+    const info = await this.enqueueEntityRustRequest(() => {
       const conn = this.getActiveConnection();
       return withRustRetry("getEntityInfo", () =>
         withRustTimeout(
@@ -631,7 +661,7 @@ export class RustPlusManager {
   async toggleSwitch(entityId: number, value: boolean): Promise<void> {
     await this.subscribeEntity(entityId);
 
-    await this.enqueueRustRequest(() => {
+    await this.enqueueEntityRustRequest(() => {
       const conn = this.getActiveConnection();
       return withRustRetry("setEntityValue", () =>
         withRustTimeout(
@@ -771,15 +801,15 @@ export class RustPlusManager {
   }
 
   async sendTeamMessage(message: string): Promise<void> {
-    const conn = this.getActiveConnection();
-    return new Promise((resolve, reject) => {
-      conn.client.sendTeamMessage(message, (response) => {
-        if (response.response?.error) {
-          reject(new Error(response.response.error.error ?? "sendTeamMessage failed"));
-          return;
-        }
-        resolve();
-      });
+    await this.enqueueRustRequest(() => {
+      const conn = this.getActiveConnection();
+      return withRustRetry("sendTeamMessage", () =>
+        withRustTimeout(
+          "sendTeamMessage",
+          (cb) => conn.client.sendTeamMessage(message, cb),
+          () => undefined,
+        ),
+      );
     });
   }
 

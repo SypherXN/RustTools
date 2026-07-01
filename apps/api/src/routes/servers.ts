@@ -7,7 +7,7 @@ import { parseTeamChatMessages } from "@rusttools/shared";
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
-import { parseInGameTime, parseTeamRoster, parseWipeCountdown, getWorldSize, getActiveServer } from "../lib/rust-data.js";
+import { parseInGameTime, parseTeamRoster, parseWipeCountdown, resolveWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { buildActiveServerConnectInfo } from "./map-overlays.js";
 import { applyTeamTrackingWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
 import {
@@ -73,12 +73,11 @@ export async function registerServerRoutes(
     if (!user) return;
 
     try {
-      const [team, info, activeServer] = await Promise.all([
+      const [team, worldSize, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
-        deps.rustPlus.getServerInfo(),
+        resolveWorldSize(deps.rustPlus),
         getActiveServerRow(deps.db),
       ]);
-      const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
       const tracked = await applyTeamTrackingWithSettings(
         deps.db,
@@ -137,9 +136,9 @@ export async function registerServerRoutes(
     }
 
     try {
-      const [team, info, activeServer] = await Promise.all([
+      const [team, worldSize, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
-        deps.rustPlus.getServerInfo(),
+        resolveWorldSize(deps.rustPlus),
         getActiveServerRow(deps.db),
       ]);
 
@@ -147,7 +146,6 @@ export async function registerServerRoutes(
         return reply.status(503).send({ error: "No active server configured" });
       }
 
-      const worldSize = getWorldSize(info);
       const parsed = parseTeamRoster(team, worldSize);
 
       if (!parsed.leaderSteamId) {
