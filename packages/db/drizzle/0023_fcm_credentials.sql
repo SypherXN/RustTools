@@ -7,5 +7,5 @@ CREATE TABLE `fcm_credentials` (
 	`created_at` integer NOT NULL,
 	`updated_at` integer NOT NULL
 );
-
-ALTER TABLE `rust_servers` ADD `fcm_credential_id` text REFERENCES `fcm_credentials`(`id`) ON DELETE CASCADE;
+--> statement-breakpoint
+ALTER TABLE `rust_servers` ADD COLUMN `fcm_credential_id` text REFERENCES `fcm_credentials`(`id`) ON DELETE CASCADE;
