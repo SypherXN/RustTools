@@ -415,17 +415,25 @@ async function assignOrphanServersToActiveFcm(
   console.log(`[FCM] Assigned ${orphans.length} server(s) to credential ${active.id}`);
 }
 
-export async function bootstrapActiveFcmListener(
+/** Connect the FCM push listener for the active credential (may block on network). */
+export async function connectActiveFcmListener(
   db: Database,
   rustPlus: RustPlusManager,
 ): Promise<void> {
-  await migrateLegacyFcmConfigIfNeeded(db);
-
   const active = await getActiveFcmCredential(db);
   if (!active) return;
 
   const config = decryptFcmConfig(active.configEncrypted);
   await rustPlus.reloadFcmListener({ config });
+}
+
+/** Migrate legacy config, then connect FCM — use connectActiveFcmListener after HTTP listen. */
+export async function bootstrapActiveFcmListener(
+  db: Database,
+  rustPlus: RustPlusManager,
+): Promise<void> {
+  await migrateLegacyFcmConfigIfNeeded(db);
+  await connectActiveFcmListener(db, rustPlus);
 }
 
 export function suggestedFcmRegisterPath(credentialId?: string): string {

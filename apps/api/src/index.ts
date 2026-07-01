@@ -16,7 +16,7 @@ import { isUserBlocked } from "./lib/user-access.js";
 import { consumeWsToken } from "./lib/ws-tokens.js";
 import { registerRoutes } from "./routes/index.js";
 import { handleFcmNotification } from "./services/fcm-handler.js";
-import { bootstrapActiveFcmListener } from "./lib/fcm-credentials.js";
+import { migrateLegacyFcmConfigIfNeeded, connectActiveFcmListener } from "./lib/fcm-credentials.js";
 import { startFcmExpiryCleanup } from "./services/fcm-expiry-cleanup.js";
 import { startPhase2Listeners } from "./services/phase2-listeners.js";
 import { startInformationEmbedUpdater } from "./services/information-embed-updater.js";
@@ -135,12 +135,16 @@ async function main() {
     });
   });
 
-  await bootstrapActiveFcmListener(db, rustPlus).catch((err) => {
-    app.log.warn(err, "FCM bootstrap failed — configure credentials in Settings → Admin");
+  await migrateLegacyFcmConfigIfNeeded(db).catch((err) => {
+    app.log.warn(err, "FCM legacy migration failed");
   });
 
   await app.listen({ port: env.apiPort, host: env.apiHost });
   app.log.info(`API listening on ${env.apiPublicUrl}`);
+
+  void connectActiveFcmListener(db, rustPlus).catch((err) => {
+    app.log.warn(err, "FCM listener connect failed — configure credentials in Settings → Admin");
+  });
 
   void reconnectStoredServers(db, rustPlus).catch((err) => {
     app.log.error(err, "Rust+ reconnect on startup failed");
