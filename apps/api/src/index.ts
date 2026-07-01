@@ -120,7 +120,6 @@ async function main() {
 
   await registerRoutes(app, { db, rustPlus });
 
-  await reconnectStoredServers(db, rustPlus);
   rustPlus.startConnectionWatchdog();
 
   startPhase2Listeners(db, rustPlus, notifications);
@@ -140,6 +139,10 @@ async function main() {
 
   await app.listen({ port: env.apiPort, host: env.apiHost });
   app.log.info(`API listening on ${env.apiPublicUrl}`);
+
+  void reconnectStoredServers(db, rustPlus).catch((err) => {
+    app.log.error(err, "Rust+ reconnect on startup failed");
+  });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
