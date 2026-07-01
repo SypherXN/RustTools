@@ -141,6 +141,27 @@
       "when": 1740000018000,
       "tag": "0018_drop_storage_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1740000019000,
+      "tag": "0019_team_board",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1740000020000,
+      "tag": "0020_team_board_global",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1740000021000,
+      "tag": "0021_team_board_category",
+      "breakpoints": true
     }
   ]
 }
