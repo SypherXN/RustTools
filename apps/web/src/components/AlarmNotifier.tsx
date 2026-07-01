@@ -1,35 +1,21 @@
 import { useEffect } from "react";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useAuth } from "../hooks/useAuth";
+import { useActiveServer } from "../hooks/useActiveServer";
 import { isDemoMode } from "../lib/demo";
 import { assetUrl } from "../lib/asset-url";
-
-function playSiren(): void {
-  try {
-    const ctx = new AudioContext();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sawtooth";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.15;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    const sweep = setInterval(() => {
-      osc.frequency.value = osc.frequency.value === 880 ? 440 : 880;
-    }, 250);
-    setTimeout(() => {
-      clearInterval(sweep);
-      osc.stop();
-      void ctx.close();
-    }, 4000);
-  } catch {
-    /* autoplay may be blocked until user gesture */
-  }
-}
+import { playAlarmSound, prefetchCustomAlarmSound } from "../lib/alarm-sound";
 
 export function AlarmNotifier() {
   const { user } = useAuth();
+  const { epoch } = useActiveServer();
+
+  useEffect(() => {
+    if (!user || isDemoMode()) return;
+    void prefetchCustomAlarmSound(epoch).catch(() => {
+      /* optional — plays default siren if prefetch fails */
+    });
+  }, [user, epoch]);
 
   useWebSocket((event, payload) => {
     if (event !== "fcmAlarm" || isDemoMode()) return;
@@ -39,6 +25,7 @@ export function AlarmNotifier() {
       message?: string;
       body?: Record<string, unknown>;
       browserSiren?: boolean;
+      customAlarmSound?: boolean;
     };
 
     const entityName =
@@ -52,9 +39,11 @@ export function AlarmNotifier() {
       new Notification(title, { body, tag: "rusttools-alarm" });
     }
 
-    if (data.browserSiren !== false) {
-      playSiren();
-    }
+    void playAlarmSound({
+      browserSiren: data.browserSiren !== false,
+      customAlarmSound: data.customAlarmSound === true,
+      epoch,
+    });
   });
 
   useEffect(() => {

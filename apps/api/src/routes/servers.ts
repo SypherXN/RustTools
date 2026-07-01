@@ -7,7 +7,7 @@ import { parseTeamChatMessages } from "@rusttools/shared";
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
-import { parseInGameTime, parseTeamRoster, parseWipeCountdown, resolveWorldSize, getActiveServer } from "../lib/rust-data.js";
+import { parseInGameTime, parseTeamRoster, parseWipeCountdown, resolveWorldSize, getActiveServer, getActiveServerId } from "../lib/rust-data.js";
 import { buildActiveServerConnectInfo } from "./map-overlays.js";
 import { applyTeamTrackingWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
 import {
@@ -23,6 +23,12 @@ import {
   notificationCapabilities,
   updateActiveNotificationSettings,
 } from "../lib/server-notification-settings.js";
+import {
+  deleteAlarmSoundFile,
+  getAlarmSoundMeta,
+  readAlarmSoundFile,
+  saveAlarmSoundFile,
+} from "../lib/alarm-sound.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
@@ -365,6 +371,107 @@ export async function registerServerRoutes(
 
     return {
       settings,
+      capabilities: await notificationCapabilities(deps.db, deps.rustPlus),
+    };
+  });
+
+  app.get("/servers/active/notifications/alarm-sound/status", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    const meta = getAlarmSoundMeta(serverId);
+    return {
+      configured: meta != null,
+      originalName: meta?.originalName ?? null,
+      mimeType: meta?.mimeType ?? null,
+      uploadedAt: meta?.uploadedAt ?? null,
+    };
+  });
+
+  app.get("/servers/active/notifications/alarm-sound", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    const file = readAlarmSoundFile(serverId);
+    if (!file) {
+      return reply.status(404).send({ error: "No custom alarm sound configured" });
+    }
+
+    reply.header("Content-Type", file.meta.mimeType);
+    reply.header("Cache-Control", "private, max-age=60");
+    return reply.send(file.data);
+  });
+
+  app.post("/servers/active/notifications/alarm-sound", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    const file = await request.file();
+    if (!file) {
+      return reply.status(400).send({ error: "Missing audio file upload" });
+    }
+
+    try {
+      const buffer = await file.toBuffer();
+      const meta = await saveAlarmSoundFile(serverId, file.filename, buffer);
+      await logAudit(deps.db, {
+        userId: user.id,
+        action: "alarm_sound_upload",
+        targetType: "server",
+        targetId: serverId,
+        metadata: { originalName: meta.originalName },
+      });
+      return {
+        ok: true,
+        status: {
+          configured: true,
+          originalName: meta.originalName,
+          mimeType: meta.mimeType,
+          uploadedAt: meta.uploadedAt,
+        },
+        capabilities: await notificationCapabilities(deps.db, deps.rustPlus),
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Upload failed";
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  app.delete("/servers/active/notifications/alarm-sound", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const serverId = await getActiveServerId(deps.db);
+    if (!serverId) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    deleteAlarmSoundFile(serverId);
+    await logAudit(deps.db, {
+      userId: user.id,
+      action: "alarm_sound_delete",
+      targetType: "server",
+      targetId: serverId,
+    });
+
+    return {
+      ok: true,
+      status: { configured: false, originalName: null, mimeType: null, uploadedAt: null },
       capabilities: await notificationCapabilities(deps.db, deps.rustPlus),
     };
   });

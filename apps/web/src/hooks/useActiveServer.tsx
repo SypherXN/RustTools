@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { invalidateApiCache } from "../lib/api-cache";
+import { invalidateAlarmSoundCache } from "../lib/alarm-sound";
 
 interface ActiveServerContextValue {
   /** Increments when the active server changes; use as a useEffect dependency. */
@@ -13,6 +14,7 @@ export function ActiveServerProvider({ children }: { children: ReactNode }) {
   const [epoch, setEpoch] = useState(0);
   const notifyActivated = useCallback(() => {
     invalidateApiCache();
+    invalidateAlarmSoundCache();
     setEpoch((e) => e + 1);
   }, []);
 

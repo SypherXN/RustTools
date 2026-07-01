@@ -10,6 +10,7 @@ import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
+import { AlarmSoundUpload } from "../components/AlarmSoundUpload";
 import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { ProcgenMapUpload } from "../components/ProcgenMapUpload";
 import { FcmCredentialsPanel } from "../components/FcmCredentialsPanel";
@@ -653,9 +654,10 @@ export function SettingsPage() {
                 disabled={notificationsSaving || !canAdmin}
                 onChange={(e) => updateSmartAlarm("browserSiren", e.target.checked)}
               />
-              <span>Play browser siren when this tab is open</span>
+              <span>Play alarm sound when this tab is open (custom upload or default siren)</span>
             </label>
             </div>
+            <AlarmSoundUpload disabled={notificationsSaving || !canAdmin} />
             {notifications.settings.smartAlarm.discord && !notifications.capabilities.discordConfigured && (
               <p className="alert alert-error">
                 Discord is enabled but no alarm channel is configured on the server.

@@ -104,6 +104,7 @@ export const DEFAULT_SMART_ALARM_ESCALATION: SmartAlarmEscalationSettings = {
 export interface NotificationSettingsCapabilities {
   discordConfigured: boolean;
   rustPlusConnected: boolean;
+  customAlarmSoundConfigured: boolean;
 }
 
 export interface NotificationSettingsResponse {

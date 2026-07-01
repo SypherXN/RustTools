@@ -48,6 +48,7 @@ import { evaluateSwitchAutoModes } from "../lib/switch-auto-modes.js";
 import { evaluateTcDecayAlerts } from "../lib/tc-decay-monitor.js";
 import { dispatchAlarmEscalation } from "../lib/alarm-escalation.js";
 import { broadcastWebPush } from "../lib/web-push.js";
+import { hasCustomAlarmSound } from "../lib/alarm-sound.js";
 import {
   dispatchAutomationEvent,
   evaluateIntervalAutomationRules,
@@ -169,6 +170,7 @@ export function startPhase2Listeners(
       payload: {
         ...event,
         browserSiren: settings.smartAlarm.browserSiren,
+        customAlarmSound: hasCustomAlarmSound(activeServer.id),
       },
     });
 

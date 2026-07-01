@@ -64,6 +64,7 @@ let demoNotificationSettings: NotificationSettingsResponse = {
   capabilities: {
     discordConfigured: true,
     rustPlusConnected: true,
+    customAlarmSoundConfigured: false,
   },
 };
 
@@ -751,6 +752,15 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/world-events") {
     return { status: demoWorldEventsStatus } as T;
+  }
+
+  if (path === "/servers/active/notifications/alarm-sound/status") {
+    return {
+      configured: false,
+      originalName: null,
+      mimeType: null,
+      uploadedAt: null,
+    } as T;
   }
 
   if (path === "/servers/active/notifications") {

@@ -14,6 +14,7 @@ import { getActiveFcmCredential } from "./fcm-credentials.js";
 import { trimTeamTrackerDeaths } from "./team-tracker.js";
 import { pruneTeamEventLogsToLimits } from "./team-event-store.js";
 import { resolveDefaultGuildChannelId } from "./discord-channels.js";
+import { hasCustomAlarmSound } from "./alarm-sound.js";
 
 export async function notificationCapabilities(
   db: Database,
@@ -21,9 +22,24 @@ export async function notificationCapabilities(
 ): Promise<NotificationSettingsCapabilities> {
   const status = rustPlus.getStatus();
   const alarmChannel = await resolveDefaultGuildChannelId(db, "alarms");
+  const activeFcm = await getActiveFcmCredential(db);
+  let customAlarmSoundConfigured = false;
+  if (activeFcm) {
+    const [server] = await db
+      .select({ id: rustServers.id })
+      .from(rustServers)
+      .where(
+        and(eq(rustServers.isActive, true), eq(rustServers.fcmCredentialId, activeFcm.id)),
+      )
+      .limit(1);
+    if (server) {
+      customAlarmSoundConfigured = hasCustomAlarmSound(server.id);
+    }
+  }
   return {
     discordConfigured: Boolean(alarmChannel),
     rustPlusConnected: status.connected && Boolean(status.activeServerId),
+    customAlarmSoundConfigured,
   };
 }
 
