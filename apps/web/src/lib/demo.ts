@@ -597,6 +597,8 @@ let demoSwitchStates: Record<string, boolean> = {
   "dev-2": false,
 };
 
+let demoRustPlusConnected = true;
+
 export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<T> {
   const method = init?.method ?? "GET";
   const body = init?.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : {};
@@ -608,7 +610,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   if (path === "/health") {
     return {
       status: "ok",
-      rustplus: { connected: true, activeServerId: "demo-server-1" },
+      rustplus: {
+        connected: demoRustPlusConnected,
+        activeServerId: demoRustPlusConnected ? "demo-server-1" : null,
+      },
       fcm: {
         listening: true,
         configured: true,
@@ -686,6 +691,22 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     const idx = demoServers.findIndex((s) => s.id === deleteMatch[1]);
     if (idx >= 0) demoServers.splice(idx, 1);
     return { ok: true, name: "Demo Server", wasActive: false } as T;
+  }
+
+  if (path === "/servers/active/rustplus/disconnect" && method === "POST") {
+    demoRustPlusConnected = false;
+    return {
+      ok: true,
+      rustplus: { connected: false, activeServerId: null },
+    } as T;
+  }
+
+  if (path === "/servers/active/rustplus/reconnect" && method === "POST") {
+    demoRustPlusConnected = true;
+    return {
+      ok: true,
+      rustplus: { connected: true, activeServerId: "demo-server-1" },
+    } as T;
   }
 
   if (path === "/servers/active/info") {

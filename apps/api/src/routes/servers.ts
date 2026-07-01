@@ -407,6 +407,28 @@ export async function registerServerRoutes(
     return { ok: true, activeServerId: id };
   });
 
+  app.post("/servers/active/rustplus/disconnect", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "admin");
+    if (!user) return;
+
+    const active = await getActiveServer(deps.db);
+    if (!active) {
+      return reply.status(404).send({ error: "No active server" });
+    }
+
+    const serverId = deps.rustPlus.getStatus().activeServerId ?? active.id;
+    await deps.rustPlus.disconnectServer(serverId, { dropCredentials: true });
+
+    await logAudit(deps.db, {
+      userId: user.id,
+      action: "rustplus_disconnect",
+      targetType: "server",
+      targetId: serverId,
+    });
+
+    return { ok: true, rustplus: deps.rustPlus.getStatus() };
+  });
+
   app.post("/servers/active/rustplus/reconnect", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "admin");
     if (!user) return;
