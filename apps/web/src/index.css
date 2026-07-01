@@ -774,28 +774,50 @@
 .admin-users-list li {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.75rem;
+  gap: 0.5rem;
   padding: 0.85rem 0;
 }
 
-.admin-user-main {
-  display: grid;
-  gap: 0.65rem;
+.admin-user-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
 }
 
-.admin-user-steam {
-  display: grid;
-  gap: 0.45rem;
+.admin-user-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
 }
 
 .admin-user-steam-label {
-  display: grid;
-  gap: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 16rem;
+  min-width: 0;
+  margin: 0;
   font-size: 0.85rem;
 }
 
-.admin-users-list > li > .inline-actions {
-  justify-content: flex-end;
+.admin-user-steam-label span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.admin-user-steam-label input {
+  flex: 1;
+  min-width: 10rem;
+}
+
+.admin-user-actions-row .inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .team-board-meta {

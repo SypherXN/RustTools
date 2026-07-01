@@ -1,12 +1,16 @@
 import type { ProcgenOverlayId } from "./procgen/types.js";
 import { runProcgenParseInSubprocess } from "./procgen-subprocess.js";
 import { eq } from "drizzle-orm";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
-import { parseServerMapMeta } from "@rusttools/shared";
 import { env } from "../config.js";
+
+/** Parse can take many minutes; pending older than this is treated as stuck. */
+const PARSE_STALE_MS = 22 * 60_000;
+
+const procgenParseInFlight = new Set<string>();
 
 export type ProcgenParseStatus = "pending" | "ready" | "error" | null;
 
@@ -84,38 +88,79 @@ function heightPath(serverId: string): string {
   return path.join(procgenDir(serverId), "height.json");
 }
 
+async function procgenMetaExists(serverId: string): Promise<boolean> {
+  try {
+    await access(metaPath(serverId));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function recoverStuckProcgenParse(
+  db: Database,
+  server: typeof rustServers.$inferSelect,
+): Promise<typeof rustServers.$inferSelect> {
+  if (server.mapParseStatus !== "pending" || !server.mapUploadedAt) {
+    return server;
+  }
+
+  const ageMs = Date.now() - server.mapUploadedAt.getTime();
+  if (ageMs < PARSE_STALE_MS) {
+    return server;
+  }
+
+  if (await procgenMetaExists(server.id)) {
+    return server;
+  }
+
+  const message = "Parse timed out or was interrupted (for example after an API restart). Upload the .map file again.";
+  await db
+    .update(rustServers)
+    .set({
+      mapParseStatus: "error",
+      mapParseError: message,
+      updatedAt: new Date(),
+    })
+    .where(eq(rustServers.id, server.id));
+
+  return { ...server, mapParseStatus: "error", mapParseError: message };
+}
+
 export async function getProcgenMapStatus(
   db: Database,
   serverId: string,
-  serverInfo?: Record<string, unknown> | null,
 ): Promise<ProcgenMapStatus> {
-  const [server] = await db.select().from(rustServers).where(eq(rustServers.id, serverId)).limit(1);
-  const mapMeta = serverInfo ? parseServerMapMeta(serverInfo) : null;
+  const [row] = await db.select().from(rustServers).where(eq(rustServers.id, serverId)).limit(1);
+  const server = row ? await recoverStuckProcgenParse(db, row) : null;
 
   const uploaded = Boolean(server?.mapFilePath);
   const parseStatus = (server?.mapParseStatus as ProcgenParseStatus) ?? null;
+  const parsing = procgenParseInFlight.has(serverId);
 
   return {
     uploaded,
     uploadedAt: server?.mapUploadedAt?.toISOString() ?? null,
     parsedAt: server?.mapParsedAt?.toISOString() ?? null,
-    parseStatus,
+    parseStatus: parsing && parseStatus !== "ready" ? "pending" : parseStatus,
     parseError: server?.mapParseError ?? null,
     mapSeed: server?.mapSeed ?? null,
     mapWorldSize: server?.mapWorldSize ?? null,
-    serverSeed: mapMeta?.seed ?? null,
-    serverMapSize: mapMeta?.mapSize ?? null,
+    serverSeed: server?.trackedMapSeed ?? null,
+    serverMapSize: server?.rustMapSize ?? server?.mapWorldSize ?? null,
     seedMatch:
-      server?.mapSeed != null && mapMeta?.seed != null ? server.mapSeed === mapMeta.seed : null,
+      server?.mapSeed != null && server?.trackedMapSeed != null
+        ? server.mapSeed === server.trackedMapSeed
+        : null,
     sizeMatch:
-      server?.mapWorldSize != null && mapMeta?.mapSize != null
-        ? server.mapWorldSize === mapMeta.mapSize
+      server?.mapWorldSize != null && (server?.rustMapSize ?? server?.mapWorldSize) != null
+        ? server.mapWorldSize === (server.rustMapSize ?? server.mapWorldSize)
         : null,
     overlays: parseStatus === "ready" ? OVERLAY_IDS : [],
   };
 }
 
-export async function parseAndCacheProcgenMap(
+export async function stageProcgenMapUpload(
   db: Database,
   serverId: string,
   mapBuffer: Buffer,
@@ -139,6 +184,58 @@ export async function parseAndCacheProcgenMap(
       updatedAt: new Date(),
     })
     .where(eq(rustServers.id, serverId));
+}
+
+export function scheduleProcgenMapParse(db: Database, serverId: string): void {
+  if (procgenParseInFlight.has(serverId)) return;
+  procgenParseInFlight.add(serverId);
+  void runProcgenMapParse(db, serverId).finally(() => {
+    procgenParseInFlight.delete(serverId);
+  });
+}
+
+/** Re-queue parses that were interrupted by an API restart. */
+export async function resumePendingProcgenParses(db: Database): Promise<void> {
+  const rows = await db
+    .select()
+    .from(rustServers)
+    .where(eq(rustServers.mapParseStatus, "pending"));
+
+  for (const server of rows) {
+    if (await procgenMetaExists(server.id)) {
+      await db
+        .update(rustServers)
+        .set({
+          mapParseStatus: "ready",
+          mapParsedAt: server.mapParsedAt ?? new Date(),
+          mapParseError: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(rustServers.id, server.id));
+      continue;
+    }
+
+    try {
+      await access(sourceMapPath(server.id));
+    } catch {
+      await db
+        .update(rustServers)
+        .set({
+          mapParseStatus: "error",
+          mapParseError: "Uploaded .map file is missing — upload again.",
+          updatedAt: new Date(),
+        })
+        .where(eq(rustServers.id, server.id));
+      continue;
+    }
+
+    scheduleProcgenMapParse(db, server.id);
+  }
+}
+
+async function runProcgenMapParse(db: Database, serverId: string): Promise<void> {
+  const dir = procgenDir(serverId);
+  const sourcePath = sourceMapPath(serverId);
 
   try {
     await runProcgenParseInSubprocess(sourcePath, dir);
@@ -151,6 +248,7 @@ export async function parseAndCacheProcgenMap(
       .set({
         mapSeed: null,
         mapWorldSize: worldSize,
+        rustMapSize: worldSize ?? undefined,
         mapParseStatus: "ready",
         mapParseError: null,
         mapParsedAt: new Date(),
@@ -170,6 +268,15 @@ export async function parseAndCacheProcgenMap(
       .where(eq(rustServers.id, serverId));
     throw err;
   }
+}
+
+export async function parseAndCacheProcgenMap(
+  db: Database,
+  serverId: string,
+  mapBuffer: Buffer,
+): Promise<void> {
+  await stageProcgenMapUpload(db, serverId, mapBuffer);
+  await runProcgenMapParse(db, serverId);
 }
 
 export async function readProcgenOverlay(

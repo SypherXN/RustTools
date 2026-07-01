@@ -20,6 +20,7 @@ import { startPhase2Listeners } from "./services/phase2-listeners.js";
 import { startInformationEmbedUpdater } from "./services/information-embed-updater.js";
 import { startDataRetention } from "./services/data-retention.js";
 import { reconnectStoredServers } from "./services/rustplus-bootstrap.js";
+import { resumePendingProcgenParses } from "./lib/procgen-map.js";
 import { WsHub } from "./services/ws-hub.js";
 import { postDiscordMessage } from "./lib/discord-messages.js";
 
@@ -142,6 +143,10 @@ async function main() {
 
   void reconnectStoredServers(db, rustPlus).catch((err) => {
     app.log.error(err, "Rust+ reconnect on startup failed");
+  });
+
+  void resumePendingProcgenParses(db).catch((err) => {
+    app.log.error(err, "Procgen parse resume on startup failed");
   });
 
   let shuttingDown = false;

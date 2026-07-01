@@ -172,68 +172,65 @@ export function AdminUsersPanel({ disabled }: { disabled: boolean }) {
           <ul className="server-list admin-users-list">
             {users.map((user) => (
               <li key={user.id}>
-                <div className="admin-user-main">
-                  <div>
-                    <strong>{user.discordUsername}</strong>
-                    <span className="muted">Discord {user.discordId}</span>
-                    {user.blocked && <span className="badge">Blocked</span>}
-                  </div>
-                  <div className="admin-user-steam">
-                    <label className="admin-user-steam-label">
-                      Steam ID
-                      <input
-                        value={steamDraft[user.id] ?? ""}
-                        onChange={(e) =>
-                          setSteamDraft((prev) => ({ ...prev, [user.id]: e.target.value }))
-                        }
-                        disabled={disabled || busy !== null}
-                        placeholder="7656119… (F1 → player.id)"
-                        inputMode="numeric"
-                        pattern="\d{17}"
-                      />
-                    </label>
-                    <div className="inline-actions">
-                      <button
-                        type="button"
-                        disabled={disabled || busy !== null}
-                        onClick={() => void saveSteamId(user)}
-                      >
-                        {busy === `steam-${user.id}` ? "Saving…" : "Save Steam ID"}
-                      </button>
-                      {user.steamId && (
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={disabled || busy !== null}
-                          onClick={() => {
-                            setSteamDraft((prev) => ({ ...prev, [user.id]: "" }));
-                            void saveSteamId(user, null);
-                          }}
-                        >
-                          Clear
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                <div className="admin-user-header">
+                  <strong>{user.discordUsername}</strong>
+                  <span className="muted">Discord {user.discordId}</span>
+                  {user.blocked && <span className="badge">Blocked</span>}
                 </div>
-                <div className="inline-actions">
-                  {!user.blocked && (
+                <div className="admin-user-actions-row">
+                  <label className="admin-user-steam-label">
+                    <span>Steam ID</span>
+                    <input
+                      value={steamDraft[user.id] ?? ""}
+                      onChange={(e) =>
+                        setSteamDraft((prev) => ({ ...prev, [user.id]: e.target.value }))
+                      }
+                      disabled={disabled || busy !== null}
+                      placeholder="7656119… (F1 → player.id)"
+                      inputMode="numeric"
+                      pattern="\d{17}"
+                    />
+                  </label>
+                  <div className="inline-actions">
                     <button
                       type="button"
                       disabled={disabled || busy !== null}
-                      onClick={() => void blockUser(user)}
+                      onClick={() => void saveSteamId(user)}
                     >
-                      {busy === `block-${user.id}` ? "Blocking…" : "Block"}
+                      {busy === `steam-${user.id}` ? "Saving…" : "Save Steam ID"}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="danger"
-                    disabled={disabled || busy !== null}
-                    onClick={() => void removeUser(user)}
-                  >
-                    {busy === user.id ? "Removing…" : "Remove"}
-                  </button>
+                    {user.steamId && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={disabled || busy !== null}
+                        onClick={() => {
+                          setSteamDraft((prev) => ({ ...prev, [user.id]: "" }));
+                          void saveSteamId(user, null);
+                        }}
+                      >
+                        Clear
+                      </button>
+                    )}
+                    {!user.blocked && (
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={disabled || busy !== null}
+                        onClick={() => void blockUser(user)}
+                      >
+                        {busy === `block-${user.id}` ? "Blocking…" : "Block"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="danger"
+                      disabled={disabled || busy !== null}
+                      onClick={() => void removeUser(user)}
+                    >
+                      {busy === user.id ? "Removing…" : "Remove"}
+                    </button>
+                  </div>
                 </div>
               </li>
             ))}

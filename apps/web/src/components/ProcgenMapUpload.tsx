@@ -2,6 +2,15 @@ import { useCallback, useEffect, useState } from "react";
 import type { ProcgenMapStatus } from "@rusttools/shared";
 import { apiFetch, apiUpload } from "../lib/api";
 
+const PARSE_POLL_MS = 4_000;
+
+function statusLabel(status: ProcgenMapStatus | null): string {
+  if (!status) return "unknown";
+  if (status.parseStatus === "pending") return "parsing";
+  if (status.parseStatus) return status.parseStatus;
+  return status.uploaded ? "uploaded" : "not uploaded";
+}
+
 export function ProcgenMapUpload() {
   const [status, setStatus] = useState<ProcgenMapStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -9,8 +18,10 @@ export function ProcgenMapUpload() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const data = await apiFetch<ProcgenMapStatus>("/servers/active/map/procgen/status");
@@ -19,13 +30,25 @@ export function ProcgenMapUpload() {
       setStatus(null);
       setError(err instanceof Error ? err.message : "Could not load procgen map status");
     } finally {
-      setLoading(false);
+      if (!opts?.silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const parsing = status?.parseStatus === "pending";
+
+  useEffect(() => {
+    if (!parsing) return;
+    const interval = setInterval(() => {
+      void refresh({ silent: true });
+    }, PARSE_POLL_MS);
+    return () => clearInterval(interval);
+  }, [parsing, refresh]);
 
   const onUpload = async (file: File | null) => {
     if (!file) return;
@@ -35,9 +58,9 @@ export function ProcgenMapUpload() {
     try {
       const form = new FormData();
       form.append("file", file);
-      await apiUpload<{ ok: boolean }>("/servers/active/map/procgen/upload", form);
-      setMessage("Map uploaded and parsed successfully.");
-      await refresh();
+      await apiUpload<{ ok: boolean; parseStatus?: string }>("/servers/active/map/procgen/upload", form);
+      setMessage("Map uploaded — parsing in the background (can take several minutes on large maps).");
+      await refresh({ silent: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -77,7 +100,14 @@ export function ProcgenMapUpload() {
             <dl className="settings-dl procgen-status-dl">
               <div>
                 <dt>Status</dt>
-                <dd>{status.parseStatus ?? (status.uploaded ? "uploaded" : "not uploaded")}</dd>
+                <dd>
+                  {statusLabel(status)}
+                  {parsing && (
+                    <span className="muted" style={{ display: "block", marginTop: "0.25rem" }}>
+                      Parsing on the server — large maps can take 5–15 minutes. This page updates automatically.
+                    </span>
+                  )}
+                </dd>
               </div>
               {status.parsedAt && (
                 <div>
@@ -114,13 +144,13 @@ export function ProcgenMapUpload() {
               <input
                 type="file"
                 accept=".map"
-                disabled={uploading}
+                disabled={uploading || parsing}
                 hidden
                 onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
               />
             </label>
             {status?.uploaded && (
-              <button type="button" className="btn-secondary" disabled={uploading} onClick={() => void onDelete()}>
+              <button type="button" className="btn-secondary" disabled={uploading || parsing} onClick={() => void onDelete()}>
                 Remove
               </button>
             )}

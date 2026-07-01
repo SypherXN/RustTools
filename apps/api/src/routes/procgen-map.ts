@@ -9,7 +9,8 @@ import { getActiveServer } from "../lib/rust-data.js";
 import {
   deleteProcgenMap,
   getProcgenMapStatus,
-  parseAndCacheProcgenMap,
+  scheduleProcgenMapParse,
+  stageProcgenMapUpload,
   readProcgenJson,
   readProcgenOverlay,
 } from "../lib/procgen-map.js";
@@ -39,14 +40,7 @@ export async function registerProcgenMapRoutes(
     const active = await getActiveServer(deps.db);
     if (!active) return reply.status(404).send({ error: "No active server" });
 
-    let serverInfo: Record<string, unknown> | null = null;
-    try {
-      serverInfo = (await deps.rustPlus.getServerInfo()) as Record<string, unknown>;
-    } catch {
-      /* optional */
-    }
-
-    return getProcgenMapStatus(deps.db, active.id, serverInfo);
+    return getProcgenMapStatus(deps.db, active.id);
   });
 
   app.post("/servers/active/map/procgen/upload", async (request, reply) => {
@@ -67,14 +61,15 @@ export async function registerProcgenMapRoutes(
     const seedFromName = parseSeedFromFilename(file.filename ?? "");
 
     try {
-      await parseAndCacheProcgenMap(deps.db, active.id, buffer);
+      await stageProcgenMapUpload(deps.db, active.id, buffer);
       if (seedFromName != null) {
         await deps.db
           .update(rustServers)
           .set({ mapSeed: seedFromName, updatedAt: new Date() })
           .where(eq(rustServers.id, active.id));
       }
-      return { ok: true };
+      scheduleProcgenMapParse(deps.db, active.id);
+      return { ok: true, parseStatus: "pending" as const };
     } catch (err) {
       return reply.status(400).send({
         error: err instanceof Error ? err.message : "Failed to parse .map file",
