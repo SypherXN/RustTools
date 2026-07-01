@@ -4,7 +4,7 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import multipart from "@fastify/multipart";
 import { buildMapTransform, hasVendingSearchInput } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
-import { parseTeamRoster, getWorldSize, getActiveServer } from "../lib/rust-data.js";
+import { parseTeamRoster, resolveWorldSize, getActiveServer } from "../lib/rust-data.js";
 import { sendAndPublishTeamChat } from "../lib/team-chat-outbound.js";
 import { applyTeamTrackingWithSettings } from "../lib/team-tracker.js";
 import { parseMapMarkers, parseMonuments } from "../lib/map-markers.js";
@@ -56,15 +56,13 @@ export async function registerServerRoutes(
     const wantImage = includeImage === "1" || includeImage === "true";
 
     try {
-      // Warm server info before the large map image transfer; Rust+ reads are serialized.
-      const info = await deps.rustPlus.getServerInfo();
       const map = await deps.rustPlus.getMap();
+      const worldSize = await resolveWorldSize(deps.rustPlus);
       const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),
       ]);
-      const worldSize = getWorldSize(info);
-      const transform = buildMapTransform(map, info as { mapSize?: number });
+      const transform = buildMapTransform(map, { mapSize: worldSize });
       const parsed = parseTeamRoster(team, worldSize);
       const activeServerId = deps.rustPlus.getStatus().activeServerId;
       const tracked = await applyTeamTrackingWithSettings(deps.db, activeServerId, parsed, worldSize);
@@ -91,8 +89,7 @@ export async function registerServerRoutes(
     if (!user) return;
 
     try {
-      const info = await deps.rustPlus.getServerInfo();
-      const worldSize = getWorldSize(info);
+      const worldSize = await resolveWorldSize(deps.rustPlus);
       const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),

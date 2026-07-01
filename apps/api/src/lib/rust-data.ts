@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
+import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { isHiddenTeamPosition, type ParsedTeamInfo, type TeamRosterMember } from "@rusttools/shared";
 
 export type { TeamRosterMember, ParsedTeamInfo };
@@ -44,6 +45,19 @@ export function parseWipeCountdown(info: unknown): {
 export function getWorldSize(info: unknown): number | undefined {
   const mapSize = (info as { mapSize?: number })?.mapSize;
   return mapSize && mapSize > 0 ? mapSize : undefined;
+}
+
+/** Prefer cached map size so map pages do not block on a fresh getInfo when Rust+ is busy. */
+export async function resolveWorldSize(
+  rustPlus: RustPlusManager,
+  fallback = 4000,
+): Promise<number> {
+  const fromCache = getWorldSize(rustPlus.getCachedServerInfo());
+  if (fromCache) {
+    void rustPlus.getServerInfo().catch(() => {});
+    return fromCache;
+  }
+  return getWorldSize(await rustPlus.getServerInfo()) ?? fallback;
 }
 
 export function parseTeamRoster(team: unknown, worldSize?: number): ParsedTeamInfo {

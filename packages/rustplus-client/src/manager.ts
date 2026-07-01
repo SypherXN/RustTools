@@ -568,22 +568,23 @@ export class RustPlusManager {
     const conn = this.getActiveConnection();
     if (conn.subscribedEntities.has(entityId)) return;
 
-    await withRustRetry("subscribeEntity", () =>
-      new Promise<void>((resolve, reject) => {
-        conn.client.getEntityInfo(entityId, (message) => {
-          if (message.response?.error) {
-            reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
-            return;
-          }
-          const entityInfo = message.response?.entityInfo;
-          if (entityInfo != null) {
-            this.entityInfoCache.set(entityId, { at: Date.now(), value: entityInfo });
-          }
-          conn.subscribedEntities.add(entityId);
-          resolve();
-        });
-      }),
-    );
+    await this.enqueueRustRequest(() => {
+      const activeConn = this.getActiveConnection();
+      if (activeConn.subscribedEntities.has(entityId)) return Promise.resolve();
+      return withRustRetry("subscribeEntity", () =>
+        withRustTimeout(
+          "subscribeEntity",
+          (cb) => activeConn.client.getEntityInfo(entityId, cb),
+          (m) => {
+            const entityInfo = m.response?.entityInfo;
+            if (entityInfo != null) {
+              this.entityInfoCache.set(entityId, { at: Date.now(), value: entityInfo });
+            }
+            activeConn.subscribedEntities.add(entityId);
+          },
+        ),
+      );
+    });
   }
 
   async getEntityInfo(entityId: number): Promise<unknown> {
@@ -595,19 +596,19 @@ export class RustPlusManager {
     const afterSubscribe = this.readEntityInfoCache(entityId);
     if (afterSubscribe != null) return afterSubscribe;
 
-    const conn = this.getActiveConnection();
-    const info = await withRustRetry("getEntityInfo", () =>
-      new Promise<unknown>((resolve, reject) => {
-        conn.client.getEntityInfo(entityId, (message) => {
-          if (message.response?.error) {
-            reject(new Error(message.response.error.error ?? "getEntityInfo failed"));
-            return;
-          }
-          resolve(message.response?.entityInfo);
-        });
-      }),
-    );
-    this.entityInfoCache.set(entityId, { at: Date.now(), value: info });
+    const info = await this.enqueueRustRequest(() => {
+      const conn = this.getActiveConnection();
+      return withRustRetry("getEntityInfo", () =>
+        withRustTimeout(
+          "getEntityInfo",
+          (cb) => conn.client.getEntityInfo(entityId, cb),
+          (m) => m.response?.entityInfo,
+        ),
+      );
+    });
+    if (info != null) {
+      this.entityInfoCache.set(entityId, { at: Date.now(), value: info });
+    }
     return info;
   }
 
@@ -628,17 +629,17 @@ export class RustPlusManager {
   }
 
   async toggleSwitch(entityId: number, value: boolean): Promise<void> {
-    const conn = this.getActiveConnection();
     await this.subscribeEntity(entityId);
 
-    await new Promise<void>((resolve, reject) => {
-      conn.client.setEntityValue(entityId, value, (message) => {
-        if (message.response?.error) {
-          reject(new Error(message.response.error.error ?? "setEntityValue failed"));
-          return;
-        }
-        resolve();
-      });
+    await this.enqueueRustRequest(() => {
+      const conn = this.getActiveConnection();
+      return withRustRetry("setEntityValue", () =>
+        withRustTimeout(
+          "setEntityValue",
+          (cb) => conn.client.setEntityValue(entityId, value, cb),
+          () => undefined,
+        ),
+      );
     });
     this.entityInfoCache.delete(entityId);
   }
