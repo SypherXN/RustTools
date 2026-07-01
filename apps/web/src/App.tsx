@@ -16,6 +16,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { MapPage } from "./pages/MapPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoragePage } from "./pages/StoragePage";
+import { TeamBoardPage } from "./pages/TeamBoardPage";
 import { TeamPage } from "./pages/TeamPage";
 import { FcmWarningBanner } from "./components/FcmWarningBanner";
 import { AlarmNotifier } from "./components/AlarmNotifier";
@@ -24,6 +25,7 @@ import { useRustPlusStatus } from "./hooks/useRustPlusStatus";
 import {
   IconAudit,
   IconAutomations,
+  IconBoard,
   IconCamera,
   IconDashboard,
   IconDevices,
@@ -137,6 +139,9 @@ function Shell() {
             <NavItem to="/team" icon={<IconTeam />}>
               Team
             </NavItem>
+            <NavItem to="/board" icon={<IconBoard />}>
+              Team board
+            </NavItem>
             {user.permissions.admin && (
               <NavItem to="/audit" icon={<IconAudit />}>
                 Audit
@@ -171,6 +176,7 @@ function Shell() {
             <Route path="/storage" element={<StoragePage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/team" element={<TeamPage />} />
+            <Route path="/board" element={<TeamBoardPage />} />
             <Route path="/audit" element={<RequirePermission capability="admin"><AuditPage /></RequirePermission>} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

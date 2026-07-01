@@ -13,6 +13,7 @@ import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { registerServerRoutes as registerServerCoreRoutes } from "./servers.js";
 import { registerMapOverlayRoutes } from "./map-overlays.js";
 import { registerProcgenMapRoutes } from "./procgen-map.js";
+import { registerTeamBoardRoutes } from "./team-board.js";
 
 export async function registerServerRoutes(
   app: FastifyInstance,
@@ -25,6 +26,7 @@ export async function registerServerRoutes(
   await registerServerCoreRoutes(app, deps);
   await registerMapOverlayRoutes(app, deps);
   await registerProcgenMapRoutes(app, deps);
+  await registerTeamBoardRoutes(app, deps);
 
   app.get("/servers/active/map/image", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");

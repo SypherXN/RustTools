@@ -354,6 +354,56 @@ export const demoTeamResponse: TeamApiResponse = {
   canPromote: true,
 };
 
+const demoBoardGlobalEntries = [
+  {
+    id: "demo-board-global-1",
+    kind: "link" as const,
+    title: "Team Discord",
+    content: "https://discord.gg/example",
+    category: "Links",
+    pinned: true,
+    createdBy: "DemoAdmin",
+    createdAt: new Date(demoNow * 1000 - 172800000).toISOString(),
+    updatedAt: new Date(demoNow * 1000 - 172800000).toISOString(),
+  },
+  {
+    id: "demo-board-global-2",
+    kind: "note" as const,
+    title: "Team rules",
+    content: "Be online for raid night. No offline raiding other teams on this server.",
+    category: "Team",
+    pinned: false,
+    createdBy: "DemoAdmin",
+    createdAt: new Date(demoNow * 1000 - 86400000).toISOString(),
+    updatedAt: new Date(demoNow * 1000 - 86400000).toISOString(),
+  },
+];
+
+const demoBoardEntries = [
+  {
+    id: "demo-board-1",
+    kind: "note" as const,
+    title: "Door codes",
+    content: "Main airlock: 2580\nRoof: 4412",
+    category: "Codes",
+    pinned: true,
+    createdBy: "DemoAdmin",
+    createdAt: new Date(demoNow * 1000 - 86400000).toISOString(),
+    updatedAt: new Date(demoNow * 1000 - 3600000).toISOString(),
+  },
+  {
+    id: "demo-board-2",
+    kind: "link" as const,
+    title: "Base blueprint",
+    content: "https://example.com/blueprint",
+    category: "Links",
+    pinned: false,
+    createdBy: "DemoAdmin",
+    createdAt: new Date(demoNow * 1000 - 43200000).toISOString(),
+    updatedAt: new Date(demoNow * 1000 - 43200000).toISOString(),
+  },
+];
+
 export const demoMapSize = { width: 2000, height: 2000 };
 
 export const demoMapTransform = {
@@ -673,6 +723,56 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       return demoNotificationSettings as T;
     }
     return demoNotificationSettings as T;
+  }
+
+  if (path === "/board/global") {
+    if (method === "GET") return { entries: demoBoardGlobalEntries } as T;
+    if (method === "POST") {
+      return {
+        id: "demo-board-global-new",
+        kind: body.kind ?? "note",
+        title: body.title ?? "New entry",
+        content: body.content ?? "",
+        category: typeof body.category === "string" ? body.category : "",
+        pinned: Boolean(body.pinned),
+        createdBy: "DemoAdmin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as T;
+    }
+  }
+
+  if (path.startsWith("/board/global/") && method === "PATCH") {
+    return { ok: true } as T;
+  }
+
+  if (path.startsWith("/board/global/") && method === "DELETE") {
+    return { ok: true } as T;
+  }
+
+  if (path === "/servers/active/board") {
+    if (method === "GET") return { entries: demoBoardEntries } as T;
+    if (method === "POST") {
+      return {
+        id: "demo-board-new",
+        kind: body.kind ?? "note",
+        title: body.title ?? "New entry",
+        content: body.content ?? "",
+        category: typeof body.category === "string" ? body.category : "",
+        pinned: Boolean(body.pinned),
+        createdBy: "DemoAdmin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as T;
+    }
+  }
+
+  if (path.startsWith("/servers/active/board/") && method === "PATCH") {
+    return { ok: true } as T;
+  }
+
+  if (path.startsWith("/servers/active/board/") && method === "DELETE") {
+    return { ok: true } as T;
   }
 
   if (path === "/servers/active/team") return demoTeamResponse as T;

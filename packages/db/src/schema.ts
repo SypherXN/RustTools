@@ -79,6 +79,35 @@ export const mapPins = sqliteTable("map_pins", {
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
 
+export const teamBoardEntries = sqliteTable("team_board_entries", {
+  id: text("id").primaryKey(),
+  serverId: text("server_id")
+    .notNull()
+    .references(() => rustServers.id, { onDelete: "cascade" }),
+  /** `note` or `link` */
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  /** Note body or URL when kind is link */
+  content: text("content").notNull(),
+  category: text("category").notNull().default(""),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const teamBoardGlobalEntries = sqliteTable("team_board_global_entries", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  category: text("category").notNull().default(""),
+  pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 export const rustEntities = sqliteTable("rust_entities", {
   id: text("id").primaryKey(),
   serverId: text("server_id")

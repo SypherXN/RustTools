@@ -798,6 +798,126 @@
   justify-content: flex-end;
 }
 
+.team-board-meta {
+  margin: 0.75rem 0 0;
+  font-size: 0.8rem;
+}
+
+.team-board-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.team-board-item h3 {
+  margin: 0.35rem 0 0;
+  font-size: 1.05rem;
+}
+
+.team-board-item h4 {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+}
+
+.team-board-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.team-board-category-filter {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  min-width: 12rem;
+}
+
+.team-board-groups {
+  display: grid;
+  gap: 1rem;
+}
+
+.team-board-group-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.team-board-category-preview {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+.team-board-section {
+  margin-top: 1.25rem;
+}
+
+.team-board-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.team-board-section-header h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.team-board-section-header p {
+  margin: 0.25rem 0 0;
+}
+
+.team-board-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.team-board-kind {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.team-board-kind-link {
+  color: var(--accent);
+}
+
+.team-board-note {
+  white-space: pre-wrap;
+  margin: 0.75rem 0 0;
+  line-height: 1.5;
+}
+
+.team-board-compose h2 {
+  margin-top: 0;
+}
+
+.team-board-compose textarea {
+  width: 100%;
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.5rem;
+}
+
 .stat-big {
   font-size: 1.5rem;
   margin: 0;
