@@ -14,6 +14,8 @@ import {
   teamMemberStatus,
 } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { peekApiCache } from "../lib/api-cache";
+import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { formatTeamGridLocation } from "../lib/team-location";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
@@ -33,12 +35,14 @@ export function TeamPage() {
   const chatFeedRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataFetchedAt, setDataFetchedAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
   const canSwitch = useCan("switch");
   const canAdmin = useCan("admin");
   const { epoch } = useActiveServer();
 
-  const applyTeamPayload = useCallback((data: TeamApiResponse) => {
+  const applyTeamPayload = useCallback((data: TeamApiResponse, fetchedAt = Date.now()) => {
     setTeamInfo(data.team);
     setDeaths(data.deaths);
     setCanPromote(data.canPromote);
@@ -46,10 +50,13 @@ export function TeamPage() {
     if (data.worldSize > 0) {
       setWorldSize(data.worldSize);
     }
+    setDataFetchedAt(fetchedAt);
     setError(null);
   }, []);
 
   const loadDeathHistory = useCallback(() => {
+    const cached = peekApiCache<{ deaths: TeamDeathEvent[] }>("/servers/active/team/deaths");
+    if (cached) setDeathHistory(cached.value.deaths);
     void apiFetch<{ deaths: TeamDeathEvent[] }>("/servers/active/team/deaths")
       .then((data) => setDeathHistory(data.deaths))
       .catch(() => {
@@ -58,6 +65,8 @@ export function TeamPage() {
   }, []);
 
   const loadConnections = useCallback(() => {
+    const cached = peekApiCache<{ connections: TeamConnectionEvent[] }>("/servers/active/team/connections");
+    if (cached) setConnections(cached.value.connections);
     void apiFetch<{ connections: TeamConnectionEvent[] }>("/servers/active/team/connections")
       .then((data) => setConnections(data.connections))
       .catch(() => {
@@ -66,6 +75,8 @@ export function TeamPage() {
   }, []);
 
   const loadChat = useCallback(() => {
+    const cached = peekApiCache<{ messages: TeamChatMessage[] }>("/servers/active/team/chat");
+    if (cached) setMessages(cached.value.messages);
     void apiFetch<{ messages: TeamChatMessage[] }>("/servers/active/team/chat")
       .then((data) => setMessages(data.messages))
       .catch(() => {
@@ -74,10 +85,24 @@ export function TeamPage() {
   }, []);
 
   const loadTeam = useCallback(() => {
+    const cachedTeam = peekApiCache<TeamApiResponse>("/servers/active/team");
+    if (cachedTeam) {
+      applyTeamPayload(cachedTeam.value, cachedTeam.fetchedAt);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    setRefreshing(true);
+
     void apiFetch<TeamApiResponse>("/servers/active/team")
-      .then(applyTeamPayload)
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+      .then((data) => applyTeamPayload(data))
+      .catch((err: Error) => {
+        if (!cachedTeam) setError(err.message);
+      })
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
     loadChat();
     loadDeathHistory();
     loadConnections();
@@ -92,7 +117,6 @@ export function TeamPage() {
   }, [applyTeamPayload]);
 
   useEffect(() => {
-    setLoading(true);
     loadTeam();
     const interval = setInterval(refreshTeamFallback, 60_000);
     return () => clearInterval(interval);
@@ -201,6 +225,7 @@ export function TeamPage() {
       <header className="page-header">
         <h1>Team</h1>
         <p>Live roster and team chat.</p>
+        <LastUpdatedLine fetchedAt={dataFetchedAt} refreshing={refreshing} />
         {pairedPlayerId && (
           <p className="muted team-paired-hint">
             Master bot paired as <code>{pairedPlayerId}</code>.

@@ -8,6 +8,8 @@ import {
   type SwitchGroupRecord,
 } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { peekApiCache } from "../lib/api-cache";
+import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { DiscordRolePicker } from "../components/DiscordRolePicker";
 import { LIVE_CAMERAS_ENABLED } from "../lib/features";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -50,6 +52,8 @@ export function DevicesPage() {
   const [activeTab, setActiveTab] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataFetchedAt, setDataFetchedAt] = useState<number | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [expandedSettings, setExpandedSettings] = useState<string | null>(null);
@@ -59,7 +63,29 @@ export function DevicesPage() {
   const { epoch } = useActiveServer();
 
   const load = async (options?: { silent?: boolean }) => {
-    if (!options?.silent) setLoading(true);
+    const cachedDevices = peekApiCache<{ devices: Device[] }>("/devices");
+    const cachedStates = peekApiCache<{ states: Record<string, boolean | null> }>("/devices/switch-states");
+    const cachedGroups = peekApiCache<{ groups: SwitchGroupRecord[] }>("/switch-groups");
+
+    if (!options?.silent) {
+      if (cachedDevices) {
+        const states = cachedStates?.value.states ?? {};
+        setDevices(
+          cachedDevices.value.devices.map((device) =>
+            device.entityType === "smart_switch"
+              ? { ...device, switchValue: states[device.id] ?? null }
+              : device,
+          ),
+        );
+        if (cachedGroups) setSwitchGroups(cachedGroups.value.groups);
+        setDataFetchedAt(cachedDevices.fetchedAt);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+    }
+    if (!options?.silent) setRefreshing(true);
+
     try {
       const [deviceData, statesData, groupData] = await Promise.all([
         apiFetch<{ devices: Device[] }>("/devices"),
@@ -74,11 +100,17 @@ export function DevicesPage() {
         ),
       );
       setSwitchGroups(groupData.groups);
+      setDataFetchedAt(Date.now());
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load devices");
+      if (!cachedDevices) {
+        setError(err instanceof Error ? err.message : "Failed to load devices");
+      }
     } finally {
-      if (!options?.silent) setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -210,6 +242,7 @@ export function DevicesPage() {
       <header className="page-header">
         <h1>Devices</h1>
         <p>Rust+ smart components paired to your active server.</p>
+        <LastUpdatedLine fetchedAt={dataFetchedAt} refreshing={refreshing} />
         {LIVE_CAMERAS_ENABLED && (
           <div className="btn-row">
             <Link to="/cameras">Live cameras →</Link>

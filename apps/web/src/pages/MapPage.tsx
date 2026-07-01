@@ -41,6 +41,8 @@ import { useWebSocket, useWebSocketConnected } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { apiFetch } from "../lib/api";
+import { peekApiCache } from "../lib/api-cache";
+import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { demoMapMarkers, demoMapSize, demoMonuments, demoTeam, demoMapTransform, isDemoMode } from "../lib/demo";
 
 interface MapData {
@@ -83,6 +85,9 @@ const DEFAULT_LAYERS: MapLayers = {
   base: true,
   eventTypes: { ...DEFAULT_EVENT_TYPE_LAYERS },
 };
+
+const MAP_DATA_PATH = "/servers/active/map?includeImage=1";
+const MAP_OVERLAYS_PATH = "/servers/active/map/overlays";
 
 export function MapPage() {
   const canSwitch = useCan("switch");
@@ -129,7 +134,8 @@ export function MapPage() {
   const [trackEventId, setTrackEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dataFetchedAt, setDataFetchedAt] = useState<number | null>(null);
   const [automationBase, setAutomationBase] = useState<AutomationBaseSettings | null>(null);
   const [setBaseMode, setSetBaseMode] = useState(() => searchParams.get("setBase") === "1");
   const [pendingBasePoint, setPendingBasePoint] = useState<{ x: number; y: number } | null>(null);
@@ -205,7 +211,7 @@ export function MapPage() {
     if (isDemoMode()) {
       setTeam(demoTeam);
       setMarkers(demoMapMarkers);
-      setLastUpdated(new Date());
+      setDataFetchedAt(Date.now());
       return;
     }
 
@@ -217,43 +223,68 @@ export function MapPage() {
     setTeam(live.team);
     setMarkers(live.markers);
     setWorldEvents(live.worldEvents);
-    setLastUpdated(new Date());
+    setDataFetchedAt(Date.now());
   }, []);
 
   const mapImageSrc = useMapImageSrc(mapImage?.imageBase64);
   const wsConnected = useWebSocketConnected();
 
   useEffect(() => {
-    setLoading(true);
+    type MapPayload = Omit<MapData, "map"> & {
+      map: { width: number; height: number; imageBase64: string | null };
+    };
+
+    const applyMapData = (
+      data: MapPayload,
+      overlays: MapOverlaysResponse,
+      fetchedAt: number,
+    ) => {
+      setMapImage(data.map);
+      setTransform(data.transform);
+      setTeam(data.team);
+      setMonuments(data.monuments);
+      setMarkers(data.markers);
+      setDrawings(overlays.drawings);
+      setPins(overlays.pins);
+      setDataFetchedAt(fetchedAt);
+      setError(null);
+    };
+
+    const cachedMap = peekApiCache<MapPayload>(MAP_DATA_PATH);
+    const cachedOverlays = peekApiCache<MapOverlaysResponse>(MAP_OVERLAYS_PATH);
+    if (cachedMap) {
+      applyMapData(
+        cachedMap.value,
+        cachedOverlays?.value ?? { drawings: [], pins: [] },
+        cachedMap.fetchedAt,
+      );
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setMapImage(null);
+    }
+
     setSelection(null);
     setFocusTarget(null);
     setFollowSteamId(null);
     setTrackEventId(null);
-    setMapImage(null);
+    setRefreshing(true);
+
     Promise.all([
-      apiFetch<
-        Omit<MapData, "map"> & {
-          map: { width: number; height: number; imageBase64: string | null };
-        }
-      >("/servers/active/map?includeImage=1"),
-      apiFetch<MapOverlaysResponse>("/servers/active/map/overlays").catch(() => ({
+      apiFetch<MapPayload>(MAP_DATA_PATH),
+      apiFetch<MapOverlaysResponse>(MAP_OVERLAYS_PATH).catch(() => ({
         drawings: [],
         pins: [],
       })),
     ])
-      .then(([data, overlays]) => {
-        setMapImage(data.map);
-        setTransform(data.transform);
-        setTeam(data.team);
-        setMonuments(data.monuments);
-        setMarkers(data.markers);
-        setDrawings(overlays.drawings);
-        setPins(overlays.pins);
-        setLastUpdated(new Date());
-        setError(null);
+      .then(([data, overlays]) => applyMapData(data, overlays, Date.now()))
+      .catch((err: Error) => {
+        if (!cachedMap) setError(err.message);
       })
-      .catch((err: Error) => setError(err.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
   }, [epoch]);
 
   const procgenReady = procgenStatus?.parseStatus === "ready";
@@ -293,13 +324,13 @@ export function MapPage() {
       const p = payload as { team?: { members?: MapTeamMember[] } } | null;
       if (p?.team?.members) {
         setTeam(p.team.members);
-        setLastUpdated(new Date());
+        setDataFetchedAt(Date.now());
       }
       return;
     }
     if (event === "worldEventsChanged") {
       setWorldEvents(payload as WorldEventsStatus);
-      setLastUpdated(new Date());
+      setDataFetchedAt(Date.now());
     }
   });
 
@@ -909,9 +940,11 @@ export function MapPage() {
             3D terrain
           </button>
         </div>
-        {lastUpdated && (
-          <p className="muted map-updated">Updated {lastUpdated.toLocaleTimeString()}</p>
-        )}
+        <LastUpdatedLine
+          fetchedAt={dataFetchedAt}
+          refreshing={refreshing}
+          className="muted map-updated"
+        />
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}

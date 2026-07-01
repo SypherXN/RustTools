@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import type { DeepSeaStatus, TeamApiResponse, WorldEventsStatus } from "@rusttools/shared";
 import { formatDurationSince, formatDiscordHelpSections, formatWebHelpCategories } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
+import { peekApiCache } from "../lib/api-cache";
+import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { useRustPlusStatus } from "../hooks/useRustPlusStatus";
@@ -26,14 +28,64 @@ export function DashboardPage() {
   const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
   const [deepSea, setDeepSea] = useState<DeepSeaStatus | null>(null);
   const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
+  const [dataFetchedAt, setDataFetchedAt] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
+    const cachedInfo = peekApiCache<ServerInfoResponse>("/servers/active/info");
+    const cachedTeam = peekApiCache<TeamApiResponse>("/servers/active/team");
+    const cachedTime = peekApiCache<{ time: { isDay?: boolean; time?: string } }>("/servers/active/time");
+    const cachedDeepSea = peekApiCache<{ status: DeepSeaStatus }>("/servers/active/deepsea");
+    const cachedEvents = peekApiCache<{ status: WorldEventsStatus }>("/servers/active/world-events");
+
+    if (cachedInfo) setServer(cachedInfo.value);
+    if (cachedTeam) {
+      const members = cachedTeam.value.team.members;
+      setTeamCounts({
+        online: members.filter((m) => m.isOnline).length,
+        total: members.length,
+      });
+    }
+    if (cachedTime) setTime(cachedTime.value.time);
+    if (cachedDeepSea) setDeepSea(cachedDeepSea.value.status);
+    if (cachedEvents) setWorldEvents(cachedEvents.value.status);
+
+    const stamps = [
+      cachedInfo?.fetchedAt,
+      cachedTeam?.fetchedAt,
+      cachedTime?.fetchedAt,
+      cachedDeepSea?.fetchedAt,
+      cachedEvents?.fetchedAt,
+    ].filter((v): v is number => v != null);
+    if (stamps.length > 0) {
+      setDataFetchedAt(Math.min(...stamps));
+    }
+
+    setRefreshing(true);
+    let pending = 5;
+    const done = () => {
+      pending -= 1;
+      if (pending <= 0) setRefreshing(false);
+    };
+
     apiFetch<ServerInfoResponse>("/servers/active/info")
-      .then(setServer)
-      .catch(() => setServer(null));
+      .then((data) => {
+        setServer(data);
+        setDataFetchedAt(Date.now());
+      })
+      .catch(() => {
+        if (!cachedInfo) setServer(null);
+      })
+      .finally(done);
     apiFetch<{ time: { isDay?: boolean; time?: string } }>("/servers/active/time")
-      .then((d) => setTime(d.time))
-      .catch(() => setTime(null));
+      .then((d) => {
+        setTime(d.time);
+        setDataFetchedAt(Date.now());
+      })
+      .catch(() => {
+        if (!cachedTime) setTime(null);
+      })
+      .finally(done);
     apiFetch<TeamApiResponse>("/servers/active/team")
       .then((data) => {
         const members = data.team.members;
@@ -41,14 +93,30 @@ export function DashboardPage() {
           online: members.filter((m) => m.isOnline).length,
           total: members.length,
         });
+        setDataFetchedAt(Date.now());
       })
-      .catch(() => setTeamCounts(null));
+      .catch(() => {
+        if (!cachedTeam) setTeamCounts(null);
+      })
+      .finally(done);
     apiFetch<{ status: DeepSeaStatus }>("/servers/active/deepsea")
-      .then((d) => setDeepSea(d.status))
-      .catch(() => setDeepSea(null));
+      .then((d) => {
+        setDeepSea(d.status);
+        setDataFetchedAt(Date.now());
+      })
+      .catch(() => {
+        if (!cachedDeepSea) setDeepSea(null);
+      })
+      .finally(done);
     apiFetch<{ status: WorldEventsStatus }>("/servers/active/world-events")
-      .then((d) => setWorldEvents(d.status))
-      .catch(() => setWorldEvents(null));
+      .then((d) => {
+        setWorldEvents(d.status);
+        setDataFetchedAt(Date.now());
+      })
+      .catch(() => {
+        if (!cachedEvents) setWorldEvents(null);
+      })
+      .finally(done);
   }, [epoch]);
 
   useWebSocket((event, payload) => {
@@ -74,6 +142,7 @@ export function DashboardPage() {
       <header className="page-header">
         <h1>Dashboard</h1>
         <p>Server status and quick overview.</p>
+        <LastUpdatedLine fetchedAt={dataFetchedAt} refreshing={refreshing} />
       </header>
 
       <div className="grid">
