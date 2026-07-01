@@ -46,6 +46,8 @@ export const rustServers = sqliteTable("rust_servers", {
   /** Last seen map seed / wipe countdown — used to detect server wipes. */
   trackedMapSeed: integer("tracked_map_seed"),
   trackedWipeAt: integer("tracked_wipe_at"),
+  /** Last map size (meters) from Rust+ getInfo — used when getInfo is slow or unavailable. */
+  rustMapSize: integer("rust_map_size"),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });

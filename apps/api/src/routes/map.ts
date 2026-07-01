@@ -57,7 +57,7 @@ export async function registerServerRoutes(
 
     try {
       const map = await deps.rustPlus.getMap();
-      const worldSize = await resolveWorldSize(deps.rustPlus);
+      const worldSize = await resolveWorldSize(deps.rustPlus, deps.db);
       const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),
@@ -89,7 +89,7 @@ export async function registerServerRoutes(
     if (!user) return;
 
     try {
-      const worldSize = await resolveWorldSize(deps.rustPlus);
+      const worldSize = await resolveWorldSize(deps.rustPlus, deps.db);
       const [team, markersRaw] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
         deps.rustPlus.getMapMarkers(),

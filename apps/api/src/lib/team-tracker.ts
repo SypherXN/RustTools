@@ -306,6 +306,7 @@ export function enrichTeamApiResponse(
   team: ParsedTeamInfo,
   deaths: TeamDeathEvent[],
   canPromote = false,
+  worldSize = 4000,
 ): TeamApiResponse {
-  return { team, deaths, pairedPlayerId, canPromote };
+  return { team, deaths, pairedPlayerId, canPromote, worldSize };
 }

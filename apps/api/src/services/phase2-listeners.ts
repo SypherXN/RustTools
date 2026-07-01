@@ -3,7 +3,7 @@ import type { Database } from "@rusttools/db";
 import { rustEntities } from "@rusttools/db";
 import type { RustPlusManager, NotificationService } from "@rusttools/rustplus-client";
 import { parseStorageEntityInfo } from "@rusttools/shared";
-import { getWorldSize, parseTeamRoster, getActiveServer } from "../lib/rust-data.js";
+import { getWorldSize, parseTeamRoster, getActiveServer, resolveWorldSize } from "../lib/rust-data.js";
 import { processTeamRosterWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
 import { canPromoteViaRustPlus, getActiveServerRow } from "../lib/promote-leader.js";
 import { handleTeamRosterEvents } from "../lib/team-event-store.js";
@@ -425,9 +425,7 @@ const lastAllOfflineByServer = new Map<string, boolean>();
   rustPlus.eventBus.on("teamChanged", async (event) => {
     try {
       const [activeServer] = await Promise.all([getActiveServerRow(db)]);
-      const cachedInfo = rustPlus.getCachedServerInfo();
-      const info = cachedInfo ?? (await rustPlus.getServerInfo());
-      const worldSize = getWorldSize(info);
+      const worldSize = await resolveWorldSize(rustPlus, db);
       const parsed = parseTeamRoster(event.teamInfo, worldSize);
       const { team, deaths, newDeaths, newConnections } = await processTeamRosterWithSettings(
         db,
@@ -439,7 +437,13 @@ const lastAllOfflineByServer = new Map<string, boolean>();
       const canPromote = await canPromoteViaRustPlus(db, activeServer, team.leaderSteamId);
       notifications.webSocket({
         event: "teamChanged",
-        payload: enrichTeamApiResponse(activeServer?.playerId ?? null, team, deaths, canPromote),
+        payload: enrichTeamApiResponse(
+          activeServer?.playerId ?? null,
+          team,
+          deaths,
+          canPromote,
+          worldSize,
+        ),
       });
       if (activeServer && newConnections.length > 0) {
         void dispatchAutomationEvent(

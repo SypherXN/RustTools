@@ -50,14 +50,54 @@ export function getWorldSize(info: unknown): number | undefined {
 /** Prefer cached map size so map pages do not block on a fresh getInfo when Rust+ is busy. */
 export async function resolveWorldSize(
   rustPlus: RustPlusManager,
+  db?: Database,
   fallback = 4000,
 ): Promise<number> {
+  if (db) {
+    const serverId = await getActiveServerId(db);
+    if (serverId) {
+      const [row] = await db
+        .select({ rustMapSize: rustServers.rustMapSize, mapWorldSize: rustServers.mapWorldSize })
+        .from(rustServers)
+        .where(eq(rustServers.id, serverId))
+        .limit(1);
+      const stored = row?.rustMapSize ?? row?.mapWorldSize;
+      if (stored != null && stored > 0) {
+        void rustPlus.getServerInfo().catch(() => {});
+        return stored;
+      }
+    }
+  }
+
   const fromCache = getWorldSize(rustPlus.getCachedServerInfo());
   if (fromCache) {
     void rustPlus.getServerInfo().catch(() => {});
     return fromCache;
   }
-  return getWorldSize(await rustPlus.getServerInfo()) ?? fallback;
+
+  const cachedMap = rustPlus.getCachedMap();
+  if (cachedMap?.width != null && cachedMap.width > 0) {
+    void rustPlus.getServerInfo().catch(() => {});
+    return cachedMap.width;
+  }
+
+  try {
+    return getWorldSize(await rustPlus.getServerInfo()) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export async function persistRustMapSize(
+  db: Database,
+  serverId: string,
+  mapSize: number | null | undefined,
+): Promise<void> {
+  if (mapSize == null || mapSize <= 0) return;
+  await db
+    .update(rustServers)
+    .set({ rustMapSize: mapSize, updatedAt: new Date() })
+    .where(eq(rustServers.id, serverId));
 }
 
 export function parseTeamRoster(team: unknown, worldSize?: number): ParsedTeamInfo {

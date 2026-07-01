@@ -43,6 +43,9 @@ export function TeamPage() {
     setDeaths(data.deaths);
     setCanPromote(data.canPromote);
     setPairedPlayerId(data.pairedPlayerId);
+    if (data.worldSize > 0) {
+      setWorldSize(data.worldSize);
+    }
     setError(null);
   }, []);
 
@@ -91,15 +94,6 @@ export function TeamPage() {
   useEffect(() => {
     setLoading(true);
     loadTeam();
-    void apiFetch<{ info: { mapSize?: number } }>("/servers/active/info")
-      .then((res) => {
-        if (res.info.mapSize && res.info.mapSize > 0) {
-          setWorldSize(res.info.mapSize);
-        }
-      })
-      .catch(() => {
-        /* map size optional for grid labels */
-      });
     const interval = setInterval(refreshTeamFallback, 60_000);
     return () => clearInterval(interval);
   }, [loadTeam, refreshTeamFallback, epoch]);

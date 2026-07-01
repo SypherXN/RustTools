@@ -352,6 +352,7 @@ export const demoTeamResponse: TeamApiResponse = {
   deaths: demoTeamDeaths,
   pairedPlayerId: "76561198000000000",
   canPromote: true,
+  worldSize: 4000,
 };
 
 const demoBoardGlobalEntries = [

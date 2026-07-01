@@ -75,7 +75,7 @@ export async function registerServerRoutes(
     try {
       const [team, worldSize, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
-        resolveWorldSize(deps.rustPlus),
+        resolveWorldSize(deps.rustPlus, deps.db),
         getActiveServerRow(deps.db),
       ]);
       const parsed = parseTeamRoster(team, worldSize);
@@ -98,7 +98,13 @@ export async function registerServerRoutes(
         activeServer,
         tracked.team.leaderSteamId,
       );
-      return enrichTeamApiResponse(activeServer?.playerId ?? null, tracked.team, tracked.deaths, canPromote);
+      return enrichTeamApiResponse(
+        activeServer?.playerId ?? null,
+        tracked.team,
+        tracked.deaths,
+        canPromote,
+        worldSize,
+      );
     } catch (err) {
       return reply.status(503).send({
         error: err instanceof Error ? err.message : "Rust+ not connected",
@@ -138,7 +144,7 @@ export async function registerServerRoutes(
     try {
       const [team, worldSize, activeServer] = await Promise.all([
         deps.rustPlus.getTeamInfo(),
-        resolveWorldSize(deps.rustPlus),
+        resolveWorldSize(deps.rustPlus, deps.db),
         getActiveServerRow(deps.db),
       ]);
 
@@ -200,7 +206,13 @@ export async function registerServerRoutes(
         activeServer,
         tracked.team.leaderSteamId,
       );
-      return enrichTeamApiResponse(activeServer.playerId, tracked.team, tracked.deaths, canPromote);
+      return enrichTeamApiResponse(
+        activeServer.playerId,
+        tracked.team,
+        tracked.deaths,
+        canPromote,
+        worldSize,
+      );
     } catch (err) {
       return reply.status(502).send({
         error: err instanceof Error ? err.message : "Failed to promote team leader",

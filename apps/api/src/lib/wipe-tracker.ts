@@ -3,7 +3,7 @@ import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { parseServerMapMeta } from "@rusttools/shared";
-import { parseWipeCountdown } from "./rust-data.js";
+import { parseWipeCountdown, persistRustMapSize } from "./rust-data.js";
 import { applyServerWipeCleanup } from "./server-wipe-cleanup.js";
 
 export type WipeCheckResult =
@@ -46,6 +46,7 @@ export async function checkServerWipe(
       .set({
         trackedMapSeed: seed,
         trackedWipeAt: wipeAt,
+        rustMapSize: mapMeta.mapSize ?? undefined,
         updatedAt: new Date(),
       })
       .where(eq(rustServers.id, serverId));
@@ -59,6 +60,7 @@ export async function checkServerWipe(
       .set({
         trackedMapSeed: seed,
         trackedWipeAt: wipeAt,
+        rustMapSize: mapMeta.mapSize ?? undefined,
         updatedAt: new Date(),
       })
       .where(eq(rustServers.id, serverId));
@@ -93,6 +95,8 @@ export async function checkServerWipe(
       .set({ trackedWipeAt: wipeAt, updatedAt: new Date() })
       .where(eq(rustServers.id, serverId));
   }
+
+  await persistRustMapSize(db, serverId, mapMeta.mapSize);
 
   return { action: "unchanged" };
 }

@@ -47,7 +47,10 @@ export async function reconnectRustServer(
     const info = await rustPlus.getServerInfo();
     await checkServerWipe(db, rustPlus, server.id, info);
   } catch (err) {
-    console.error(`[RustPlus] Wipe check failed for ${server.name}:`, err);
+    console.error(
+      `[RustPlus] Startup getInfo failed for ${server.name} — team/map grid labels may use defaults until Rust+ responds:`,
+      err instanceof Error ? err.message : err,
+    );
   }
 
   scheduleEntityResubscribe(db, rustPlus, server.id);

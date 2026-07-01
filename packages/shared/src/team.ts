@@ -49,6 +49,8 @@ export interface TeamApiResponse {
   pairedPlayerId: string | null;
   /** True when RustTools can call promoteToLeader (master is leader or leader has companion link). */
   canPromote: boolean;
+  /** World map size in meters (for grid labels). */
+  worldSize: number;
 }
 
 /** Whether a roster member is eligible to become team leader. */
