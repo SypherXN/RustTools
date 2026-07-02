@@ -182,7 +182,7 @@ Per-server config (env vars seed defaults for new servers):
 - **Vending search** — find items across all shops; filter by currency, price range, deal % vs median; item icons in results
 - **Connect string** — copy `client.connect ip:port` from Settings/Dashboard
 - **Map seed, salt, name, size** — displayed from Rust+ server info
-- **Live refresh** — team and markers update via WebSocket; map live poll runs only when WebSocket is disconnected (fallback); background jobs staggered at 0s / 20s / 40s offsets
+- **Live refresh** — roster/world-event changes push instantly over the WebSocket; teammate positions and map event markers poll on a short interval (~12s connected, 30s fallback) since they aren't broadcast; Rust+ team/marker reads are cached ~10–15s and de-duplicated across clients; background jobs staggered at 0s / 20s / 40s offsets
 
 ### Procgen map (`.map` upload)
 

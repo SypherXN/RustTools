@@ -310,12 +310,17 @@ export function MapPage() {
   }, [procgenReady, epoch]);
 
   useEffect(() => {
-    if (loading || wsConnected) return;
+    if (loading) return;
+    // Teammate positions and map event markers (cargo, heli, crates, vending…)
+    // are NOT pushed over the WebSocket, so poll live map data on a short
+    // interval even while the socket is connected. When the socket is down we
+    // back off to a slower cadence as a fallback.
+    const intervalMs = wsConnected ? 12_000 : 30_000;
     const interval = setInterval(() => {
       void refreshLive().catch(() => {
         // Keep showing the last good map if a live refresh fails.
       });
-    }, 90_000);
+    }, intervalMs);
     return () => clearInterval(interval);
   }, [loading, refreshLive, wsConnected]);
 

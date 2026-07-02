@@ -1348,6 +1348,11 @@ legend {
   justify-content: space-between;
 }
 
+.map-3d-warning {
+  color: #f59e0b;
+  font-size: 0.85rem;
+}
+
 .map-3d-canvas {
   flex: none;
   height: var(--map-viewport-height, min(72vh, 820px));

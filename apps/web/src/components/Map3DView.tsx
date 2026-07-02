@@ -877,6 +877,16 @@ export function Map3DView({
     const mount = mountRef.current;
     if (!mount || !heightData) return;
 
+    // The terrain mesh is built in the uploaded .map's coordinate space, so the
+    // entire scene (camera, fog, cardinal labels, pan clamp, markers) must use
+    // that SAME world size. The `worldSize`/`transform` props come from the
+    // live map endpoint, which is client-cached and can be stale right after
+    // switching to a different-size map — using them would scale the terrain
+    // and everything around it differently and distort the 3D view.
+    const worldSize = heightData.worldSize;
+    const textureMatchesTerrain =
+      Math.abs(transform.worldSize - worldSize) <= Math.max(1, worldSize * 0.01);
+
     const centerY = (heightData.minHeight + heightData.maxHeight) / 2;
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87ceeb);
@@ -909,7 +919,7 @@ export function Map3DView({
     scene.add(sun);
     scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x4a6741, 0.55));
 
-    const texture = mapImageSrc
+    const texture = mapImageSrc && textureMatchesTerrain
       ? new THREE.TextureLoader().load(mapImageSrc, () => requestRender())
       : null;
     if (texture) {
@@ -1259,6 +1269,10 @@ export function Map3DView({
     );
   }
 
+  const textureMismatch =
+    Math.abs(transform.worldSize - heightData.worldSize) >
+    Math.max(1, heightData.worldSize * 0.01);
+
   return (
     <div className="map-3d-panel map-viewport-wrap">
       <div className="map-viewport-toolbar map-3d-toolbar">
@@ -1269,6 +1283,12 @@ export function Map3DView({
           {" · "}
           Elevation {Math.round(heightData.minHeight)}m – {Math.round(heightData.maxHeight)}m
         </span>
+        {textureMismatch && (
+          <span className="map-3d-warning">
+            Map image doesn&apos;t match this world size ({heightData.worldSize}m) yet — showing
+            shaded terrain. It will refresh shortly; if not, re-upload the .map for this map.
+          </span>
+        )}
       </div>
       <div ref={mountRef} className="map-3d-canvas map-viewport" />
     </div>

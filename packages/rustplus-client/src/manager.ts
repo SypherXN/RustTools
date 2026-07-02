@@ -45,8 +45,10 @@ const STALE_READ_MAX_MS = 30 * 60 * 1000;
 /** Avoid hammering Rust+ when the UI and background jobs request the same data. */
 const READ_CACHE_TTL_MS = {
   serverInfo: 60_000,
-  teamInfo: 30_000,
-  mapMarkers: 30_000,
+  // Keep team positions and map event markers fresh enough to feel "live" on
+  // the map while still de-duplicating bursts of concurrent requests.
+  teamInfo: 10_000,
+  mapMarkers: 15_000,
   map: 300_000,
   time: 30_000,
   teamChat: 30_000,
