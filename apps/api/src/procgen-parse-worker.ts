@@ -7,7 +7,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { buildProcgenArtifacts } from "./lib/procgen/parse.js";
+import { buildProcgenArtifacts, PROCGEN_PARSER_VERSION } from "./lib/procgen/parse.js";
 import type { ProcgenOverlayId } from "./lib/procgen/types.js";
 
 const OVERLAY_IDS: ProcgenOverlayId[] = [
@@ -48,6 +48,7 @@ async function main(): Promise<void> {
       worldSize: parsed.worldSize,
       version: parsed.version,
       overlaySize: parsed.overlaySize,
+      parserVersion: PROCGEN_PARSER_VERSION,
     }),
   );
   await writeFile(path.join(outDir, "paths.json"), JSON.stringify(parsed.paths));

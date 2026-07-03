@@ -1,4 +1,5 @@
 import type { ProcgenOverlayId } from "./procgen/types.js";
+import { PROCGEN_PARSER_VERSION } from "./procgen/parse.js";
 import { runProcgenParseInSubprocess } from "./procgen-subprocess.js";
 import { eq } from "drizzle-orm";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -194,8 +195,34 @@ export function scheduleProcgenMapParse(db: Database, serverId: string): void {
   });
 }
 
+/** Re-parse maps whose cached artifacts were produced by an older (buggy) parser. */
+async function reparseOutdatedProcgenArtifacts(db: Database): Promise<void> {
+  const rows = await db
+    .select()
+    .from(rustServers)
+    .where(eq(rustServers.mapParseStatus, "ready"));
+
+  for (const server of rows) {
+    const meta = await readProcgenJson<{ parserVersion?: number }>(server.id, "meta");
+    if (meta && (meta.parserVersion ?? 1) >= PROCGEN_PARSER_VERSION) continue;
+
+    try {
+      await access(sourceMapPath(server.id));
+    } catch {
+      continue; // No source.map retained — user must re-upload to benefit from the fix.
+    }
+
+    console.log(
+      `[Procgen] Re-parsing map for ${server.id} (artifacts from parser v${meta?.parserVersion ?? 1} < v${PROCGEN_PARSER_VERSION})`,
+    );
+    scheduleProcgenMapParse(db, server.id);
+  }
+}
+
 /** Re-queue parses that were interrupted by an API restart. */
 export async function resumePendingProcgenParses(db: Database): Promise<void> {
+  await reparseOutdatedProcgenArtifacts(db);
+
   const rows = await db
     .select()
     .from(rustServers)

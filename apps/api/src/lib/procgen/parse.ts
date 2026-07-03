@@ -17,6 +17,14 @@ const ICEBERG_PREFAB_HINTS = ["iceberg", "ice_berg"];
 
 const LZ4_FRAME_MAGIC = 0x184d2204;
 
+/**
+ * Bump when the parse pipeline changes in a way that invalidates cached
+ * artifacts (height.json, overlays). Servers with older meta.json are
+ * re-parsed from source.map on API startup.
+ * v2: fixed misaligned terrain buffers corrupting heights on some maps.
+ */
+export const PROCGEN_PARSER_VERSION = 2;
+
 interface RustWorldInstance {
   size: number;
   maps: Array<{ name: string; data: Uint8Array }>;
@@ -150,9 +158,28 @@ function decodeStandardLz4Frame(frame: Uint8Array): Uint8Array {
   return merged;
 }
 
+/**
+ * Protobuf decodes `bytes` fields as views into the payload buffer at arbitrary
+ * byte offsets. rustworld's TerrainMap "fixes" misalignment by shifting the read
+ * start (up to 3 bytes) instead of copying, which pairs the wrong bytes into
+ * every 16/32-bit sample and turns the terrain into noise. Whether this triggers
+ * depends on the byte layout of the specific .map file, so some maps parse fine
+ * and others come out corrupted. Copy each layer into a standalone buffer
+ * (byteOffset 0) so the alignment hack never activates.
+ */
+function realignMapBuffers(world: RustWorldInstance): void {
+  for (const map of world.maps ?? []) {
+    if (map.data && map.data.byteOffset % 4 !== 0) {
+      map.data = map.data.slice();
+    }
+  }
+}
+
 export function parseRustMapFile(buffer: Buffer): RustWorldInstance {
   const payload = decompressWorldData(buffer);
-  return decodeWorldData(payload);
+  const world = decodeWorldData(payload);
+  realignMapBuffers(world);
+  return world;
 }
 
 function overlayResolution(worldSize: number): number {
