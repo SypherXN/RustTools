@@ -13,6 +13,7 @@ import { sendTeamChatCommandResult, sendTeamChatIfUnmuted } from "../lib/team-ch
 import {
   parseMuteTeamChatCommand,
   parseUnmuteTeamChatCommand,
+  stripDuplicatedMessageFromName,
 } from "@rusttools/shared";
 import {
   configuredWorldEventEntities,
@@ -418,7 +419,10 @@ export function startPhase2Listeners(
 
     await notifications.discord({
       channelId: channel,
-      embed: buildTeamChatMirrorEmbed(event.name, event.message),
+      embed: buildTeamChatMirrorEmbed(
+        stripDuplicatedMessageFromName(event.name, event.message),
+        event.message,
+      ),
     });
   });
 

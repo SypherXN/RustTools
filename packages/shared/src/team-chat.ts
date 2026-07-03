@@ -48,12 +48,32 @@ export function parseTeamChatMessage(raw: unknown): TeamChatMessage | null {
   };
 }
 
+/**
+ * Some servers deliver the chat sender name with the message appended
+ * (`"<name>: <message>"`), which makes the message text show up twice in the UI
+ * (once as part of the name, once as the message). Strip a trailing
+ * `": <message>"` so only the real name remains.
+ */
+export function stripDuplicatedMessageFromName(
+  name: string,
+  message: string | undefined,
+): string {
+  const body = message?.trim();
+  if (!name || !body) return name;
+  const suffix = `: ${body}`;
+  if (name.endsWith(suffix)) {
+    const stripped = name.slice(0, -suffix.length).trim();
+    if (stripped) return stripped;
+  }
+  return name;
+}
+
 /** Prefer in-message name; fall back to team roster when Rust+ omits it. */
 export function resolveTeamChatSenderName(
   message: TeamChatMessage,
   roster?: ReadonlyArray<{ steamId: string; name: string }>,
 ): string {
-  const direct = message.name?.trim();
+  const direct = stripDuplicatedMessageFromName(message.name?.trim() ?? "", message.message);
   if (direct && direct !== "Unknown") return direct;
   const fromRoster = roster?.find((member) => member.steamId === message.steamId)?.name?.trim();
   if (fromRoster) return fromRoster;
