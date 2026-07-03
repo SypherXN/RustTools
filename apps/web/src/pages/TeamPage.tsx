@@ -16,6 +16,7 @@ import {
 import { apiFetch } from "../lib/api";
 import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
+import { RustText } from "../components/RustText";
 import { formatTeamGridLocation } from "../lib/team-location";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useCan } from "../hooks/usePermissions";
@@ -271,7 +272,10 @@ export function TeamPage() {
             {messages.length === 0 && <p className="muted">No messages yet.</p>}
             {messages.map((msg) => (
               <p key={`${msg.steamId}-${msg.sentAt}-${msg.message}`} className="chat-line">
-                <strong>{resolveTeamChatSenderName(msg, teamInfo?.members)}</strong>: {msg.message}
+                <strong>
+                  <RustText>{resolveTeamChatSenderName(msg, teamInfo?.members)}</RustText>
+                </strong>
+                : <RustText>{msg.message}</RustText>
               </p>
             ))}
           </div>
