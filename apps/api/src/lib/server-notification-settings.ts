@@ -5,6 +5,7 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   mergeNotificationSettings,
   parseServerNotificationSettings,
+  seedServerNotificationSettingsFromEnv,
   type NotificationSettingsCapabilities,
   type NotificationSettingsResponse,
   type ServerNotificationSettings,
@@ -53,7 +54,20 @@ export async function getServerNotificationSettings(
     .where(eq(rustServers.id, serverId))
     .limit(1);
 
-  return parseServerNotificationSettings(server?.notificationSettingsJson);
+  const raw = server?.notificationSettingsJson;
+  if (!raw?.trim()) {
+    const seeded = seedServerNotificationSettingsFromEnv();
+    await db
+      .update(rustServers)
+      .set({
+        notificationSettingsJson: JSON.stringify(seeded),
+        updatedAt: new Date(),
+      })
+      .where(eq(rustServers.id, serverId));
+    return seeded;
+  }
+
+  return parseServerNotificationSettings(raw);
 }
 
 export async function getActiveNotificationSettings(
@@ -76,8 +90,20 @@ export async function getActiveNotificationSettings(
 
   if (!server) return null;
 
+  let settings = parseServerNotificationSettings(server.notificationSettingsJson);
+  if (!server.notificationSettingsJson?.trim()) {
+    settings = seedServerNotificationSettingsFromEnv();
+    await db
+      .update(rustServers)
+      .set({
+        notificationSettingsJson: JSON.stringify(settings),
+        updatedAt: new Date(),
+      })
+      .where(eq(rustServers.id, server.id));
+  }
+
   return {
-    settings: parseServerNotificationSettings(server.notificationSettingsJson),
+    settings,
     capabilities: await notificationCapabilities(db, rustPlus),
   };
 }

@@ -217,7 +217,7 @@ export async function executeTeamChatCommand(
   }
 
   if (parseDeepSeaTeamChatCommand(message)) {
-    const status = await fetchDeepSeaStatus(db, rustPlus, ctx.serverId);
+    const status = await fetchDeepSeaStatus(rustPlus, ctx.serverId);
     const reply = formatDeepSeaTeamChatMessage(status);
     return forDiscord(ctx, { reply }, [buildDeepSeaEmbed(status)]);
   }

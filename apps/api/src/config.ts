@@ -1,10 +1,8 @@
-import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../..");
-config({ path: path.resolve(repoRoot, ".env") });
 
 function resolveRepoPath(relativePath: string): string {
   const raw = relativePath.replace(/^file:/, "");
@@ -29,7 +27,6 @@ const DEV_ENCRYPTION_KEY = "dev-encryption-key-32chars!!";
 const DEV_INTERNAL_API_KEY = "change-me-internal-api-key";
 
 export const env = {
-  nodeEnv: optional("NODE_ENV", "development"),
   isDev: optional("NODE_ENV", "development") !== "production",
   apiPort: Number(optional("API_PORT", "3000")),
   apiHost: optional("API_HOST", "0.0.0.0"),
@@ -54,7 +51,6 @@ export const env = {
     roleAdmin: optional("DISCORD_ROLE_ADMIN").split(",").map((r) => r.trim()).filter(Boolean),
     roleSwitch: optional("DISCORD_ROLE_SWITCH").split(",").map((r) => r.trim()).filter(Boolean),
     roleView: optional("DISCORD_ROLE_VIEW").split(",").map((r) => r.trim()).filter(Boolean),
-    notificationChannelId: optional("DISCORD_NOTIFICATION_CHANNEL_ID"),
   },
   internalApiKey: optional("INTERNAL_API_KEY"),
   webPush: {

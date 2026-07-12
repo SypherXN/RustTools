@@ -5,7 +5,8 @@ import { ActiveServerProvider } from "./hooks/useActiveServer";
 import { WebSocketProvider } from "./hooks/WebSocketProvider";
 import { isDemoMode } from "./lib/demo";
 import { assetUrl } from "./lib/asset-url";
-import { LIVE_CAMERAS_ENABLED } from "./lib/features";
+
+const LIVE_CAMERAS_ENABLED = import.meta.env.VITE_LIVE_CAMERAS !== "false";
 import { RequirePermission, permissionLabel } from "./components/RequirePermission";
 import { AuditPage } from "./pages/AuditPage";
 import { AutomationsPage } from "./pages/AutomationsPage";

@@ -1,10 +1,3 @@
-import { config } from "dotenv";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-config({ path: path.resolve(__dirname, "../../../.env") });
-
 export const env = {
   botToken: process.env.DISCORD_BOT_TOKEN ?? "",
   clientId: process.env.DISCORD_CLIENT_ID ?? "",

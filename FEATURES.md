@@ -16,7 +16,7 @@ Self-hosted Rust companion for your team — Rust+ device control, live web dash
 - **Production boot validation** — with `NODE_ENV=production`, the API refuses to start unless `SESSION_SECRET` and `ENCRYPTION_KEY` are set to non-default values, `DISCORD_GUILD_ID` is set, at least one `DISCORD_ROLE_*` env var is configured, `INTERNAL_API_KEY` is at least 32 characters (not the example default), and `RUSTPLUS_ALLOW_UNPROMPTED_PAIR` is not enabled
 - **User blocking** — admins can block Discord or Steam IDs in **Settings → Admin**; blocked users cannot log in, call the API, or open WebSockets; Discord blacklist entries revoke active sessions
 - **Multi-server support** — pair multiple Rust servers; activate one at a time; admins can **delete** a server (disconnects only that server’s Rust+ session, removes DB row and on-disk assets)
-- **Demo mode** — try the UI without a live Rust+ connection (`?demo=1`)
+- **Demo mode** — try the UI without a live Rust+ connection (`npm run dev:web:demo`, or open with `?demo=1`)
 - **Live updates** — WebSocket pushes team, devices (including smart switch ON/OFF), storage, alarms, map events, camera frames, and chat to open tabs
 - **PWA-ready** — web app manifest + service worker for installable mobile/desktop experience
 - **API rate limiting** — configurable per-IP limit (default 600 req/min via `API_RATE_LIMIT_MAX`); `/health` is exempt
@@ -158,9 +158,9 @@ Rule builder with triggers, optional conditions, and actions — saved per serve
 
 Per-server config (env vars seed defaults for new servers):
 
-- **Night lights** — turn on configured switches at night
+- **Night lights** — turn on configured switches at night (Settings; `.env` `AUTOMATION_*` seeds new servers only)
 - **Team-offline SAM** — flip a SAM site switch when everyone goes offline
-- **Map event alerts** — team chat and/or Discord for cargo, heli, chinook, vendor, oil, bradley, convoy
+- **Map event alerts** — team chat and/or Discord for cargo, heli, chinook, vendor, oil, bradley, convoy (Settings; env is bootstrap-only)
 - **Stale device cleanup** — when a paired device disappears from Rust+, its entity row, automation rules, switch-group/library membership, and legacy automation references (`nightLights.entityIds`, `teamOfflineSam.switchEntityId`) are removed automatically (10-minute reconcile job + immediate cleanup on manual unpair/wipe); pruning an empty switch group also removes automation rules that reference that group
 
 ---
@@ -226,6 +226,7 @@ Automated spawn/despawn alerts to Discord and optional team chat (grid + coordin
 
 - Open/close phase detection from map markers and monuments
 - Dashboard card, Discord alerts, `/deepsea`, `!deepsea` / `!ds`
+- Open/close Discord and team-chat alerts are configured in **Settings → Notifications** (database), not via `.env`
 
 ### Configurable timers (Settings → Event Timers)
 
@@ -326,7 +327,6 @@ To check switch state in Discord: `/switch target:<name> action:status` or `/ali
 - **Live information board** — auto-updating embed (map, server, team, events, Deep Sea) every 60s
 - **Smart alarms**
 - **Team chat mirror**
-- **Commands channel** — optional channel binding (legacy); all bot commands are **slash commands**, not typed `!` messages in Discord
 - **Map events**
 - **Deep Sea**
 - **Storage**

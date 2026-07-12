@@ -6,6 +6,7 @@ build/
 .local/
 *.log
 .DS_Store
+.cursor/
 /data/
 *.db
 *.db-journal

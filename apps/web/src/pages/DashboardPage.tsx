@@ -4,7 +4,7 @@ import { formatDurationSince, formatDiscordHelpSections, formatWebHelpCategories
 import { apiFetch } from "../lib/api";
 import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { useRustPlusStatus } from "../hooks/useRustPlusStatus";
 

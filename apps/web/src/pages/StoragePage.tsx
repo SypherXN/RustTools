@@ -8,7 +8,7 @@ import { parseStorageEntityInfo, resolveStorageMonitorIcon } from "@rusttools/sh
 import { StorageContentsGrid, StorageUpkeepBanner } from "../components/StorageContentsGrid";
 import { StorageIconPicker } from "../components/StorageIconPicker";
 import { apiFetch } from "../lib/api";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 

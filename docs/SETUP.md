@@ -373,7 +373,10 @@ DATABASE_URL=file:./data/rusttools.db
 # API_RATE_LIMIT_MAX=600
 ```
 
-### Optional automations
+### Optional automations (bootstrap only)
+
+`AUTOMATION_*` values seed **Settings** the first time a server has no saved notification JSON.
+After that, **Settings → Automations / Notifications** is the source of truth — changing `.env` does not override saved settings.
 
 ```env
 AUTOMATION_NIGHT_LIGHTS=true

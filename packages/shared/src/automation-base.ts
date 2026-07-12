@@ -46,24 +46,15 @@ export function resolveProximityRadiusMeters(
   return MAP_GRID_CELL_SIZE;
 }
 
-/** @deprecated Use {@link formatProximityRadiusMeters}. */
-export function formatProximityRadius(radiusGrid: number): string {
-  return formatProximityRadiusMeters(proximityRadiusMetersFromGrid(radiusGrid));
-}
-
 export function formatProximityRadiusMeters(meters: number): string {
   if (!Number.isFinite(meters) || meters <= 0) return "0 m";
   if (meters >= 1000) return `${meters / 1000} km`;
   return `${Math.round(meters)} m`;
 }
 
-/** Patch to persist meters and keep legacy grid field in sync. */
-export function proximityRadiusPatch(meters: number): { radiusMeters: number; radiusGrid: number } {
-  const radiusMeters = Math.max(0, meters);
-  return {
-    radiusMeters,
-    radiusGrid: radiusMeters / MAP_GRID_CELL_SIZE,
-  };
+/** Patch to persist meters only (legacy `radiusGrid` remains readable via resolve). */
+export function proximityRadiusPatch(meters: number): { radiusMeters: number } {
+  return { radiusMeters: Math.max(0, meters) };
 }
 
 /** Resolve server base world coordinates from stored settings and map pins. */

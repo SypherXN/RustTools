@@ -8,7 +8,7 @@ import fs from "node:fs";
 import { createDatabase, resolveDatabasePath, runMigrations } from "@rusttools/db";
 import { users } from "@rusttools/db";
 import { eq } from "drizzle-orm";
-import { NotificationService, RustPlusManager } from "@rusttools/rustplus-client";
+import { createNotificationService, RustPlusManager } from "@rusttools/rustplus-client";
 import { env, assertProductionDiscordGuildId, assertProductionDiscordRoles, assertProductionInternalApiKey, assertProductionRustPlusPairing, assertProductionSecrets } from "./config.js";
 import { getSessionUser } from "./lib/auth.js";
 import { hasDiscordCapability } from "./lib/discord-permissions.js";
@@ -25,23 +25,6 @@ import { reconnectStoredServers } from "./services/rustplus-bootstrap.js";
 import { resumePendingProcgenParses } from "./lib/procgen-map.js";
 import { WsHub } from "./services/ws-hub.js";
 import { postDiscordMessage } from "./lib/discord-messages.js";
-
-async function sendDiscordMessage(notification: {
-  channelId: string;
-  content?: string;
-  embed?: {
-    title?: string;
-    description?: string;
-    color?: number;
-    fields?: Array<{ name: string; value: string; inline?: boolean }>;
-  };
-  components?: Array<{
-    type: number;
-    components: Array<{ type: number; style: number; label: string; custom_id: string }>;
-  }>;
-}): Promise<void> {
-  await postDiscordMessage(notification);
-}
 
 async function main() {
   assertProductionSecrets();
@@ -60,8 +43,10 @@ async function main() {
   const db = createDatabase(`file:${dbPath}`);
   const wsHub = new WsHub();
 
-  const notifications = new NotificationService({
-    discord: sendDiscordMessage,
+  const notifications = createNotificationService({
+    discord: async (notification) => {
+      await postDiscordMessage(notification);
+    },
     webSocket: (msg) => wsHub.broadcast(msg.event, msg.payload),
   });
 

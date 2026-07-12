@@ -1,21 +1,11 @@
-import fs from "node:fs";
-import path from "node:path";
 import {
   FCM_CREDENTIAL_LIFETIME_DAYS,
   FCM_WARNING_DAYS_BEFORE,
+  type FcmCredentialStatus,
 } from "@rusttools/shared";
 
 export { FCM_CREDENTIAL_LIFETIME_DAYS, FCM_WARNING_DAYS_BEFORE };
-
-export interface FcmCredentialStatus {
-  configured: boolean;
-  listening: boolean;
-  registeredAt: string | null;
-  expiresAt: string | null;
-  daysRemaining: number | null;
-  warning: boolean;
-  expired: boolean;
-}
+export type { FcmCredentialStatus };
 
 export function computeFcmCredentialStatus(
   registeredAtMs: number,
@@ -79,59 +69,4 @@ export function prepareFcmConfigForSave(
     prepared.registered_at = new Date().toISOString();
   }
   return prepared;
-}
-
-export function writeFcmConfigFile(
-  configPath: string,
-  config: Record<string, unknown>,
-  options?: { replace?: boolean },
-): void {
-  const resolved = path.resolve(configPath);
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  if (options?.replace && fs.existsSync(resolved)) {
-    fs.unlinkSync(resolved);
-  }
-  const prepared = prepareFcmConfigForSave(config, options);
-  fs.writeFileSync(resolved, `${JSON.stringify(prepared, null, 2)}\n`, "utf8");
-}
-
-export function getFcmCredentialStatus(
-  configPath: string,
-  listening: boolean,
-): FcmCredentialStatus {
-  const resolved = path.resolve(configPath);
-  if (!fs.existsSync(resolved)) {
-    return {
-      configured: false,
-      listening: false,
-      registeredAt: null,
-      expiresAt: null,
-      daysRemaining: null,
-      warning: true,
-      expired: false,
-    };
-  }
-
-  let registeredAtMs: number;
-  try {
-    const raw = JSON.parse(fs.readFileSync(resolved, "utf8")) as {
-      registered_at?: number | string;
-      registeredAt?: number | string;
-    };
-    const fromConfig = raw.registered_at ?? raw.registeredAt;
-    if (fromConfig != null) {
-      registeredAtMs =
-        typeof fromConfig === "number"
-          ? fromConfig > 1e12
-            ? fromConfig
-            : fromConfig * 1000
-          : Date.parse(fromConfig);
-    } else {
-      registeredAtMs = fs.statSync(resolved).mtimeMs;
-    }
-  } catch {
-    registeredAtMs = fs.statSync(resolved).mtimeMs;
-  }
-
-  return computeFcmCredentialStatus(registeredAtMs, listening, true);
 }

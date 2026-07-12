@@ -5,7 +5,7 @@ import {
   emptyWorldEventStats,
   findOilRigMonuments,
   formatWorldEventAnnouncement,
-  legacyAutomationsFromEnv,
+  DEFAULT_LEGACY_AUTOMATION_SETTINGS,
   isBradleyMarker,
   isConvoyMarker,
   isTravelingVendorMarker,
@@ -451,7 +451,7 @@ export function formatAnnouncementsForChat(
   prefix?: string,
 ): string[] {
   const resolvedPrefix =
-    prefix?.trim() || legacyAutomationsFromEnv().mapEvents.prefix;
+    prefix?.trim() || DEFAULT_LEGACY_AUTOMATION_SETTINGS.mapEvents.prefix;
   return announcements.map((announcement) =>
     formatWorldEventAnnouncement(announcement, worldSize, resolvedPrefix),
   );

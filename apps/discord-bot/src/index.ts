@@ -4,7 +4,7 @@ import {
   GatewayIntentBits,
   type ChatInputCommandInteraction,
 } from "discord.js";
-import { internalFetch, internalPost, mapAttachment, ApiError } from "./api.js";
+import { internalFetch, mapAttachment, ApiError } from "./api.js";
 import { env } from "./config.js";
 import { BANG_MESSAGE_BY_SLASH, BANG_SLASH_COMMAND_NAMES } from "./commands.js";
 import type { DiscordChannelBinding } from "@rusttools/shared";
@@ -81,12 +81,12 @@ async function handleSwitch(interaction: ChatInputCommandInteraction) {
     | "toggle"
     | "status";
 
-  const result = await internalPost<{
+  const result = await internalFetch<{
     ok: boolean;
     device: string;
     value: boolean | null;
     readOnly?: boolean;
-  }>("/internal/switch", interaction.user.id, { target, action });
+  }>("/internal/switch", interaction.user.id, { json: { target, action } });
 
   await replyEmbed(
     interaction,
@@ -174,7 +174,7 @@ async function handleDeepSea(interaction: ChatInputCommandInteraction) {
 async function handleChat(interaction: ChatInputCommandInteraction) {
   const message = interaction.options.getString("message", true);
   const discordUsername = interaction.user.globalName ?? interaction.user.username;
-  await internalPost("/internal/chat", interaction.user.id, { message, discordUsername });
+  await internalFetch("/internal/chat", interaction.user.id, { json: { message, discordUsername } });
   await replyEmbed(interaction, chatSentEmbed(), { ephemeral: true });
 }
 
@@ -270,13 +270,15 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
     }
 
     const purpose = interaction.options.getString("purpose", true);
-    const result = await internalPost<{ ok: boolean; bindings: DiscordChannelBinding[] }>(
+    const result = await internalFetch<{ ok: boolean; bindings: DiscordChannelBinding[] }>(
       "/internal/channels/bind",
       interaction.user.id,
       {
-        guildId: interaction.guildId,
-        purpose,
-        channelId: interaction.channelId,
+        json: {
+          guildId: interaction.guildId,
+          purpose,
+          channelId: interaction.channelId,
+        },
       },
     );
 
@@ -293,12 +295,14 @@ async function handleChannel(interaction: ChatInputCommandInteraction) {
 
   if (sub === "clear") {
     const purpose = interaction.options.getString("purpose", true);
-    const result = await internalPost<{ ok: boolean; cleared: boolean; bindings: DiscordChannelBinding[] }>(
+    const result = await internalFetch<{ ok: boolean; cleared: boolean; bindings: DiscordChannelBinding[] }>(
       "/internal/channels/clear",
       interaction.user.id,
       {
-        guildId: interaction.guildId,
-        purpose,
+        json: {
+          guildId: interaction.guildId,
+          purpose,
+        },
       },
     );
 
@@ -353,11 +357,13 @@ async function handleBlacklist(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    await internalPost("/internal/blacklist/add", interaction.user.id, {
-      guildId: interaction.guildId,
-      targetDiscordId: user?.id,
-      steamId: steamId ?? undefined,
-      reason,
+    await internalFetch("/internal/blacklist/add", interaction.user.id, {
+      json: {
+        guildId: interaction.guildId,
+        targetDiscordId: user?.id,
+        steamId: steamId ?? undefined,
+        reason,
+      },
     });
 
     const label = user ? user.tag : `Steam ${steamId}`;
@@ -386,13 +392,15 @@ async function handleBlacklist(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    const result = await internalPost<{ removed: boolean }>(
+    const result = await internalFetch<{ removed: boolean }>(
       "/internal/blacklist/remove",
       interaction.user.id,
       {
-        guildId: interaction.guildId,
-        targetDiscordId: user?.id,
-        steamId: steamId ?? undefined,
+        json: {
+          guildId: interaction.guildId,
+          targetDiscordId: user?.id,
+          steamId: steamId ?? undefined,
+        },
       },
     );
 

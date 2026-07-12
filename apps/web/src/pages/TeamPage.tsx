@@ -18,7 +18,7 @@ import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { RustText } from "../components/RustText";
 import { formatTeamGridLocation } from "../lib/team-location";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 

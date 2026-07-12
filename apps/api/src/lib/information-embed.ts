@@ -111,7 +111,7 @@ export async function buildInformationEmbed(
       rustPlus.getTeamInfo(),
       rustPlus.getTime(),
       fetchWorldEventsStatus(db, rustPlus, activeServer.id),
-      fetchDeepSeaStatus(db, rustPlus, activeServer.id),
+      fetchDeepSeaStatus(rustPlus, activeServer.id),
     ]);
 
     const mapMeta = parseServerMapMeta(info);

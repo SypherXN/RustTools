@@ -19,42 +19,45 @@ async function parseApiError(res: Response): Promise<ApiError> {
   return new ApiError(payload.error ?? `API error ${res.status}`, res.status, payload.code);
 }
 
+type InternalFetchInit = RequestInit & { json?: Record<string, unknown> };
+
 export async function internalFetch<T>(
   path: string,
   discordUserId: string,
-  init?: RequestInit,
+  init?: InternalFetchInit,
 ): Promise<T> {
+  const { json, ...rest } = init ?? {};
+  const method = rest.method ?? (json != null ? "POST" : "GET");
+
+  if (method === "POST" || json != null) {
+    const res = await fetch(`${apiBaseUrl()}${path}`, {
+      ...rest,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.internalApiKey}`,
+        ...(rest.headers as Record<string, string>),
+      },
+      body: JSON.stringify({ discordUserId, ...json }),
+    });
+
+    if (!res.ok) {
+      throw await parseApiError(res);
+    }
+
+    return res.json() as Promise<T>;
+  }
+
   const sep = path.includes("?") ? "&" : "?";
   const url = `${apiBaseUrl()}${path}${sep}discordUserId=${encodeURIComponent(discordUserId)}`;
 
   const res = await fetch(url, {
-    ...init,
+    ...rest,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.internalApiKey}`,
-      ...(init?.headers as Record<string, string>),
+      ...(rest.headers as Record<string, string>),
     },
-  });
-
-  if (!res.ok) {
-    throw await parseApiError(res);
-  }
-
-  return res.json() as Promise<T>;
-}
-
-export async function internalPost<T>(
-  path: string,
-  discordUserId: string,
-  data: Record<string, unknown>,
-): Promise<T> {
-  const res = await fetch(`${apiBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.internalApiKey}`,
-    },
-    body: JSON.stringify({ discordUserId, ...data }),
   });
 
   if (!res.ok) {

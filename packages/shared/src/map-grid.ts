@@ -40,6 +40,11 @@ export function worldToGridLabel(x: number, y: number, worldSize: number): strin
   return `${gridColumnLabel(col)}${row}`;
 }
 
+/** Grid label plus rounded world coords, e.g. `G15 (1234, 567)`. */
+export function formatWorldCoords(x: number, y: number, worldSize: number): string {
+  return `${worldToGridLabel(x, y, worldSize)} (${Math.round(x)}, ${Math.round(y)})`;
+}
+
 export function buildMapGrid(
   transform: MapCoordinateTransform,
 ): { lines: MapGridLine[]; labels: MapGridLabel[] } {

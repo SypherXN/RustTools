@@ -3,7 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import { parseTeamChatMessages } from "@rusttools/shared";
+import { mergeTeamChatMessages, parseTeamChatMessages } from "@rusttools/shared";
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
 import { decrypt } from "../lib/crypto.js";
@@ -17,7 +17,7 @@ import {
   promoteTeamLeader,
 } from "../lib/promote-leader.js";
 import { persistTeamRosterEvents, listTeamConnectionHistory, listTeamDeathHistory } from "../lib/team-event-store.js";
-import { mergeTeamChatHistory } from "../lib/team-chat-buffer.js";
+import { getBufferedTeamChat } from "../lib/team-chat-buffer.js";
 import {
   getActiveNotificationSettings,
   notificationCapabilities,
@@ -134,7 +134,10 @@ export async function registerServerRoutes(
       }
 
       const raw = await deps.rustPlus.getTeamChat();
-      const messages = mergeTeamChatHistory(activeServer.id, parseTeamChatMessages(raw));
+      const messages = mergeTeamChatMessages(
+        parseTeamChatMessages(raw),
+        getBufferedTeamChat(activeServer.id),
+      );
       return { messages };
     } catch (err) {
       return reply.status(503).send({
@@ -289,7 +292,7 @@ export async function registerServerRoutes(
     }
 
     try {
-      const status = await fetchDeepSeaStatus(deps.db, deps.rustPlus, activeServer.id);
+      const status = await fetchDeepSeaStatus(deps.rustPlus, activeServer.id);
       return { status };
     } catch (err) {
       return reply.status(503).send({

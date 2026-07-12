@@ -65,7 +65,7 @@ export interface AutomationTrigger {
   baseY?: number;
   /** Circular proximity radius in world meters (overrides server base when set). */
   radiusMeters?: number;
-  /** @deprecated Legacy radius in 150 m units — use {@link radiusMeters}. */
+  /** @deprecated Legacy read fallback in 150 m units — UI writes {@link radiusMeters} only. */
   radiusGrid?: number;
   useServerBase?: boolean;
   mapPinId?: string;
@@ -81,6 +81,7 @@ export interface AutomationCondition {
   baseX?: number;
   baseY?: number;
   radiusMeters?: number;
+  /** @deprecated Legacy read fallback — UI writes {@link radiusMeters} only. */
   radiusGrid?: number;
   useServerBase?: boolean;
   mapPinId?: string;
@@ -152,7 +153,6 @@ export function activeAllAwayFromBaseCondition(
     proximityCheck: "none_near",
     useServerBase: true,
     radiusMeters: 150,
-    radiusGrid: 1,
     ...overrides,
   };
 }
@@ -167,7 +167,6 @@ export function activeAnyNearBaseCondition(
     proximityCheck: "any_near",
     useServerBase: true,
     radiusMeters: 150,
-    radiusGrid: 1,
     ...overrides,
   };
 }

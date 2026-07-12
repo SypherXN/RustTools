@@ -34,30 +34,25 @@ export interface WebSocketNotification {
   payload: unknown;
 }
 
-export interface NotificationHandlers {
-  discord?: (notification: DiscordNotification) => Promise<void>;
-  webSocket?: (notification: WebSocketNotification) => void;
+/** Plain callback object for Discord + WebSocket fan-out. */
+export interface NotificationService {
+  discord: (notification: DiscordNotification) => Promise<void>;
+  webSocket: (notification: WebSocketNotification) => void;
 }
 
-export class NotificationService {
-  constructor(private handlers: NotificationHandlers = {}) {}
-
-  setHandlers(handlers: NotificationHandlers): void {
-    this.handlers = { ...this.handlers, ...handlers };
-  }
-
-  async discord(notification: DiscordNotification): Promise<void> {
-    if (!this.handlers.discord) {
-      console.warn("[NotificationService] Discord handler not configured");
-      return;
-    }
-    await this.handlers.discord(notification);
-  }
-
-  webSocket(notification: WebSocketNotification): void {
-    if (!this.handlers.webSocket) {
-      return;
-    }
-    this.handlers.webSocket(notification);
-  }
+export function createNotificationService(
+  handlers: Partial<NotificationService> = {},
+): NotificationService {
+  return {
+    async discord(notification) {
+      if (!handlers.discord) {
+        console.warn("[notifications] Discord handler not configured");
+        return;
+      }
+      await handlers.discord(notification);
+    },
+    webSocket(notification) {
+      handlers.webSocket?.(notification);
+    },
+  };
 }

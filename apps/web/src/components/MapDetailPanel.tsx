@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { formatMonumentRecyclers, formatProximityRadiusMeters, getCctvForMonument, getMonumentInfo, worldToGridLabel } from "@rusttools/shared";
+import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, getCctvForMonument, getMonumentInfo } from "@rusttools/shared";
 import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
@@ -55,8 +55,7 @@ interface MapDetailPanelProps {
 }
 
 function formatCoords(x: number, y: number, worldSize: number): string {
-  const grid = worldToGridLabel(x, y, worldSize);
-  return `${grid} (${Math.round(x)}, ${Math.round(y)})`;
+  return formatWorldCoords(x, y, worldSize);
 }
 
 function VendingDetails({

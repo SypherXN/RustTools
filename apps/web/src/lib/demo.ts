@@ -19,7 +19,11 @@ import {
 } from "@rusttools/shared";
 
 export function isDemoMode(): boolean {
-  return import.meta.env.VITE_DEMO_MODE === "true";
+  if (import.meta.env.VITE_DEMO_MODE === "true") return true;
+  if (typeof window !== "undefined") {
+    return new URLSearchParams(window.location.search).get("demo") === "1";
+  }
+  return false;
 }
 
 export const demoUser: AuthUserResponse = {
@@ -562,37 +566,6 @@ export const demoAuditEvents = [
   },
 ];
 
-export const demoVendingResults = [
-  {
-    markerId: "vending-1",
-    name: "Outpost Shop",
-    x: 500,
-    y: 800,
-    item: "-932201673",
-    itemName: "Scrap",
-    itemShortname: "scrap",
-    quantity: 100,
-    costItem: "69511070",
-    costItemName: "Metal Fragments",
-    costItemShortname: "metal.fragments",
-    costQuantity: 500,
-  },
-  {
-    markerId: "vending-2",
-    name: "Bandit Camp",
-    x: 1400,
-    y: 1100,
-    item: "1545779598",
-    itemName: "Assault Rifle",
-    itemShortname: "rifle.ak",
-    quantity: 1,
-    costItem: "-932201673",
-    costItemName: "Scrap",
-    costItemShortname: "scrap",
-    costQuantity: 500,
-  },
-];
-
 let demoSwitchStates: Record<string, boolean> = {
   "dev-1": true,
   "dev-2": false,
@@ -604,8 +577,23 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   const method = init?.method ?? "GET";
   const body = init?.body ? (JSON.parse(init.body as string) as Record<string, unknown>) : {};
 
+  const ok = { ok: true } as T;
+  const boardEntry = () =>
+    ({
+      id: "demo-board-new",
+      kind: body.kind ?? "note",
+      title: body.title ?? "New entry",
+      content: body.content ?? "",
+      category: typeof body.category === "string" ? body.category : "",
+      pinned: Boolean(body.pinned),
+      createdBy: "DemoAdmin",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }) as T;
+
+  // ── Auth / health ────────────────────────────────────────────────────
   if (path === "/auth/me") return demoUser as T;
-  if (path === "/auth/logout" || path === "/auth/link-rust") return { ok: true } as T;
+  if (path === "/auth/logout" || path === "/auth/link-rust") return ok;
   if (path === "/auth/ws-token") return { token: "demo-ws-token" } as T;
 
   if (path === "/health") {
@@ -626,22 +614,26 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     } as T;
   }
 
+  // ── Admin (prefix catch-all after specific fixtures) ─────────────────
   if (path === "/admin/fcm-credentials") {
-    const demoCredential = {
-      id: "demo-fcm",
-      label: "Demo master",
-      isActive: true,
-      registeredAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
-      daysRemaining: 45,
-      warning: false,
-      expired: false,
-      listening: true,
-      serverCount: 1,
-      activeServerName: "Demo Server",
-      masterPlayerId: "76561198000000000",
-    };
-    return { credentials: [demoCredential] } as T;
+    return {
+      credentials: [
+        {
+          id: "demo-fcm",
+          label: "Demo master",
+          isActive: true,
+          registeredAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+          daysRemaining: 45,
+          warning: false,
+          expired: false,
+          listening: true,
+          serverCount: 1,
+          activeServerName: "Demo Server",
+          masterPlayerId: "76561198000000000",
+        },
+      ],
+    } as T;
   }
 
   if (path === "/admin/fcm-status") {
@@ -654,10 +646,6 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       warning: false,
       expired: false,
     } as T;
-  }
-
-  if (path === "/admin/data-reset" && method === "POST") {
-    return { ok: true, scope: body.scope, detail: "Demo mode — no data changed." } as T;
   }
 
   if (path === "/admin/users") {
@@ -676,25 +664,29 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path === "/admin/blacklist") {
+    if (method === "POST") {
+      return {
+        ok: true,
+        entry: {
+          id: "demo-block-1",
+          guildId: "demo",
+          discordId: null,
+          steamId: null,
+          reason: "",
+          createdBy: null,
+          createdAt: new Date().toISOString(),
+        },
+      } as T;
+    }
     return { entries: [] } as T;
   }
 
-  if (path.startsWith("/admin/users/") && method === "PATCH") {
-    return { ok: true, steamId: body?.steamId ?? null } as T;
+  if (path.startsWith("/admin/")) {
+    if (method === "GET") return { ok: true, entries: [], users: [], credentials: [] } as T;
+    return ok;
   }
 
-  if (path.startsWith("/admin/users/") && method === "DELETE") {
-    return { ok: true } as T;
-  }
-
-  if (path.startsWith("/admin/blacklist/") && method === "DELETE") {
-    return { ok: true } as T;
-  }
-
-  if (path === "/admin/blacklist" && method === "POST") {
-    return { ok: true, entry: { id: "demo-block-1", guildId: "demo", discordId: null, steamId: null, reason: "", createdBy: null, createdAt: new Date().toISOString() } } as T;
-  }
-
+  // ── Servers ──────────────────────────────────────────────────────────
   if (path === "/servers") return { servers: demoServers } as T;
 
   const activateMatch = path.match(/^\/servers\/([^/]+)\/activate$/);
@@ -702,7 +694,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     for (const s of demoServers) {
       s.isActive = s.id === activateMatch[1];
     }
-    return { ok: true } as T;
+    return ok;
   }
 
   const deleteMatch = path.match(/^\/servers\/([^/]+)$/);
@@ -714,18 +706,12 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/servers/active/rustplus/disconnect" && method === "POST") {
     demoRustPlusConnected = false;
-    return {
-      ok: true,
-      rustplus: { connected: false, activeServerId: null },
-    } as T;
+    return { ok: true, rustplus: { connected: false, activeServerId: null } } as T;
   }
 
   if (path === "/servers/active/rustplus/reconnect" && method === "POST") {
     demoRustPlusConnected = true;
-    return {
-      ok: true,
-      rustplus: { connected: true, activeServerId: "demo-server-1" },
-    } as T;
+    return { ok: true, rustplus: { connected: true, activeServerId: "demo-server-1" } } as T;
   }
 
   if (path === "/servers/active/info") {
@@ -755,12 +741,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   if (path === "/servers/active/notifications/alarm-sound/status") {
-    return {
-      configured: false,
-      originalName: null,
-      mimeType: null,
-      uploadedAt: null,
-    } as T;
+    return { configured: false, originalName: null, mimeType: null, uploadedAt: null } as T;
   }
 
   if (path === "/servers/active/notifications") {
@@ -775,60 +756,22 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return demoNotificationSettings as T;
   }
 
+  // ── Board (prefix) ───────────────────────────────────────────────────
   if (path === "/board/global") {
     if (method === "GET") return { entries: demoBoardGlobalEntries } as T;
-    if (method === "POST") {
-      return {
-        id: "demo-board-global-new",
-        kind: body.kind ?? "note",
-        title: body.title ?? "New entry",
-        content: body.content ?? "",
-        category: typeof body.category === "string" ? body.category : "",
-        pinned: Boolean(body.pinned),
-        createdBy: "DemoAdmin",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as T;
-    }
+    if (method === "POST") return boardEntry();
   }
-
-  if (path.startsWith("/board/global/") && method === "PATCH") {
-    return { ok: true } as T;
-  }
-
-  if (path.startsWith("/board/global/") && method === "DELETE") {
-    return { ok: true } as T;
-  }
-
   if (path === "/servers/active/board") {
     if (method === "GET") return { entries: demoBoardEntries } as T;
-    if (method === "POST") {
-      return {
-        id: "demo-board-new",
-        kind: body.kind ?? "note",
-        title: body.title ?? "New entry",
-        content: body.content ?? "",
-        category: typeof body.category === "string" ? body.category : "",
-        pinned: Boolean(body.pinned),
-        createdBy: "DemoAdmin",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } as T;
-    }
+    if (method === "POST") return boardEntry();
+  }
+  if (path.startsWith("/board/") || path.startsWith("/servers/active/board/")) {
+    return ok;
   }
 
-  if (path.startsWith("/servers/active/board/") && method === "PATCH") {
-    return { ok: true } as T;
-  }
-
-  if (path.startsWith("/servers/active/board/") && method === "DELETE") {
-    return { ok: true } as T;
-  }
-
+  // ── Team ─────────────────────────────────────────────────────────────
   if (path === "/servers/active/team") return demoTeamResponse as T;
-
   if (path === "/servers/active/team/deaths") return { deaths: demoTeamDeaths } as T;
-
   if (path === "/servers/active/team/connections") {
     return {
       connections: [
@@ -847,7 +790,6 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       ],
     } as T;
   }
-
   if (path === "/servers/active/team/chat") return { messages: demoTeamChat } as T;
 
   if (path === "/servers/active/team/promote" && method === "POST") {
@@ -873,6 +815,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     } as T;
   }
 
+  // ── Map ──────────────────────────────────────────────────────────────
   if (path === "/servers/active/map" || path.startsWith("/servers/active/map?")) {
     return {
       map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null },
@@ -882,21 +825,15 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       markers: demoMapMarkers,
     } as T;
   }
-
   if (path === "/servers/active/map/image") {
-    return {
-      map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null },
-    } as T;
+    return { map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null } } as T;
   }
-
   if (path === "/servers/active/map/live") {
     return { team: demoTeam, markers: demoMapMarkers, worldEvents: demoWorldEventsStatus } as T;
   }
-
   if (path === "/servers/active/map/overlays") {
     return { drawings: [], pins: [] } as T;
   }
-
   if (path === "/servers/active/map/procgen/status") {
     return {
       uploaded: false,
@@ -913,11 +850,11 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       overlays: [],
     } as T;
   }
-
   if (path.startsWith("/servers/active/map/procgen/")) {
     throw new Error("Procgen map features require a .map upload (disabled in demo mode)");
   }
 
+  // ── Vending / chat ───────────────────────────────────────────────────
   if (path.startsWith("/vending/search")) {
     const params = new URLSearchParams(path.split("?")[1] ?? "");
     const q = params.get("q") ?? undefined;
@@ -962,13 +899,11 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
         sentAt: Math.floor(Date.now() / 1000),
       });
     }
-    return { ok: true } as T;
+    return ok;
   }
 
-  if (path === "/devices") {
-    return { devices: demoDevices } as T;
-  }
-
+  // ── Devices / storage ────────────────────────────────────────────────
+  if (path === "/devices") return { devices: demoDevices } as T;
   if (path === "/devices/switch-states") {
     const states: Record<string, boolean | null> = {};
     for (const device of demoDevices) {
@@ -1000,23 +935,18 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     if (device && typeof body.displayName === "string") {
       device.displayName = body.displayName;
     }
-    return { ok: true } as T;
+    return ok;
   }
 
-  if (path === "/devices/switch-group" && method === "POST") {
-    return { ok: true } as T;
-  }
+  if (path === "/devices/switch-group" && method === "POST") return ok;
 
   if (path === "/storage") return { monitors: demoMonitors.map(enrichDemoMonitor) } as T;
-
   if (path === "/storage/container-icons") {
     return { catalog: STORAGE_CONTAINER_ICON_CATALOG } as T;
   }
-
   if (path.startsWith("/storage/search")) {
     return { monitors: demoMonitors.map(enrichDemoMonitor) } as T;
   }
-
   if (path.startsWith("/storage/items/search")) {
     const params = new URL(`http://local${path}`).searchParams;
     const q = params.get("q") ?? "";
@@ -1048,55 +978,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
 
   if (path === "/audit") return { events: demoAuditEvents } as T;
 
-  if (path === "/automation-rules") {
-    if (method === "GET") return { rules: [] } as T;
-    if (method === "POST") return { ok: true, id: "demo-rule" } as T;
-  }
-
-  const automationRuleMatch = path.match(/^\/automation-rules\/([^/]+)$/);
-  if (automationRuleMatch && (method === "PATCH" || method === "DELETE")) {
-    return { ok: true } as T;
-  }
-
-  if (path === "/automation-rule-templates") {
-    if (method === "GET") return { templates: [] } as T;
-    if (method === "POST") return { ok: true, id: "demo-template" } as T;
-  }
-
-  const automationTemplateMatch = path.match(/^\/automation-rule-templates\/([^/]+)$/);
-  if (automationTemplateMatch && (method === "PATCH" || method === "DELETE")) {
-    return { ok: true } as T;
-  }
-
-  if (path === "/switch-groups") {
-    if (method === "GET") return { groups: [] } as T;
-    if (method === "POST") return { ok: true, id: "demo-group" } as T;
-  }
-
-  const switchGroupMatch = path.match(/^\/switch-groups\/([^/]+)$/);
-  if (switchGroupMatch && (method === "PATCH" || method === "DELETE")) {
-    return { ok: true } as T;
-  }
-
-  if (path === "/device-library") {
-    return { groups: [], cameras: [] } as T;
-  }
-
-  if (path === "/device-library/groups" && method === "POST") {
-    return { ok: true, id: "demo-library-group" } as T;
-  }
-
-  const deviceLibraryGroupMatch = path.match(/^\/device-library\/groups\/([^/]+)$/);
-  if (deviceLibraryGroupMatch && method === "PATCH") {
-    return { ok: true } as T;
-  }
-
+  // ── Automations / library (prefix catch-alls) ─────────────────────────
   if (path === "/automation-settings") {
     if (method === "GET") {
-      return {
-        automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
-        pins: [],
-      } as T;
+      return { automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS }, pins: [] } as T;
     }
     if (method === "PATCH") {
       return {
@@ -1106,6 +991,16 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
         },
       } as T;
     }
+  }
+
+  if (
+    path.startsWith("/automation-") ||
+    path.startsWith("/switch-groups") ||
+    path.startsWith("/device-library")
+  ) {
+    if (method === "GET") return { rules: [], templates: [], groups: [], cameras: [] } as T;
+    if (method === "POST") return { ok: true, id: "demo-id" } as T;
+    return ok;
   }
 
   throw new Error(`Demo mode: unhandled API path ${method} ${path}`);

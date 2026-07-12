@@ -140,10 +140,6 @@ export function peekApiCache<T>(path: string, init?: RequestInit): { value: T; f
   return { value: hit.value as T, fetchedAt: hit.at };
 }
 
-export function getApiCacheTimestamp(path: string, init?: RequestInit): number | null {
-  return peekApiCache(path, init)?.fetchedAt ?? null;
-}
-
 export async function cachedApiFetch<T>(
   path: string,
   fetcher: () => Promise<T>,

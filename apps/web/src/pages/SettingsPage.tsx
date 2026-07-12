@@ -845,9 +845,9 @@ export function SettingsPage() {
         <h2>Team Chat Bot</h2>
         <p className="muted">
           Control in-game bot behavior. Admins can also use <code>!mute</code> and <code>!unmute</code>{" "}
-          in team chat (requires linked Steam ID + admin role). Link a Discord channel with{" "}
-          <code>/channel set purpose:In-game command runner</code> to run <code>!commands</code> from
-          Discord.
+          in team chat (requires linked Steam ID + admin role). In Discord, use{" "}
+          <strong>slash commands</strong> only — in-game <code>!</code> commands do not run from Discord
+          channels.
         </p>
         {notifications && (
           <div className="form-stack">

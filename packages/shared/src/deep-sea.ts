@@ -1,3 +1,5 @@
+import { formatDurationCompact } from "./duration.js";
+
 const MARKER_TYPE_VENDING = 3;
 
 export type DeepSeaPhase = "open" | "closed" | "unknown";
@@ -42,19 +44,7 @@ export function deepSeaCooldownSec(): number {
   if (Number.isFinite(min) && Number.isFinite(max) && min > 0 && max >= min) {
     return Math.floor((min + max) / 2);
   }
-  const single = Number(process.env.DEEPSEA_COOLDOWN_SECONDS);
-  return Number.isFinite(single) && single > 0 ? single : DEFAULT_DEEP_SEA_COOLDOWN_SEC;
-}
-
-export function deepSeaTeamChatEnabled(): boolean {
-  return process.env.AUTOMATION_DEEP_SEA_TEAM_CHAT === "true";
-}
-
-export function deepSeaDiscordEnabled(): boolean {
-  const explicit = process.env.AUTOMATION_DEEP_SEA_DISCORD?.trim().toLowerCase();
-  if (explicit === "true") return true;
-  if (explicit === "false") return false;
-  return deepSeaTeamChatEnabled();
+  return DEFAULT_DEEP_SEA_COOLDOWN_SEC;
 }
 
 export function isOffshoreWorldCoordinate(x: number, y: number, mapSize: number): boolean {
@@ -83,14 +73,7 @@ export function detectDeepSeaOpen(input: DeepSeaDetectionInput): DeepSeaDetectio
 }
 
 export function formatDurationLabel(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
-  const days = Math.floor(seconds / 86_400);
-  const hours = Math.floor((seconds % 86_400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-
-  if (days > 0) return `${days}d ${hours}h`;
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  return formatDurationCompact(totalSeconds);
 }
 
 export function buildDeepSeaStatus(args: {
@@ -152,20 +135,23 @@ export function buildDeepSeaStatus(args: {
   };
 }
 
-export function formatDeepSeaTeamChatMessage(status: DeepSeaStatus): string {
-  const prefix = process.env.AUTOMATION_EVENT_TEAM_CHAT_PREFIX?.trim() || "RustTools";
+export function formatDeepSeaTeamChatMessage(
+  status: DeepSeaStatus,
+  prefix = "RustTools",
+): string {
+  const resolvedPrefix = prefix.trim() || "RustTools";
   if (status.isOpen) {
     const remaining =
       status.secondsRemaining != null
         ? ` (~${formatDurationLabel(status.secondsRemaining)} left)`
         : "";
-    return `[${prefix}] Deep Sea is OPEN${remaining}`;
+    return `[${resolvedPrefix}] Deep Sea is OPEN${remaining}`;
   }
   const remaining =
     status.secondsRemaining != null
       ? ` — opens in ~${formatDurationLabel(status.secondsRemaining)}`
       : "";
-  return `[${prefix}] Deep Sea is CLOSED${remaining}`;
+  return `[${resolvedPrefix}] Deep Sea is CLOSED${remaining}`;
 }
 
 export function formatDeepSeaDiscordDescription(status: DeepSeaStatus): string {

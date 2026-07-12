@@ -5,8 +5,8 @@
  *
  * Requires: built packages, local API on :3000, .env with INTERNAL_API_KEY (optional for internal routes)
  */
-import { config } from "dotenv";
 import path from "node:path";
+import fs from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import Database from "better-sqlite3";
@@ -23,11 +23,10 @@ import {
 } from "@rusttools/shared";
 import {
   validateFcmConfigPayload,
-  getFcmCredentialStatus,
+  computeFcmCredentialStatus,
 } from "../packages/rustplus-client/dist/fcm-status.js";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-config({ path: path.resolve(repoRoot, ".env") });
 
 const API = process.env.SMOKE_API_URL ?? "http://127.0.0.1:3000";
 const INTERNAL_KEY = process.env.INTERNAL_API_KEY ?? "";
@@ -221,8 +220,31 @@ assert(
 );
 
 const fcmPath = path.resolve(repoRoot, "data/fcm-config.json");
-const fcmStatus = getFcmCredentialStatus(fcmPath, true);
-assert("getFcmCredentialStatus configured", fcmStatus.configured === true || !fcmStatus.configured);
+let fcmRegisteredAtMs = Date.now();
+if (fs.existsSync(fcmPath)) {
+  try {
+    const raw = JSON.parse(fs.readFileSync(fcmPath, "utf8"));
+    const fromConfig = raw.registered_at ?? raw.registeredAt;
+    if (fromConfig != null) {
+      fcmRegisteredAtMs =
+        typeof fromConfig === "number"
+          ? fromConfig > 1e12
+            ? fromConfig
+            : fromConfig * 1000
+          : Date.parse(fromConfig);
+    } else {
+      fcmRegisteredAtMs = fs.statSync(fcmPath).mtimeMs;
+    }
+  } catch {
+    fcmRegisteredAtMs = fs.statSync(fcmPath).mtimeMs;
+  }
+}
+const fcmStatus = computeFcmCredentialStatus(
+  fcmRegisteredAtMs,
+  true,
+  fs.existsSync(fcmPath),
+);
+assert("computeFcmCredentialStatus configured", fcmStatus.configured === true || !fcmStatus.configured);
 
 // ── API: public / health ────────────────────────────────────────────────
 

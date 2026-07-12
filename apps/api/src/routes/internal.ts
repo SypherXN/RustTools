@@ -113,7 +113,7 @@ export async function registerInternalRoutes(
       return reply.status(503).send({ error: "No active server" });
     }
 
-    const status = await fetchDeepSeaStatus(deps.db, deps.rustPlus, serverId);
+    const status = await fetchDeepSeaStatus(deps.rustPlus, serverId);
     return { status };
   });
 

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useAuth } from "../hooks/useAuth";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { isDemoMode } from "../lib/demo";

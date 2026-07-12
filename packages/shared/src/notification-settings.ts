@@ -44,8 +44,8 @@ export interface AutomationBaseSettings {
   y: number | null;
   /** Circular proximity radius in world meters (preferred). */
   radiusMeters?: number | null;
-  /** @deprecated Legacy radius in 150 m units — use {@link radiusMeters}. */
-  radiusGrid: number;
+  /** @deprecated Legacy read fallback in 150 m units — UI writes {@link radiusMeters} only. */
+  radiusGrid?: number;
   mapPinId: string | null;
   label?: string;
 }
@@ -54,7 +54,6 @@ export const DEFAULT_AUTOMATION_BASE_SETTINGS: AutomationBaseSettings = {
   x: null,
   y: null,
   radiusMeters: 150,
-  radiusGrid: 1,
   mapPinId: null,
   label: "Base",
 };
@@ -230,12 +229,15 @@ export function parseServerNotificationSettings(
       teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
       eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
-      legacyAutomations: legacyAutomationsFromEnv(),
+      legacyAutomations: {
+        nightLights: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.nightLights },
+        teamOfflineSam: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.teamOfflineSam },
+        mapEvents: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.mapEvents },
+      },
     };
   }
   try {
     const parsed = JSON.parse(raw) as Partial<ServerNotificationSettings>;
-    const envLegacy = legacyAutomationsFromEnv();
     return mergeNotificationSettings(DEFAULT_SERVER_NOTIFICATION_SETTINGS, {
       smartAlarm: parsed.smartAlarm,
       deepSea: parsed.deepSea,
@@ -244,20 +246,18 @@ export function parseServerNotificationSettings(
       teamActivity: parsed.teamActivity,
       eventTimers: parsed.eventTimers,
       automationBase: parsed.automationBase,
-      legacyAutomations: parsed.legacyAutomations ?? envLegacy,
+      legacyAutomations: parsed.legacyAutomations,
     });
   } catch {
-    return {
-      smartAlarm: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.smartAlarm },
-      deepSea: { ...DEFAULT_SERVER_NOTIFICATION_SETTINGS.deepSea },
-      tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
-      teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
-      teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
-      eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
-      automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
-      legacyAutomations: legacyAutomationsFromEnv(),
-    };
+    return parseServerNotificationSettings(null);
   }
+}
+
+/** Bootstrap Settings for a server with no saved JSON — env used once, then persisted. */
+export function seedServerNotificationSettingsFromEnv(): ServerNotificationSettings {
+  return mergeNotificationSettings(DEFAULT_SERVER_NOTIFICATION_SETTINGS, {
+    legacyAutomations: legacyAutomationsFromEnv(),
+  });
 }
 
 export function formatSmartAlarmTeamChatMessage(

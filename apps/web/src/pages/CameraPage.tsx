@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listStaticCctvCodes } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
-import { useWebSocket } from "../hooks/useWebSocket";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { CameraFeedPlaceholder } from "../components/CameraFeedPlaceholder";
 

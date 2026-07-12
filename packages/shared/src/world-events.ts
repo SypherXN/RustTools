@@ -1,4 +1,5 @@
 import { worldToGridLabel } from "./map-grid.js";
+import { formatDurationCompact } from "./duration.js";
 import { MAP_MARKER_TYPE } from "./map-marker-types.js";
 
 export type OilRigKind = "small" | "large";
@@ -134,16 +135,7 @@ export function nearestOilRig(
 export function formatDurationSince(seconds: number | null, nowSec: number): string {
   if (seconds == null) return "never";
   const elapsed = Math.max(0, nowSec - seconds);
-  if (elapsed < 60) return `${elapsed}s ago`;
-  if (elapsed < 3600) return `${Math.floor(elapsed / 60)}m ago`;
-  if (elapsed < 86_400) {
-    const h = Math.floor(elapsed / 3600);
-    const m = Math.floor((elapsed % 3600) / 60);
-    return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
-  }
-  const d = Math.floor(elapsed / 86_400);
-  const h = Math.floor((elapsed % 86_400) / 3600);
-  return h > 0 ? `${d}d ${h}h ago` : `${d}d ago`;
+  return `${formatDurationCompact(elapsed)} ago`;
 }
 
 export function formatCountdown(seconds: number | null): string | null {

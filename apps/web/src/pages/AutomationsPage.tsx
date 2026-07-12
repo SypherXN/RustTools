@@ -15,9 +15,11 @@ import { activeAllAwayFromBaseCondition, formatProximityRadiusMeters, proximityR
 import { apiFetch } from "../lib/api";
 import { DeviceMemberPicker } from "../components/DeviceMemberPicker";
 import { DiscordRolePicker } from "../components/DiscordRolePicker";
-import { LIVE_CAMERAS_ENABLED } from "../lib/features";
 import { useCan } from "../hooks/usePermissions";
+
 import { useActiveServer } from "../hooks/useActiveServer";
+
+const LIVE_CAMERAS_ENABLED = import.meta.env.VITE_LIVE_CAMERAS !== "false";
 
 interface Device {
   id: string;
@@ -178,7 +180,7 @@ function defaultTrigger(type: AutomationTrigger["type"]): AutomationTrigger {
         memberFilter: "active",
         proximityCheck: "none_near",
         useServerBase: true,
-        radiusGrid: 1,
+        radiusMeters: 150,
       };
     default:
       return { type };
@@ -195,7 +197,7 @@ function defaultCondition(type: AutomationCondition["type"]): AutomationConditio
         memberFilter: "active",
         proximityCheck: "any_near",
         useServerBase: true,
-        radiusGrid: 1,
+        radiusMeters: 150,
       };
     case "switch_is":
       return { type, switchValue: true };
@@ -386,7 +388,6 @@ function ProximityFields({
     memberFilter?: TeamMemberFilter;
     proximityCheck?: TeamProximityCheck;
     radiusMeters?: number;
-    radiusGrid?: number;
     useServerBase?: boolean;
     mapPinId?: string;
   }) => void;

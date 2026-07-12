@@ -1,8 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { nanoid } from "nanoid";
+import { randomBytes, randomUUID } from "node:crypto";
 
 export function generateId(): string {
-  return nanoid();
+  return randomUUID();
 }
 
 export function generateRefreshToken(): string {

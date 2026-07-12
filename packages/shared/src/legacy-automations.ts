@@ -1,4 +1,4 @@
-/** Legacy env automations (#115) — stored per server, env used as initial defaults. */
+/** Legacy env automations — env values seed defaults once into saved Settings, then Settings wins. */
 
 export interface NightLightsAutomationSettings {
   enabled: boolean;
@@ -55,9 +55,7 @@ export function legacyAutomationsFromEnv(): LegacyAutomationSettings {
   const samRaw = process.env.AUTOMATION_SAM_SWITCH_ENTITY_ID?.trim();
   const samId = samRaw ? Number(samRaw) : NaN;
 
-  const typesRaw =
-    process.env.AUTOMATION_EVENT_TYPES?.trim() ||
-    process.env.AUTOMATION_EVENT_TEAM_CHAT_TYPES?.trim();
+  const typesRaw = process.env.AUTOMATION_EVENT_TYPES?.trim();
   const types = typesRaw
     ? typesRaw.split(",").map((p) => p.trim().toLowerCase()).filter(Boolean)
     : DEFAULT_MAP_EVENT_TYPES;
@@ -89,8 +87,8 @@ export function legacyAutomationsFromEnv(): LegacyAutomationSettings {
 export function resolveMapEventAutomationSettings(
   stored?: Partial<MapEventAutomationSettings> | null,
 ): MapEventAutomationSettings {
-  const env = legacyAutomationsFromEnv().mapEvents;
-  const merged = { ...env, ...stored };
+  const defaults = DEFAULT_LEGACY_AUTOMATION_SETTINGS.mapEvents;
+  const merged = { ...defaults, ...stored };
   if (stored?.types?.length) merged.types = stored.types;
   return merged;
 }

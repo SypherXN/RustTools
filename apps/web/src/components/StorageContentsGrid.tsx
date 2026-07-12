@@ -1,4 +1,5 @@
 import type { ParsedStorage, StorageItemView } from "@rusttools/shared";
+import { formatCompactQuantity } from "@rusttools/shared";
 
 const DEFAULT_COLUMNS = 6;
 const DEFAULT_CAPACITY = 24;
@@ -8,18 +9,6 @@ function slotCount(parsed: ParsedStorage): number {
   const filled = parsed.items.length;
   if (filled === 0) return DEFAULT_CAPACITY;
   return Math.max(DEFAULT_CAPACITY, Math.ceil(filled / DEFAULT_COLUMNS) * DEFAULT_COLUMNS);
-}
-
-function formatStack(quantity: number): string {
-  if (quantity >= 1_000_000) {
-    const m = quantity / 1_000_000;
-    return m >= 10 ? `${Math.round(m)}M` : `${m.toFixed(1).replace(/\.0$/, "")}M`;
-  }
-  if (quantity >= 10_000) {
-    const k = quantity / 1000;
-    return k >= 100 ? `${Math.round(k)}k` : `${k.toFixed(1).replace(/\.0$/, "")}k`;
-  }
-  return quantity.toLocaleString();
 }
 
 function StorageSlot({ item }: { item: StorageItemView | null }) {
@@ -42,7 +31,7 @@ function StorageSlot({ item }: { item: StorageItemView | null }) {
         }}
       />
       {item.quantity > 1 && (
-        <span className="storage-slot-qty">{formatStack(item.quantity)}</span>
+        <span className="storage-slot-qty">{formatCompactQuantity(item.quantity)}</span>
       )}
       {item.isBlueprint && <span className="storage-slot-bp">BP</span>}
     </div>

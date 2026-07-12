@@ -4,7 +4,7 @@ import type { EntityType, RustPlusEvent } from "@rusttools/shared";
 import { EventBus } from "./event-bus.js";
 import { FcmListener, type FcmConfig, type ParsedFcmNotification } from "./fcm-listener.js";
 import { JobScheduler } from "./job-scheduler.js";
-import { NotificationService } from "./notification-service.js";
+import { createNotificationService, type NotificationService } from "./notification-service.js";
 
 export interface ServerCredentials {
   id: string;
@@ -212,7 +212,7 @@ export class RustPlusManager {
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private options: RustPlusManagerOptions = {}) {
-    this.notifications = options.notificationService ?? new NotificationService();
+    this.notifications = options.notificationService ?? createNotificationService();
   }
 
   getStatus() {

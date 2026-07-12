@@ -36,8 +36,7 @@ import { MapPrefabOverlay } from "../components/MapPrefabOverlay";
 import { Map3DView } from "../components/Map3DView";
 import { VendingTradeRow } from "../components/VendingTradeRow";
 import type { MapTrackableEvent } from "../components/MapEventDock";
-import { useMapImageSrc } from "../hooks/useMapImageSrc";
-import { useWebSocket, useWebSocketConnected } from "../hooks/useWebSocket";
+import { useWebSocket, useWebSocketConnected } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { apiFetch } from "../lib/api";
@@ -226,7 +225,11 @@ export function MapPage() {
     setDataFetchedAt(Date.now());
   }, []);
 
-  const mapImageSrc = useMapImageSrc(mapImage?.imageBase64);
+  const mapImageSrc = useMemo(() => {
+    const base64 = mapImage?.imageBase64;
+    if (!base64) return null;
+    return `data:image/jpeg;base64,${base64}`;
+  }, [mapImage?.imageBase64]);
   const wsConnected = useWebSocketConnected();
 
   useEffect(() => {

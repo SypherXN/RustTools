@@ -4,8 +4,6 @@ import { mapDrawings, mapPins } from "@rusttools/db";
 import { deleteAutomationRulesReferencingMapPin } from "./automation-rule-cleanup.js";
 import { deletePinScreenshotIfExists } from "./map-pin-storage.js";
 
-export { deletePinScreenshotIfExists } from "./map-pin-storage.js";
-
 /** Clear map drawings, pins, and all pin screenshot files for a server. */
 export async function clearMapAnnotationsForServer(db: Database, serverId: string): Promise<void> {
   const pins = await db

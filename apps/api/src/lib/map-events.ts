@@ -1,6 +1,6 @@
 import type { MapEventAutomationSettings } from "@rusttools/shared";
 import {
-  legacyAutomationsFromEnv,
+  DEFAULT_LEGACY_AUTOMATION_SETTINGS,
   mapEventDiscordEnabled,
   mapEventTeamChatEnabled,
   resolveMapEventAutomationSettings,
@@ -20,7 +20,7 @@ const EVENT_TYPE_ALIASES: Record<string, number> = {
 export function resolveMapEventSettings(
   stored?: Partial<MapEventAutomationSettings> | null,
 ): MapEventAutomationSettings {
-  return resolveMapEventAutomationSettings(stored ?? legacyAutomationsFromEnv().mapEvents);
+  return resolveMapEventAutomationSettings(stored);
 }
 
 export function eventTeamChatEnabled(settings?: MapEventAutomationSettings): boolean {
@@ -63,7 +63,8 @@ export function formatEventTeamChatMessage(
   prefix?: string,
 ): string {
   const grid = worldToGridLabel(marker.x, marker.y, worldSize);
-  const resolvedPrefix = prefix?.trim() || legacyAutomationsFromEnv().mapEvents.prefix;
+  const resolvedPrefix =
+    prefix?.trim() || DEFAULT_LEGACY_AUTOMATION_SETTINGS.mapEvents.prefix;
   const name = marker.label.trim() || "World event";
   return `[${resolvedPrefix}] ${name} @ ${grid} (${Math.round(marker.x)}, ${Math.round(marker.y)})`;
 }

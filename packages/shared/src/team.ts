@@ -1,3 +1,5 @@
+import { formatDurationCompact } from "./duration.js";
+
 export type TeamMemberStatus = "online" | "afk" | "offline" | "dead";
 
 export interface TeamRosterMember {
@@ -60,16 +62,6 @@ export function canBecomeTeamLeader(
   return !member.isLeader && member.isOnline && member.isAlive;
 }
 
-function formatDuration(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  const remM = m % 60;
-  return remM > 0 ? `${h}h ${remM}m` : `${h}h`;
-}
-
 export function teamMemberStatus(
   member: Pick<TeamRosterMember, "isOnline" | "isAlive" | "status">,
 ): TeamMemberStatus {
@@ -86,14 +78,14 @@ export function formatTeamAfkDuration(
   if (!afkSince || afkSince <= 0) return null;
   const elapsed = nowSec - afkSince;
   if (elapsed < 0) return null;
-  return `~${formatDuration(elapsed)}`;
+  return `~${formatDurationCompact(elapsed)}`;
 }
 
 export function formatTeamDeathAgo(deathTime: number | null, nowSec = Math.floor(Date.now() / 1000)): string | null {
   if (!deathTime || deathTime <= 0) return null;
   const ago = nowSec - deathTime;
   if (ago < 0) return null;
-  return `${formatDuration(ago)} ago`;
+  return `${formatDurationCompact(ago)} ago`;
 }
 
 export function formatTeamSession(
@@ -104,7 +96,7 @@ export function formatTeamSession(
   if (!isOnline || !spawnTime || spawnTime <= 0) return null;
   const elapsed = nowSec - spawnTime;
   if (elapsed < 0) return null;
-  return `~${formatDuration(elapsed)}`;
+  return `~${formatDurationCompact(elapsed)}`;
 }
 
 export function formatTeamConnectionLabel(connection: TeamConnectionEvent): string {
@@ -118,7 +110,7 @@ export function formatTeamConnectionAgo(
 ): string | null {
   const ago = nowSec - occurredAt;
   if (ago < 0) return null;
-  return `${formatDuration(ago)} ago`;
+  return `${formatDurationCompact(ago)} ago`;
 }
 
 export function sortTeamRoster(members: TeamRosterMember[]): TeamRosterMember[] {

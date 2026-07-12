@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "@rusttools/db";
 import { rustEntities } from "@rusttools/db";
-import type { RustPlusManager, NotificationService } from "@rusttools/rustplus-client";
+import type { RustPlusManager, NotificationService, DiscordNotification } from "@rusttools/rustplus-client";
 import { parseStorageEntityInfo } from "@rusttools/shared";
 import { getWorldSize, parseTeamRoster, getActiveServer, resolveWorldSize } from "../lib/rust-data.js";
 import { processTeamRosterWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
@@ -125,9 +125,7 @@ export function startPhase2Listeners(
           await notifications.discord({
             channelId: channel,
             embed: payload.embed,
-            components: payload.components as Parameters<
-              NotificationService["discord"]
-            >[0]["components"],
+            components: payload.components as DiscordNotification["components"],
           });
         }
         notifications.webSocket({

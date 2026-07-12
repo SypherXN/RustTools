@@ -1,5 +1,5 @@
 import type { ChatInputCommandInteraction } from "discord.js";
-import { internalPost } from "./api.js";
+import { internalFetch } from "./api.js";
 import { replyTeamCommandChunks, replyWithEmbeds, type EmbedPayload } from "./reply-embeds.js";
 
 export async function runBangCommand(
@@ -15,13 +15,15 @@ export async function runBangCommand(
       ? interaction.member.displayName
       : interaction.user.displayName || interaction.user.username;
 
-  const result = await internalPost<{ replies: string[]; embeds?: EmbedPayload[] }>(
+  const result = await internalFetch<{ replies: string[]; embeds?: EmbedPayload[] }>(
     "/internal/slash-command/execute",
     interaction.user.id,
     {
-      guildId: interaction.guildId,
-      message: bangMessage,
-      discordUsername: displayName,
+      json: {
+        guildId: interaction.guildId,
+        message: bangMessage,
+        discordUsername: displayName,
+      },
     },
   );
 

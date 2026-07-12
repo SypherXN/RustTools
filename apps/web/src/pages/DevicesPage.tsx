@@ -11,10 +11,12 @@ import { apiFetch } from "../lib/api";
 import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
 import { DiscordRolePicker } from "../components/DiscordRolePicker";
-import { LIVE_CAMERAS_ENABLED } from "../lib/features";
-import { useWebSocket } from "../hooks/useWebSocket";
+
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
+
+const LIVE_CAMERAS_ENABLED = import.meta.env.VITE_LIVE_CAMERAS !== "false";
 
 interface Device {
   id: string;

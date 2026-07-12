@@ -1,15 +1,12 @@
-import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import type { DeepSeaStatus } from "@rusttools/shared";
 import { getWorldSize } from "./rust-data.js";
 import { deepSeaTracker, monumentsFromMap } from "./deep-sea-tracker.js";
 
 export async function fetchDeepSeaStatus(
-  db: Database,
   rustPlus: RustPlusManager,
   serverId: string,
 ): Promise<DeepSeaStatus> {
-  void db;
   try {
     const [info, map] = await Promise.all([rustPlus.getServerInfo(), rustPlus.getMap()]);
     const markersRaw = rustPlus.getLastMapMarkers() ?? (await rustPlus.getMapMarkers());
