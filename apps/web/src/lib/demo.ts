@@ -423,6 +423,7 @@ export const demoMonuments = [
   { token: "airfield_display_name", name: "Airfield", x: 1200, y: 600 },
   { token: "launch_site_display_name", name: "Launch Site", x: 400, y: 1600 },
   { token: "outpost_display_name", name: "Outpost", x: 500, y: 800 },
+  { token: "apartment_complex_display_name", name: "Apartment Complex", x: 900, y: 1100 },
 ];
 
 export const demoMapMarkers = [

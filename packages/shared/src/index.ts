@@ -38,4 +38,5 @@ export * from "./team-proximity.js";
 export * from "./admin.js";
 export * from "./legacy-automations.js";
 export * from "./procgen-map.js";
+export * from "./game-data-version.js";
 export * from "./team-board.js";

@@ -10,6 +10,7 @@ const CCTV_BY_NAME = cctvData as Record<string, CctvEntry>;
 /** Normalize monument token/name for CCTV lookup. */
 function normalizeMonumentKey(name: string): string {
   return name
+    .replace(/_display_name$/i, "")
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
@@ -26,6 +27,7 @@ const TOKEN_ALIASES: Record<string, string> = {
   launch_site: "Launch Site",
   military_tunnel: "Military Tunnel",
   trainyard: "Train Yard",
+  power_plant: "Power Plant",
   powerplant: "Power Plant",
   water_treatment_plant: "Water Treatment Plant",
   satellite_dish: "Satellite Dish",
@@ -33,6 +35,8 @@ const TOKEN_ALIASES: Record<string, string> = {
   junkyard: "Junkyard",
   sewer_branch: "Sewer Branch",
   ferry_terminal: "Ferry Terminal",
+  apartment_complex: "Apartment Complex",
+  radtown: "Radtown",
   underwater_lab: "Underwater Labs",
   abandoned_military_base: "Abandoned Military Base",
   missile_silo: "Missile Silo",
@@ -45,7 +49,9 @@ export function getCctvForMonument(tokenOrName: string): CctvEntry | null {
   const raw = tokenOrName.trim();
   if (!raw) return null;
 
-  const alias = TOKEN_ALIASES[raw.toLowerCase()] ?? TOKEN_ALIASES[raw];
+  const stripped = raw.replace(/_display_name$/i, "");
+  const alias =
+    TOKEN_ALIASES[raw.toLowerCase()] ?? TOKEN_ALIASES[stripped.toLowerCase()] ?? TOKEN_ALIASES[raw];
   if (alias && CCTV_BY_NAME[alias]) return CCTV_BY_NAME[alias];
 
   const normalized = normalizeMonumentKey(raw);

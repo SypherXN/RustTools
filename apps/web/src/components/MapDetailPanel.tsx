@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, getCctvForMonument, getMonumentInfo } from "@rusttools/shared";
+import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, formatRustGameDataLabel, getCctvForMonument, getMonumentInfo } from "@rusttools/shared";
 import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
@@ -147,7 +147,8 @@ function MonumentDetails({
         </>
       )}
       <p className="muted map-detail-disclaimer">
-        Reference info — reset times and radiation vary by server and game updates.
+        Game data: {formatRustGameDataLabel()}. Reference info — reset times and radiation vary by server and
+        updates.
       </p>
     </>
   );
