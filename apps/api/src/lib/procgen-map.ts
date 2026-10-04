@@ -33,6 +33,7 @@ export interface ProcgenMapStatus {
 const OVERLAY_IDS: ProcgenOverlayId[] = [
   "building-blocked",
   "heatmap-ores",
+  "heatmap-hqm",
   "heatmap-stones",
   "heatmap-sulfur",
 ];
@@ -53,6 +54,7 @@ const PARSE_ARTIFACT_NAMES = [
   "height.json",
   "overlay-building-blocked.png",
   "overlay-heatmap-ores.png",
+  "overlay-heatmap-hqm.png",
   "overlay-heatmap-stones.png",
   "overlay-heatmap-sulfur.png",
 ] as const;

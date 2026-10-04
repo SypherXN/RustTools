@@ -149,9 +149,10 @@ Rule builder with triggers, optional conditions, and actions — saved per serve
 ### Live cameras (Cameras page)
 
 - Subscribe to monument CCTV IDs (e.g. `DOME1`, `OILRIG1L1`) or player-placed PTZ / auto-turret names from the Computer Station
+- Monument ID reference on the Cameras page and map monument panel (including dynamic lab prefixes such as `SPECTRE****`)
 - Stylized idle / connecting placeholder; live PNG frames over WebSocket once subscribed
 - Direction pad for PTZ; fire button for controllable auto turrets
-- **Requires** server owner to run `cctvrender.enabled true` in the server console (off on most public servers)
+- **Requires** server owner to run `cctvrender.enabled true` in the server console (off on most public servers). Codes remain useful on in-game Computer Stations when streaming is disabled.
 - Only one remote viewer at a time per camera (same as in-game Rust+)
 
 ### Legacy automations (Settings)
@@ -160,7 +161,7 @@ Per-server config (env vars seed defaults for new servers):
 
 - **Night lights** — turn on configured switches at night (Settings; `.env` `AUTOMATION_*` seeds new servers only)
 - **Team-offline SAM** — flip a SAM site switch when everyone goes offline
-- **Map event alerts** — team chat and/or Discord for cargo, heli, chinook, vendor, oil, bradley, convoy (Settings; env is bootstrap-only)
+- **Map event alerts** — team chat and/or Discord for cargo, heli, chinook, vendor, oil, bradley, convoy, satellite (Settings; env is bootstrap-only)
 - **Stale device cleanup** — when a paired device disappears from Rust+, its entity row, automation rules, switch-group/library membership, and legacy automation references (`nightLights.entityIds`, `teamOfflineSam.switchEntityId`) are removed automatically (10-minute reconcile job + immediate cleanup on manual unpair/wipe); pruning an empty switch group also removes automation rules that reference that group
 
 ---
@@ -171,10 +172,10 @@ Per-server config (env vars seed defaults for new servers):
 
 - **Server map** — image from Rust+ with grid overlay and zoom controls (fit-to-map floor)
 - **Team positions** — live teammate markers with detail panel; cluster picker when markers overlap
-- **Monuments** — labels on map; **CCTV codes** per monument in detail panel
+- **Monuments** — labels on map; **CCTV codes** per monument in detail panel (reference — most servers disable Rust+ streaming). Panel facts are audited through Livestock (2026-10-01): power-grid loot rooms, Bandit Air Wolf pad (`AIRWOLF`), Dome crude delay, Ranch livestock vendor
 - **Map markers** — vending machines, crates, events from Rust+
 - **Smart map follow** — track a teammate or world event from the detail panel / event dock until you pan away (2D and 3D)
-- **Event dock** — track cargo, heli, chinook, vendor, bradley, convoy on the map
+- **Event dock** — track cargo, heli, chinook, vendor, bradley, convoy, satellite crash on the map
 - **Collaborative drawings** — server-persisted pen strokes (Switch permission to draw)
 - **Team pins** — notes, labels, optional screenshot upload; edit in side detail panel; can be linked as the server automation base
 - **Server base zone** — blue circular overlay when the **Server base** layer is enabled (2D and 3D); **Focus base** in the layers panel
@@ -190,7 +191,7 @@ Upload the server’s procgen `.map` file in **Settings → Server & Map** to un
 
 - **Where to get the file** — Rust client cache after joining the server, or in-game F1 → `Download map file`
 - **Building-blocked zones** — overlay for no-build areas
-- **Resource heatmaps** — ores, stones, sulfur
+- **Resource heatmaps** — ores, HQM spawn ground (Decor/Cliffside/Clutter; not unique HQM vs metal), stones, sulfur
 - **Roads and rail paths** — extracted path network
 - **Caves and icebergs** — prefab markers from map data
 - **Parse status** — seed/world-size match warnings vs active server
@@ -220,6 +221,7 @@ Automated spawn/despawn alerts to Discord and optional team chat (grid + coordin
 - Traveling vendor
 - Bradley APC
 - Convoy
+- Satellite crash (named Rust+ marker — crate-cool timer after landing, cooldown after despawn)
 - Oil rig triggers (small/large) with locked crate unlock countdown and reminders
 
 ### Deep Sea
@@ -233,10 +235,11 @@ Automated spawn/despawn alerts to Discord and optional team chat (grid + coordin
 - Cargo egress duration
 - Oil rig crate unlock offset and reminder intervals
 - Oil rig proximity detection radius
+- Satellite crash crate-cool and cooldown durations
 
 ### On-demand event queries (team chat & Discord slash commands)
 
-In-game: `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!large` · `!small` · `!events`
+In-game: `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!satellite` · `!large` · `!small` · `!events`
 
 Discord: matching slash commands (`/cargo`, `/events`, etc.) — see [Discord bot](#discord-bot) below.
 
@@ -310,7 +313,7 @@ Slash commands (role-gated same as web permissions). Responses use **Discord emb
 | `/map` | Post the current server map image |
 | `/online` `/offline` `/afk` `/alive` | Roster filters (same as in-game `!` commands) |
 | `/leader` | Promote yourself to team leader (online, alive, Steam ID linked) |
-| `/cargo` `/heli` `/chinook` `/vendor` `/bradley` `/convoy` `/large` `/small` `/events` | World event status |
+| `/cargo` `/heli` `/chinook` `/vendor` `/bradley` `/convoy` `/satellite` `/large` `/small` `/events` | World event status |
 | `/upkeep` | Tool cupboard upkeep report |
 | `/mute` `/unmute` | Mute/unmute RustTools bot in team chat (admin) |
 | `/pair` | FCM pairing status |
@@ -353,7 +356,7 @@ Type in **team chat**, or use matching **slash commands** in Discord (Switch per
 
 ### Events & world
 
-- `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!bradley` · `!convoy`
+- `!cargo` · `!heli` · `!chinook` · `!vendor` · `!bradley` · `!convoy` · `!satellite`
 - `!large` · `!small` — oil rig status and crate unlock timers
 - `!events` — summary of all tracked events
 - `!deepsea` · `!ds` — Deep Sea status

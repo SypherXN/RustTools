@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { listStaticCctvCodes } from "@rusttools/shared";
+import { CCTV_STREAMING_DISCLAIMER, listCctvReference, listStaticCctvCodes } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
@@ -25,6 +25,7 @@ export function CameraPage() {
   const lastInputAt = useRef(0);
 
   const cctvCodes = useMemo(() => listStaticCctvCodes(), []);
+  const cctvReference = useMemo(() => listCctvReference(), []);
 
   const load = async () => {
     try {
@@ -105,9 +106,10 @@ export function CameraPage() {
       <header className="page-header">
         <h1>Live cameras</h1>
         <p>
-          Subscribe to Rust+ CCTV or auto turret feeds. Only one viewer controls a camera at a time in-game. Most
-          servers require the owner to run <code>cctvrender.enabled true</code> in the server console before external
-          camera feeds work.
+          Subscribe to Rust+ CCTV or auto turret feeds when the server allows it. Only one viewer controls a
+          camera at a time in-game. Most public servers leave streaming off — the owner must run{" "}
+          <code>cctvrender.enabled true</code> in the server console. Monument IDs below still work on an in-game
+          Computer Station even when this page cannot connect.
         </p>
       </header>
 
@@ -138,8 +140,9 @@ export function CameraPage() {
           )}
         </div>
         <p className="muted" style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
-          Dome monument uses <code>DOME1</code> or <code>DOMETOP</code>, not DOMELAND. Player-placed PTZ/turret
-          cameras use the name you set on the Computer Station in-game.
+          {CCTV_STREAMING_DISCLAIMER} Dome uses <code>DOME1</code> or <code>DOMETOP</code>. Player-placed PTZ/turret
+          cameras use the name you set on the Computer Station. Lab/compound prefixes such as{" "}
+          <code>SPECTRE****</code> are not in this list because the wipe suffix must be copied in-game.
         </p>
         {cameras.length > 0 && (
           <div className="btn-row" style={{ marginTop: "0.75rem" }}>
@@ -150,6 +153,35 @@ export function CameraPage() {
             ))}
           </div>
         )}
+      </section>
+
+      <section className="card" style={{ marginBottom: "1rem" }}>
+        <details>
+          <summary>Monument camera IDs (reference)</summary>
+          <p className="muted" style={{ marginTop: "0.75rem", fontSize: "0.875rem" }}>
+            Use these on an in-game Computer Station. Dynamic prefixes need the current wipe suffix. Connecting
+            here will fail on servers that have not enabled <code>cctvrender</code>.
+          </p>
+          <dl className="stat-list" style={{ marginTop: "0.75rem" }}>
+            {cctvReference.map((entry) => (
+              <div key={entry.monument}>
+                <dt>
+                  {entry.monument}
+                  {entry.dynamic ? " (wipe suffix)" : ""}
+                </dt>
+                <dd>
+                  {entry.codes.map((code, i) => (
+                    <span key={code}>
+                      {i > 0 ? ", " : ""}
+                      <code>{code}</code>
+                    </span>
+                  ))}
+                  {entry.notes ? <span className="muted"> — {entry.notes}</span> : null}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </details>
       </section>
 
       <section className="card camera-viewer-wrap">

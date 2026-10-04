@@ -14,4 +14,6 @@ export const TerrainBiome = {
   TEMPERATE: 1,
   TUNDRA: 2,
   ARCTIC: 3,
+  /** Present on Jungle-era maps; missing on older biome layers. */
+  JUNGLE: 4,
 } as const;

@@ -6,6 +6,7 @@ import { useAuthenticatedImageSrc } from "../hooks/useAuthenticatedImageSrc";
 const OVERLAY_MAP: Array<{ layer: keyof MapProcgenLayers; id: ProcgenOverlayId; filter: string; opacity: number }> = [
   { layer: "buildingBlocked", id: "building-blocked", filter: "saturate(1.25) contrast(1.2)", opacity: 0.95 },
   { layer: "heatmapOres", id: "heatmap-ores", filter: "saturate(2.2) contrast(1.8) brightness(1.2)", opacity: 1 },
+  { layer: "heatmapHqm", id: "heatmap-hqm", filter: "saturate(1.8) contrast(1.6) brightness(1.15)", opacity: 1 },
   { layer: "heatmapStones", id: "heatmap-stones", filter: "saturate(2) contrast(1.9) brightness(1.35)", opacity: 1 },
   { layer: "heatmapSulfur", id: "heatmap-sulfur", filter: "saturate(2.4) contrast(1.9) brightness(1.25)", opacity: 1 },
 ];

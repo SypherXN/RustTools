@@ -39,5 +39,12 @@ export const BUILDING_BLOCKED_TOPOLOGY =
   TerrainTopology.LAKE |
   TerrainTopology.BUILDING;
 
-/** Ore node spawn topology. */
+/** Ore node spawn topology (metal/stone/sulfur share this; HQM also uses Clutter). */
 export const ORE_TOPOLOGY = TerrainTopology.DECOR | TerrainTopology.CLIFFSIDE;
+
+/**
+ * HQM node spawn ground (Decor / Cliffside / Clutter).
+ * `.map` files do not mark HQM vs other ores — this is likely spawn terrain, not exact nodes.
+ */
+export const HQM_TOPOLOGY =
+  TerrainTopology.DECOR | TerrainTopology.CLIFFSIDE | TerrainTopology.CLUTTER;

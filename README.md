@@ -109,7 +109,7 @@ Default proximity radius is **150 m** (circular world distance). Each automation
 
 ### Live cameras (optional)
 
-The **Cameras** page is enabled by default. Remote CCTV requires the server owner to run `cctvrender.enabled true` in the server console (usually off on public servers). Set `VITE_LIVE_CAMERAS=false` at web build time to hide the nav item.
+The **Cameras** page is enabled by default. Remote CCTV requires the server owner to run `cctvrender.enabled true` in the server console (usually off on public servers). Monument IDs still work on an in-game Computer Station when streaming is disabled. Set `VITE_LIVE_CAMERAS=false` at web build time to hide the nav item.
 
 ## Production (Oracle A1)
 

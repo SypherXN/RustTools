@@ -1,13 +1,17 @@
 import type { Database } from "@rusttools/db";
 import {
   buildOilRigSnapshot,
+  buildSatelliteCrashSnapshot,
   buildTrackedEntitySnapshot,
   emptyWorldEventStats,
   findOilRigMonuments,
   formatWorldEventAnnouncement,
   DEFAULT_LEGACY_AUTOMATION_SETTINGS,
+  DEFAULT_EVENT_TIMER_SETTINGS,
   isBradleyMarker,
   isConvoyMarker,
+  isGroundedSatelliteCrashMarker,
+  isSatelliteCrashMarker,
   isTravelingVendorMarker,
   MAP_MARKER_TYPE,
   markerEntityLabel,
@@ -52,6 +56,10 @@ interface ServerRuntime {
   vendor: ActiveEntity | null;
   bradley: ActiveEntity | null;
   convoy: ActiveEntity | null;
+  satellite: ActiveEntity | null;
+  satelliteCrateCoolUntil: number | null;
+  satelliteLootableAnnounced: boolean;
+  satelliteCooldownUntil: number | null;
   oil: Record<OilRigKind, OilRigRuntime>;
   stats: WorldEventStats;
   spawnAnnounced: Set<string>;
@@ -79,6 +87,10 @@ function emptyRuntime(persisted?: {
     vendor: null,
     bradley: null,
     convoy: null,
+    satellite: null,
+    satelliteCrateCoolUntil: null,
+    satelliteLootableAnnounced: false,
+    satelliteCooldownUntil: null,
     oil: {
       small: emptyOilRigRuntime(persisted?.oilSmallLastTriggeredAt ?? null),
       large: emptyOilRigRuntime(persisted?.oilLargeLastTriggeredAt ?? null),
@@ -143,6 +155,12 @@ function pickBradleyMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
 
 function pickConvoyMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
   return markers.filter((marker) => isConvoyMarker(marker));
+}
+
+function pickSatelliteMarkers(markers: ParsedMapMarker[]): ParsedMapMarker[] {
+  const hits = markers.filter((marker) => isSatelliteCrashMarker(marker));
+  const grounded = hits.filter((marker) => isGroundedSatelliteCrashMarker(marker));
+  return grounded.length > 0 ? grounded : hits;
 }
 
 export class WorldEventTracker {
@@ -229,6 +247,19 @@ export class WorldEventTracker {
         runtime.stats.convoyLastDespawnAt,
         runtime.stats.convoyLastSpawnAt,
       ),
+      satellite: buildSatelliteCrashSnapshot(
+        runtime.satellite
+          ? { x: runtime.satellite.x, y: runtime.satellite.y, sinceSec: runtime.satellite.sinceSec }
+          : null,
+        {
+          crateCoolUntil: runtime.satelliteCrateCoolUntil,
+          cooldownUntil: runtime.satelliteCooldownUntil,
+          lastDespawnAt: runtime.stats.satelliteLastDespawnAt,
+          lastSpawnAt: runtime.stats.satelliteLastSpawnAt,
+        },
+        worldSize,
+        nowSec,
+      ),
       oilRigs: {
         small: buildOilRigSnapshot(runtime.oil.small, timers, nowSec),
         large: buildOilRigSnapshot(runtime.oil.large, timers, nowSec),
@@ -285,7 +316,9 @@ export class WorldEventTracker {
                     ? "Bradley APC"
                     : key === "convoy"
                       ? "Convoy"
-                      : markerEntityLabel(type),
+                      : key === "satellite"
+                        ? "Satellite crash"
+                        : markerEntityLabel(type),
               x: marker.x,
               y: marker.y,
             });
@@ -320,6 +353,14 @@ export class WorldEventTracker {
           });
         } else if (key === "vendor") {
           announcements.push({ kind: "vendor_despawn", entity: "vendor" });
+        } else if (key === "satellite") {
+          announcements.push({
+            kind: "despawn",
+            entity: "satellite",
+            label: "Satellite crash",
+            x: current.x,
+            y: current.y,
+          });
         } else {
           announcements.push({
             kind: "despawn",
@@ -379,6 +420,50 @@ export class WorldEventTracker {
       "convoyLastSpawnAt",
       "convoyLastDespawnAt",
     );
+    const satelliteWasActive = runtime.satellite != null;
+    const satelliteHits = pickSatelliteMarkers(markers).map((marker, index) =>
+      index === 0 ? { ...marker, id: "satellite-crash" } : marker,
+    );
+    runtime.satellite = processMobile(
+      "satellite",
+      satelliteHits[0]?.type ?? MAP_MARKER_TYPE.GENERIC,
+      runtime.satellite,
+      satelliteHits,
+      "satelliteLastSpawnAt",
+      "satelliteLastDespawnAt",
+    );
+    if (runtime.satellite) {
+      runtime.satelliteCooldownUntil = null;
+      const grounded = satelliteHits.some((marker) => isGroundedSatelliteCrashMarker(marker));
+      if (grounded && runtime.satelliteCrateCoolUntil == null) {
+        runtime.satelliteCrateCoolUntil =
+          nowSec +
+          (input.timers.satelliteCrateCoolSeconds ??
+            DEFAULT_EVENT_TIMER_SETTINGS.satelliteCrateCoolSeconds);
+      }
+      if (
+        runtime.satelliteCrateCoolUntil != null &&
+        nowSec >= runtime.satelliteCrateCoolUntil &&
+        !runtime.satelliteLootableAnnounced
+      ) {
+        runtime.satelliteLootableAnnounced = true;
+        announcements.push({
+          kind: "satellite_lootable",
+          entity: "satellite",
+          x: runtime.satellite.x,
+          y: runtime.satellite.y,
+        });
+      }
+    } else {
+      runtime.satelliteCrateCoolUntil = null;
+      runtime.satelliteLootableAnnounced = false;
+      if (satelliteWasActive) {
+        runtime.satelliteCooldownUntil =
+          nowSec +
+          (input.timers.satelliteCooldownSeconds ??
+            DEFAULT_EVENT_TIMER_SETTINGS.satelliteCooldownSeconds);
+      }
+    }
 
     for (const kind of ["small", "large"] as const) {
       const rigState = runtime.oil[kind];

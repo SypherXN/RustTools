@@ -23,26 +23,22 @@ export const RUST_GAME_DATA_PATCHES_APPLIED: ReadonlyArray<{
   { patchName: "Common Ground", patchDate: "2026-07-02" },
   { patchName: "Power Trip", patchDate: "2026-08-06" },
   { patchName: "Breach and Clear", patchDate: "2026-09-03" },
+  { patchName: "Livestock", patchDate: "2026-10-01" },
 ];
 
 /** Current RustTools game-data baseline (map monument panel, CCTV list, etc.). */
 export const RUST_GAME_DATA: RustGameDataCoverage = {
-  patchName: "Breach and Clear",
-  patchDate: "2026-09-03",
-  verifiedAt: "2026-09-09",
+  patchName: "Livestock",
+  patchDate: "2026-10-01",
+  verifiedAt: "2026-10-04",
   sources: [
+    "https://rust.facepunch.com/news/livestock",
+    "https://www.rustafied.com/updates/2026/10/1/livestock-update-incoming",
     "https://rust.facepunch.com/news/breach-and-clear",
     "https://rust.facepunch.com/news/power-trip",
-    "https://www.rustafied.com/updates/2026/9/3/breach-and-clear-update-incoming",
-    "https://www.rustafied.com/updates/2026/8/6/power-trip-update",
     "https://rusthelp.com/tools/cctv-codes",
   ],
-  pending: [
-    "Satellite crash as a tracked map/world event (Launch Site terminal — loot timers, cooldown)",
-    "Underwater Lab SPECTRE dynamic CCTV suffix — verify in-game per wipe",
-    "Apartment per-room CCTV codes beyond RADTOWNAPARTMENTS",
-    "Procgen map overlays for new HQM world nodes (Breach and Clear)",
-  ],
+  pending: [],
 };
 
 export function formatRustGameDataLabel(data: RustGameDataCoverage = RUST_GAME_DATA): string {

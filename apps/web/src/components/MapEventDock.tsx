@@ -82,6 +82,28 @@ function buildEvents(status: WorldEventsStatus, nowSec: number): TrackableEvent[
     "Last seen {since} ago",
   );
 
+  const sat = status.satellite;
+  let satDetail = "Off map";
+  if (sat.active) {
+    if (sat.phase === "inbound") satDetail = `Inbound @ ${sat.grid ?? "?"}`;
+    else if (sat.phase === "cooling") {
+      satDetail = `Crate too hot @ ${sat.grid ?? "?"}${sat.lootableLabel ? ` · ${sat.lootableLabel}` : ""}`;
+    } else satDetail = `Lootable @ ${sat.grid ?? "?"}`;
+  } else if (sat.phase === "cooldown" && sat.cooldownLabel) {
+    satDetail = `Cooldown ${sat.cooldownLabel}`;
+  } else if (sat.sinceSec) {
+    satDetail = `Last seen ${formatDurationSince(sat.sinceSec, nowSec)}`;
+  }
+  items.push({
+    id: "satellite",
+    label: "Satellite crash",
+    grid: sat.grid,
+    x: sat.x,
+    y: sat.y,
+    active: sat.active,
+    detail: satDetail,
+  });
+
   return items;
 }
 
@@ -100,6 +122,7 @@ const TRACKABLE_LAYER_KEYS = new Set([
   "vendor",
   "bradley",
   "convoy",
+  "satellite",
 ]);
 
 export function isTrackableLayerKey(key: string): key is MapEventTypeKey {

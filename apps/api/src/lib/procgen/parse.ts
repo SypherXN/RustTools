@@ -1,5 +1,5 @@
 import { WorldData } from "rustworld";
-import { BUILDING_BLOCKED_TOPOLOGY, ORE_TOPOLOGY, TerrainTopology } from "./topology.js";
+import { BUILDING_BLOCKED_TOPOLOGY, HQM_TOPOLOGY, ORE_TOPOLOGY, TerrainTopology } from "./topology.js";
 import { TerrainBiome, TerrainSplat } from "./splat.js";
 import { decompressLz4LegacyStream } from "./lz4-legacy-reader.js";
 import { extractTerrainMesh, sampleTerrainChannel } from "./terrain.js";
@@ -22,8 +22,9 @@ const LZ4_FRAME_MAGIC = 0x184d2204;
  * artifacts (height.json, overlays). Servers with older meta.json are
  * re-parsed from source.map on API startup.
  * v2: fixed misaligned terrain buffers corrupting heights on some maps.
+ * v3: HQM spawn-ground heatmap (Decor/Cliffside/Clutter).
  */
-export const PROCGEN_PARSER_VERSION = 2;
+export const PROCGEN_PARSER_VERSION = 3;
 
 interface RustWorldInstance {
   size: number;
@@ -203,6 +204,7 @@ function sampleSplatChannel(splat: TerrainMapLike, channel: number, x: number, z
 }
 
 function sampleBiomeChannel(biome: TerrainMapLike, channel: number, x: number, z: number): number {
+  if (channel >= (biome.data?.length ?? 0)) return 0;
   return sampleTerrainChannel(biome, channel, x, z) / 255;
 }
 
@@ -252,6 +254,24 @@ function rasterStonesHeatmap(splat: TerrainMapLike, outSize: number): Uint8Array
         const a = Math.min(255, Math.floor(90 + stones * 220));
         setPixel(rgba, outSize, x, z, 230, 240, 255, a);
       }
+    }
+  }
+  return rgba;
+}
+
+function rasterHqmHeatmap(topology: TerrainMapLike, biome: TerrainMapLike, outSize: number): Uint8Array {
+  const rgba = createRgbaBuffer(outSize);
+  for (let z = 0; z < outSize; z++) {
+    for (let x = 0; x < outSize; x++) {
+      const wx = (x / outSize) * topology.worldSize;
+      const wz = (z / outSize) * topology.worldSize;
+      const value = sampleTopology(topology, wx, wz);
+      if ((value & HQM_TOPOLOGY) === 0) continue;
+      const clutter = (value & TerrainTopology.CLUTTER) !== 0;
+      const jungle = sampleBiomeChannel(biome, TerrainBiome.JUNGLE, wx, wz);
+      const base = clutter ? 210 : (value & TerrainTopology.DECOR) !== 0 ? 170 : 130;
+      const a = Math.min(255, Math.floor(base + jungle * 70));
+      setPixel(rgba, outSize, x, z, 186, 210, 230, a);
     }
   }
   return rgba;
@@ -343,6 +363,7 @@ export function buildProcgenArtifacts(buffer: Buffer): ProcgenParseResult {
   const overlays: Record<ProcgenOverlayId, Uint8Array> = {
     "building-blocked": rasterBuildingBlocked(topology, overlaySize),
     "heatmap-ores": rasterOreHeatmap(topology, overlaySize),
+    "heatmap-hqm": rasterHqmHeatmap(topology, biome, overlaySize),
     "heatmap-stones": rasterStonesHeatmap(splat, overlaySize),
     "heatmap-sulfur": rasterSulfurHeatmap(topology, biome, overlaySize),
   };

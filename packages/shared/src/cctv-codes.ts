@@ -3,7 +3,13 @@ import cctvData from "./data/cctv-codes.json" with { type: "json" };
 export interface CctvEntry {
   codes: string[];
   dynamic: boolean;
+  /** Extra monument-specific caveats (wipe suffixes, in-game-only IDs). */
+  notes?: string;
 }
+
+/** Most public servers leave Rust+ camera streaming off. Codes are still useful in-game. */
+export const CCTV_STREAMING_DISCLAIMER =
+  "Most servers disable Rust+ camera streaming (`cctvrender.enabled`). Monument IDs are for in-game Computer Stations — connecting here only works if the server owner turned streaming on.";
 
 const CCTV_BY_NAME = cctvData as Record<string, CctvEntry>;
 
@@ -79,4 +85,23 @@ export function listStaticCctvCodes(): string[] {
     for (const code of entry.codes) codes.add(code);
   }
   return [...codes].sort();
+}
+
+export interface CctvReferenceMonument {
+  monument: string;
+  codes: string[];
+  dynamic: boolean;
+  notes?: string;
+}
+
+/** Full CCTV reference for UI (static IDs and dynamic prefixes). */
+export function listCctvReference(): CctvReferenceMonument[] {
+  return Object.entries(CCTV_BY_NAME)
+    .map(([monument, entry]) => ({
+      monument,
+      codes: entry.codes,
+      dynamic: entry.dynamic,
+      notes: entry.notes,
+    }))
+    .sort((a, b) => a.monument.localeCompare(b.monument));
 }

@@ -145,6 +145,18 @@ const demoWorldEventsStatus = {
     egressInSec: null,
     trail: [],
   },
+  satellite: {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: null,
+    phase: "idle" as const,
+    lootableInSec: null,
+    lootableLabel: null,
+    cooldownInSec: null,
+    cooldownLabel: null,
+  },
   oilRigs: {
     small: {
       triggered: false,
@@ -177,6 +189,8 @@ const demoWorldEventsStatus = {
     bradleyLastDespawnAt: Math.floor(Date.now() / 1000) - 5000,
     convoyLastSpawnAt: null,
     convoyLastDespawnAt: null,
+    satelliteLastSpawnAt: null,
+    satelliteLastDespawnAt: null,
     oilSmallLastTriggeredAt: null,
     oilLargeLastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
   },

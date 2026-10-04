@@ -13,6 +13,7 @@ import type { ProcgenOverlayId } from "./lib/procgen/types.js";
 const OVERLAY_IDS: ProcgenOverlayId[] = [
   "building-blocked",
   "heatmap-ores",
+  "heatmap-hqm",
   "heatmap-stones",
   "heatmap-sulfur",
 ];

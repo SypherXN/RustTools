@@ -1,11 +1,13 @@
 {
   "Apartment Complex": {
     "codes": ["RADTOWNAPARTMENTS"],
-    "dynamic": false
+    "dynamic": false,
+    "notes": "RADTOWNAPARTMENTS is the only published apartment camera ID. Rented-room cameras are shown on the basement security terminal in-game and are not listed publicly. Most servers leave Rust+ camera streaming off."
   },
   "Radtown": {
     "codes": ["RADTOWNAPARTMENTS", "RADTOWNHOUSE", "RADTOWNSBL"],
-    "dynamic": false
+    "dynamic": false,
+    "notes": "RADTOWNAPARTMENTS is the public apartment feed. Per-room apartment cameras are in-game only (basement security terminal)."
   },
   "Abandoned Military Base": {
     "codes": ["COMPOUND******", "OUTDOOR******"],
@@ -16,8 +18,9 @@
     "dynamic": false
   },
   "Bandit Camp": {
-    "codes": ["TOWNWEAPONS", "CASINO"],
-    "dynamic": false
+    "codes": ["TOWNWEAPONS", "CASINO", "AIRWOLF"],
+    "dynamic": false,
+    "notes": "AIRWOLF is the Air Wolf helipad camera (Livestock). The pad starts broken each wipe until players repair it."
   },
   "Dome": {
     "codes": ["DOME1", "DOMETOP"],
@@ -71,7 +74,8 @@
       "SPECTRE****",
       "TECHCABINET****"
     ],
-    "dynamic": true
+    "dynamic": true,
+    "notes": "SPECTRE is a confirmed 4-digit wipe-suffix prefix (same family as LAB**** / DOCK****). Copy SPECTRE#### from the lab computer station each wipe. RustTools cannot verify the live suffix — most servers disable CCTV streaming."
   },
   "Cargo Ship": {
     "codes": ["CARGODECK", "CARGOBRIDGE", "CARGOSTERN", "CARGOHOLD1", "CARGOHOLD2"],

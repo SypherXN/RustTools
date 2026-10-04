@@ -14,6 +14,7 @@ export type EventChatCommand =
   | "vendor"
   | "bradley"
   | "convoy"
+  | "satellite"
   | "events";
 
 const EVENT_COMMANDS: Record<string, EventChatCommand> = {
@@ -28,6 +29,9 @@ const EVENT_COMMANDS: Record<string, EventChatCommand> = {
   "!vendor": "vendor",
   "!bradley": "bradley",
   "!convoy": "convoy",
+  "!satellite": "satellite",
+  "!sat": "satellite",
+  "!satcrash": "satellite",
   "!events": "events",
 };
 
@@ -62,6 +66,27 @@ function formatEntityStatus(
     return `RustTools ${name}: not on map (last seen ${formatDurationSince(last, nowSec)})`;
   }
   return `RustTools ${name}: not on map`;
+}
+
+function formatSatelliteStatus(status: WorldEventsStatus, nowSec: number): string {
+  const crash = status.satellite;
+  if (crash.active && crash.grid) {
+    const since = formatDurationSince(crash.sinceSec, nowSec);
+    let line = `RustTools Satellite crash: ${crash.phase} @ ${crash.grid} (since ${since})`;
+    if (crash.phase === "cooling" && crash.lootableLabel) {
+      line += ` · crate lootable in ${crash.lootableLabel}`;
+    }
+    if (crash.phase === "lootable") line += " · crate lootable";
+    if (crash.phase === "inbound") line += " · inbound";
+    return line;
+  }
+  if (crash.phase === "cooldown" && crash.cooldownLabel) {
+    return `RustTools Satellite crash: cooldown ${crash.cooldownLabel}`;
+  }
+  if (crash.sinceSec != null) {
+    return `RustTools Satellite crash: not on map (last seen ${formatDurationSince(crash.sinceSec, nowSec)})`;
+  }
+  return "RustTools Satellite crash: not on map";
 }
 
 function formatOilRigStatus(kind: OilRigKind, status: WorldEventsStatus, nowSec: number): string {
@@ -105,6 +130,8 @@ export function formatEventChatCommandResponse(
       return formatEntityStatus("Bradley APC", status.bradley, nowSec);
     case "convoy":
       return formatEntityStatus("Convoy", status.convoy, nowSec);
+    case "satellite":
+      return formatSatelliteStatus(status, nowSec);
     case "events": {
       const lines = [
         formatEntityStatus("Cargo", status.cargo, nowSec),
@@ -113,6 +140,7 @@ export function formatEventChatCommandResponse(
         formatEntityStatus("Vendor", status.vendor, nowSec),
         formatEntityStatus("Bradley", status.bradley, nowSec),
         formatEntityStatus("Convoy", status.convoy, nowSec),
+        formatSatelliteStatus(status, nowSec),
         formatOilRigStatus("small", status, nowSec),
         formatOilRigStatus("large", status, nowSec),
       ];

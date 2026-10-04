@@ -11,6 +11,7 @@ const EVENT_TYPE_LABELS: Record<MapEventTypeKey, string> = {
   vendor: "Traveling vendor",
   bradley: "Bradley",
   convoy: "Convoy",
+  satellite: "Satellite crash",
   crate: "Crates",
   other: "Other events",
 };
@@ -203,6 +204,11 @@ export function MapLayersPanel({
               label="Ore heatmap"
             />
             <LayerCheckbox
+              checked={procgenLayers.heatmapHqm}
+              onChange={() => onToggleProcgenLayer("heatmapHqm")}
+              label="HQM spawn ground"
+            />
+            <LayerCheckbox
               checked={procgenLayers.heatmapStones}
               onChange={() => onToggleProcgenLayer("heatmapStones")}
               label="Stone heatmap"
@@ -227,6 +233,9 @@ export function MapLayersPanel({
               onChange={() => onToggleProcgenLayer("icebergs")}
               label="Icebergs"
             />
+            <p className="muted" style={{ margin: "0.35rem 0 0", fontSize: "0.8rem" }}>
+              HQM overlay is spawn ground (Decor/Cliffside/Clutter). Map files do not mark HQM vs other ores.
+            </p>
           </div>
         </details>
       )}

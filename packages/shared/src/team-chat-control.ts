@@ -65,6 +65,9 @@ export function isTeamChatBotCommand(message: string): boolean {
     /^!vendor\b/i.test(text) ||
     /^!bradley\b/i.test(text) ||
     /^!convoy\b/i.test(text) ||
+    /^!satellite\b/i.test(text) ||
+    /^!satcrash\b/i.test(text) ||
+    /^!sat\b/i.test(text) ||
     /^!events\b/i.test(text)
   );
 }

@@ -33,6 +33,7 @@ export const DEFAULT_MAP_EVENT_TYPES = [
   "oil",
   "bradley",
   "convoy",
+  "satellite",
 ];
 
 export const DEFAULT_LEGACY_AUTOMATION_SETTINGS: LegacyAutomationSettings = {

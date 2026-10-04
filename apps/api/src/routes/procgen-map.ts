@@ -18,6 +18,7 @@ import {
 const OVERLAY_IDS = new Set<ProcgenOverlayId>([
   "building-blocked",
   "heatmap-ores",
+  "heatmap-hqm",
   "heatmap-stones",
   "heatmap-sulfur",
 ]);

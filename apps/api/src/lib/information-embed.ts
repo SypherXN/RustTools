@@ -177,6 +177,18 @@ export async function buildInformationEmbed(
         worldEvents.vendor.sinceSec,
         nowSec,
       ),
+      formatEventLine(
+        "Satellite",
+        worldEvents.satellite.active,
+        worldEvents.satellite.grid,
+        worldEvents.satellite.sinceSec,
+        nowSec,
+        worldEvents.satellite.phase === "cooling" && worldEvents.satellite.lootableLabel
+          ? `crate in ${worldEvents.satellite.lootableLabel}`
+          : worldEvents.satellite.phase === "cooldown" && worldEvents.satellite.cooldownLabel
+            ? `cooldown ${worldEvents.satellite.cooldownLabel}`
+            : undefined,
+      ),
     ].join("\n");
 
     const oilSmall = worldEvents.oilRigs.small;

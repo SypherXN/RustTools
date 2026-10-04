@@ -925,8 +925,8 @@ export function SettingsPage() {
       <section className="card">
         <h2>Event Timers</h2>
         <p className="muted">
-          Adjust countdowns for cargo egress, oil rig locked crate unlock, and team chat reminders before
-          unlock.
+          Adjust countdowns for cargo egress, oil rig locked crate unlock, satellite crash crate cool, and team
+          chat reminders before unlock.
         </p>
         {notifications && (
           <div className="form-stack">
@@ -994,6 +994,40 @@ export function SettingsPage() {
                     .filter((n) => Number.isFinite(n) && n > 0);
                   updateEventTimers("oilCrateReminderMinutes", values.length ? values : [10, 5, 1]);
                 }}
+              />
+            </label>
+            <label>
+              Satellite crate cool (seconds)
+              <input
+                type="number"
+                min={60}
+                max={1800}
+                step={30}
+                value={notifications.settings.eventTimers.satelliteCrateCoolSeconds ?? 300}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateEventTimers(
+                    "satelliteCrateCoolSeconds",
+                    Math.max(60, Number(e.target.value) || 300),
+                  )
+                }
+              />
+            </label>
+            <label>
+              Satellite cooldown (seconds)
+              <input
+                type="number"
+                min={300}
+                max={7200}
+                step={60}
+                value={notifications.settings.eventTimers.satelliteCooldownSeconds ?? 2100}
+                disabled={notificationsSaving || !canAdmin}
+                onChange={(e) =>
+                  updateEventTimers(
+                    "satelliteCooldownSeconds",
+                    Math.max(300, Number(e.target.value) || 2100),
+                  )
+                }
               />
             </label>
           </div>

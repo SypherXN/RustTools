@@ -40,7 +40,7 @@ export function CameraFeedPlaceholder({ mode, cameraId }: CameraFeedPlaceholderP
               Connecting to <code>{cameraId}</code>
             </>
           ) : (
-            <>Select a saved camera or enter a CCTV ID above to connect</>
+            <>Select a saved camera or enter a CCTV ID above. Most servers block Rust+ camera streaming.</>
           )}
         </p>
 

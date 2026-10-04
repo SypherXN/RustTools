@@ -26,6 +26,7 @@ const TEAM_CHAT_SLASH = [
   { name: "vendor", description: "Traveling vendor status and location" },
   { name: "bradley", description: "Bradley APC status and location" },
   { name: "convoy", description: "Convoy status and location" },
+  { name: "satellite", description: "Satellite crash status, crate cool, and cooldown" },
   { name: "large", description: "Large oil rig crate unlock status" },
   { name: "small", description: "Small oil rig crate unlock status" },
   { name: "events", description: "Summary of all tracked world events" },

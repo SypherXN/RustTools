@@ -2,6 +2,7 @@ import type { MapCoordinateTransform } from "@rusttools/shared";
 import {
   isBradleyMarker,
   isConvoyMarker,
+  isSatelliteCrashMarker,
   isTravelingVendorMarker,
   MAP_MARKER_TYPE,
   worldLengthToMapPixels,
@@ -61,6 +62,7 @@ export type MapEventTypeKey =
   | "vendor"
   | "bradley"
   | "convoy"
+  | "satellite"
   | "crate"
   | "other";
 
@@ -71,6 +73,7 @@ export interface MapEventTypeLayers {
   vendor: boolean;
   bradley: boolean;
   convoy: boolean;
+  satellite: boolean;
   crate: boolean;
   other: boolean;
 }
@@ -93,6 +96,7 @@ export const DEFAULT_EVENT_TYPE_LAYERS: MapEventTypeLayers = {
   vendor: true,
   bradley: true,
   convoy: true,
+  satellite: true,
   crate: true,
   other: true,
 };
@@ -106,6 +110,7 @@ export function classifyMapEventMarker(marker: MapMarkerPoint): MapEventTypeKey 
   if (isTravelingVendorMarker(marker)) return "vendor";
   if (isBradleyMarker(marker)) return "bradley";
   if (isConvoyMarker(marker)) return "convoy";
+  if (isSatelliteCrashMarker(marker)) return "satellite";
   if (marker.type === MAP_MARKER_TYPE.CRATE) return "crate";
   return "other";
 }

@@ -387,6 +387,7 @@ AUTOMATION_SAM_SWITCH_ENTITY_ID=12345
 
 AUTOMATION_EVENT_TEAM_CHAT=true
 AUTOMATION_EVENT_DISCORD=true
+# Comma-separated: cargo, chinook, heli, vendor, oil, bradley, convoy, satellite
 AUTOMATION_EVENT_TYPES=cargo,chinook,heli
 AUTOMATION_EVENT_TEAM_CHAT_PREFIX=RustTools
 # Optional: route event alerts to a different Discord channel than raid alarms
@@ -650,7 +651,7 @@ The npm script on a dev machine is the easiest path. After registration, command
 
 **Core:** `/help`, `/status`, `/devices`, `/switch`, `/alias`, `/alarm`, `/storage`, `/team`, `/time`, `/deepsea`, `/chat`, `/send`, `/map`, `/pair`, `/link`
 
-**Team & world (mirror in-game `!` commands):** `/online`, `/offline`, `/afk`, `/alive`, `/leader`, `/cargo`, `/heli`, `/chinook`, `/vendor`, `/bradley`, `/convoy`, `/large`, `/small`, `/events`, `/upkeep`
+**Team & world (mirror in-game `!` commands):** `/online`, `/offline`, `/afk`, `/alive`, `/leader`, `/cargo`, `/heli`, `/chinook`, `/vendor`, `/bradley`, `/convoy`, `/satellite`, `/large`, `/small`, `/events`, `/upkeep`
 
 **Admin:** `/channel show|set|clear`, `/blacklist add|remove|list`, `/mute`, `/unmute`
 

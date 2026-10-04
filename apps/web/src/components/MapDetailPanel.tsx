@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, formatRustGameDataLabel, getCctvForMonument, getMonumentInfo } from "@rusttools/shared";
+import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, formatRustGameDataLabel, getCctvForMonument, getMonumentInfo, CCTV_STREAMING_DISCLAIMER } from "@rusttools/shared";
 import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
@@ -125,7 +125,7 @@ function MonumentDetails({
         <>
           <h4>CCTV codes</h4>
           {cctv.dynamic && (
-            <p className="muted">Dynamic codes — suffix varies per wipe; check in-game terminal.</p>
+            <p className="muted">Dynamic codes — 4-digit suffix varies per wipe; copy from the in-game computer station.</p>
           )}
           <ul className="map-detail-cctv">
             {cctv.codes.map((code) => (
@@ -134,6 +134,8 @@ function MonumentDetails({
               </li>
             ))}
           </ul>
+          {cctv.notes && <p className="muted">{cctv.notes}</p>}
+          <p className="muted">{CCTV_STREAMING_DISCLAIMER}</p>
         </>
       )}
       {info.notes.length > 0 && (

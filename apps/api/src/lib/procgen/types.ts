@@ -1,6 +1,7 @@
 export type ProcgenOverlayId =
   | "building-blocked"
   | "heatmap-ores"
+  | "heatmap-hqm"
   | "heatmap-stones"
   | "heatmap-sulfur";
 

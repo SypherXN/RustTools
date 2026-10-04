@@ -12,7 +12,7 @@ export function formatWebHelpCategories(): WebHelpCategory[] {
     },
     {
       name: "World events",
-      commands: ["!cargo", "!heli", "!chinook", "!vendor", "!bradley", "!convoy", "!large", "!small", "!events"],
+      commands: ["!cargo", "!heli", "!chinook", "!vendor", "!bradley", "!convoy", "!satellite", "!large", "!small", "!events"],
     },
     {
       name: "World & TC",
@@ -53,7 +53,7 @@ export function formatTeamChatHelpReplies(fromDiscord = false): string[] {
     [
       "RustTools help (1/3)",
       "Team: !online !offline !afk !alive !leader",
-      "Events: !cargo !heli !chinook !bradley !convoy !large !small !vendor !events",
+      "Events: !cargo !heli !chinook !bradley !convoy !satellite !large !small !vendor !events",
       "World: !deepsea !ds · TC: !upkeepdetail",
     ].join(" · "),
     [
@@ -106,7 +106,7 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       name: "World events",
       value: [
         "`/cargo` `/heli` `/chinook` `/vendor`",
-        "`/bradley` `/convoy` `/large` `/small`",
+        "`/bradley` `/convoy` `/satellite` `/large` `/small`",
         "`/events` — all tracked events",
       ].join("\n"),
     },

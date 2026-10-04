@@ -308,6 +308,20 @@ export function DashboardPage() {
                 </dd>
               </div>
               <div>
+                <dt>Satellite crash</dt>
+                <dd>
+                  {worldEvents.satellite.active
+                    ? worldEvents.satellite.phase === "cooling" && worldEvents.satellite.lootableLabel
+                      ? `Crate too hot @ ${worldEvents.satellite.grid ?? "?"} · ${worldEvents.satellite.lootableLabel}`
+                      : worldEvents.satellite.phase === "inbound"
+                        ? `Inbound @ ${worldEvents.satellite.grid ?? "?"}`
+                        : `Lootable @ ${worldEvents.satellite.grid ?? "?"}`
+                    : worldEvents.satellite.phase === "cooldown" && worldEvents.satellite.cooldownLabel
+                      ? `Cooldown ${worldEvents.satellite.cooldownLabel}`
+                      : `Off map (last ${formatDurationSince(worldEvents.satellite.sinceSec, nowSec)})`}
+                </dd>
+              </div>
+              <div>
                 <dt>Small Oil Rig</dt>
                 <dd>
                   {worldEvents.oilRigs.small.triggered

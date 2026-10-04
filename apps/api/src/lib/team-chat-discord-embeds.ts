@@ -72,6 +72,34 @@ function formatEventField(
   return { name: label, value: "Not on map", inline: true };
 }
 
+function formatSatelliteField(
+  status: WorldEventsStatus,
+  nowSec: number,
+): { name: string; value: string; inline: boolean } {
+  const crash = status.satellite;
+  if (crash.active && crash.grid) {
+    const since = formatDurationSince(crash.sinceSec, nowSec);
+    let value = `**${crash.grid}** · since ${since}`;
+    if (crash.phase === "inbound") value += "\nInbound";
+    if (crash.phase === "cooling" && crash.lootableLabel) {
+      value += `\nCrate lootable in ${crash.lootableLabel}`;
+    }
+    if (crash.phase === "lootable") value += "\nCrate lootable";
+    return { name: "Satellite crash ● active", value, inline: true };
+  }
+  if (crash.phase === "cooldown" && crash.cooldownLabel) {
+    return { name: "Satellite crash", value: `Cooldown ${crash.cooldownLabel}`, inline: true };
+  }
+  if (crash.sinceSec != null) {
+    return {
+      name: "Satellite crash",
+      value: `Offline · last ${formatDurationSince(crash.sinceSec, nowSec)}`,
+      inline: true,
+    };
+  }
+  return { name: "Satellite crash", value: "Not on map", inline: true };
+}
+
 function formatOilField(
   kind: "large" | "small",
   status: WorldEventsStatus,
@@ -215,6 +243,16 @@ export function buildEventEmbed(
     };
   }
 
+  if (command === "satellite") {
+    const field = formatSatelliteField(status, nowSec);
+    return {
+      title: "Satellite crash",
+      color: field.name.includes("●") ? EMBED_COLORS.active : EMBED_COLORS.muted,
+      fields: [field],
+      footer: { text: "RustTools" },
+    };
+  }
+
   const titles = {
     cargo: "Cargo Ship",
     heli: "Patrol Helicopter",
@@ -266,6 +304,7 @@ export function buildEventsSummaryEmbed(
     formatEventField("Vendor", status.vendor, nowSec),
     formatEventField("Bradley", status.bradley, nowSec),
     formatEventField("Convoy", status.convoy, nowSec),
+    formatSatelliteField(status, nowSec),
     formatOilField("small", status, nowSec),
     formatOilField("large", status, nowSec),
   ];

@@ -13,6 +13,10 @@ export interface EventTimerSettings {
   oilCrateReminderMinutes: number[];
   /** World units — chinook/crate within this distance of rig counts as triggered. */
   oilRigProximityUnits: number;
+  /** Locked satellite crate after landing (community default ~5 min). */
+  satelliteCrateCoolSeconds: number;
+  /** Time from wreckage despawn to the next crash window (~30–40 min). */
+  satelliteCooldownSeconds: number;
 }
 
 export const DEFAULT_EVENT_TIMER_SETTINGS: EventTimerSettings = {
@@ -20,6 +24,8 @@ export const DEFAULT_EVENT_TIMER_SETTINGS: EventTimerSettings = {
   oilCrateUnlockSeconds: 900,
   oilCrateReminderMinutes: [10, 5, 1],
   oilRigProximityUnits: 250,
+  satelliteCrateCoolSeconds: 300,
+  satelliteCooldownSeconds: 2100,
 };
 
 export interface TrailPoint {
@@ -47,6 +53,21 @@ export interface OilRigSnapshot {
   lastTriggeredAt: number | null;
 }
 
+export type SatelliteCrashPhase = "idle" | "inbound" | "cooling" | "lootable" | "cooldown";
+
+export interface SatelliteCrashSnapshot {
+  active: boolean;
+  x: number | null;
+  y: number | null;
+  grid: string | null;
+  sinceSec: number | null;
+  phase: SatelliteCrashPhase;
+  lootableInSec: number | null;
+  lootableLabel: string | null;
+  cooldownInSec: number | null;
+  cooldownLabel: string | null;
+}
+
 export interface WorldEventStats {
   cargoLastSpawnAt: number | null;
   cargoLastDespawnAt: number | null;
@@ -61,6 +82,8 @@ export interface WorldEventStats {
   bradleyLastDespawnAt: number | null;
   convoyLastSpawnAt: number | null;
   convoyLastDespawnAt: number | null;
+  satelliteLastSpawnAt: number | null;
+  satelliteLastDespawnAt: number | null;
   oilSmallLastTriggeredAt: number | null;
   oilLargeLastTriggeredAt: number | null;
 }
@@ -73,6 +96,7 @@ export interface WorldEventsStatus {
   vendor: TrackedEntitySnapshot;
   bradley: TrackedEntitySnapshot;
   convoy: TrackedEntitySnapshot;
+  satellite: SatelliteCrashSnapshot;
   oilRigs: Record<OilRigKind, OilRigSnapshot>;
   stats: WorldEventStats;
 }
@@ -190,8 +214,78 @@ export function emptyWorldEventStats(): WorldEventStats {
     bradleyLastDespawnAt: null,
     convoyLastSpawnAt: null,
     convoyLastDespawnAt: null,
+    satelliteLastSpawnAt: null,
+    satelliteLastDespawnAt: null,
     oilSmallLastTriggeredAt: null,
     oilLargeLastTriggeredAt: null,
+  };
+}
+
+export function emptySatelliteCrashSnapshot(): SatelliteCrashSnapshot {
+  return {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: null,
+    phase: "idle",
+    lootableInSec: null,
+    lootableLabel: null,
+    cooldownInSec: null,
+    cooldownLabel: null,
+  };
+}
+
+export function buildSatelliteCrashSnapshot(
+  active: { x: number; y: number; sinceSec: number } | null,
+  extras: {
+    crateCoolUntil: number | null;
+    cooldownUntil: number | null;
+    lastDespawnAt: number | null;
+    lastSpawnAt: number | null;
+  },
+  worldSize: number,
+  nowSec: number,
+): SatelliteCrashSnapshot {
+  const lootableInSec =
+    extras.crateCoolUntil != null ? Math.max(0, extras.crateCoolUntil - nowSec) : null;
+  const cooldownInSec =
+    extras.cooldownUntil != null ? Math.max(0, extras.cooldownUntil - nowSec) : null;
+
+  if (active) {
+    const phase: SatelliteCrashPhase =
+      extras.crateCoolUntil == null
+        ? "inbound"
+        : lootableInSec != null && lootableInSec > 0
+          ? "cooling"
+          : "lootable";
+    return {
+      active: true,
+      x: active.x,
+      y: active.y,
+      grid: worldToGridLabel(active.x, active.y, worldSize),
+      sinceSec: active.sinceSec,
+      phase,
+      lootableInSec: phase === "inbound" ? null : lootableInSec,
+      lootableLabel: phase === "inbound" ? null : formatCountdown(lootableInSec),
+      cooldownInSec: null,
+      cooldownLabel: null,
+    };
+  }
+
+  const phase: SatelliteCrashPhase =
+    cooldownInSec != null && cooldownInSec > 0 ? "cooldown" : "idle";
+  return {
+    active: false,
+    x: null,
+    y: null,
+    grid: null,
+    sinceSec: extras.lastDespawnAt ?? extras.lastSpawnAt,
+    phase,
+    lootableInSec: null,
+    lootableLabel: null,
+    cooldownInSec: phase === "cooldown" ? cooldownInSec : null,
+    cooldownLabel: phase === "cooldown" ? formatCountdown(cooldownInSec) : null,
   };
 }
 
@@ -242,7 +336,14 @@ export function buildTrackedEntitySnapshot(
   };
 }
 
-export type WorldEventEntity = "cargo" | "heli" | "chinook" | "vendor" | "bradley" | "convoy";
+export type WorldEventEntity =
+  | "cargo"
+  | "heli"
+  | "chinook"
+  | "vendor"
+  | "bradley"
+  | "convoy"
+  | "satellite";
 
 export type WorldEventAnnouncementKind =
   | "spawn"
@@ -252,7 +353,8 @@ export type WorldEventAnnouncementKind =
   | "oil_triggered"
   | "oil_crate_unlocked"
   | "oil_reminder"
-  | "vendor_despawn";
+  | "vendor_despawn"
+  | "satellite_lootable";
 
 export interface WorldEventAnnouncement {
   kind: WorldEventAnnouncementKind;
@@ -277,9 +379,14 @@ export function formatWorldEventAnnouncement(
 
   switch (announcement.kind) {
     case "spawn":
+      if (announcement.entity === "satellite") {
+        return `[${prefix}] Satellite crash${at} — crate too hot ~5 min after landing`;
+      }
       return `[${prefix}] ${announcement.label ?? announcement.entity} spawned${at}`;
     case "despawn":
       return `[${prefix}] ${announcement.label ?? announcement.entity} left the map`;
+    case "satellite_lootable":
+      return `[${prefix}] Satellite crash crate lootable${at}`;
     case "heli_down":
       return `[${prefix}] Patrol heli downed${at}`;
     case "cargo_egress":

@@ -45,7 +45,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       lootReset: "Shop stock only — no monument loot crates.",
       recyclers: [{ count: 1, efficiency: "40% (safe zone, 8s)", location: "Near shops" }],
       workbench: "Tier 1",
-      notes: ["No PvP or damage", "Casino and blackjack"],
+      notes: [
+        "No PvP or damage",
+        "Casino and blackjack",
+        "Air Wolf helipad starts broken each wipe. Repair it (30,000 wood, 10,000 metal fragments, 100 rope) before the vendor sells aircraft; it stays fixed for the wipe",
+      ],
     },
   },
   {
@@ -63,7 +67,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
         "Rented rooms are combat zones; monument exterior is safe zone",
         "Basement security terminal and master keys (~1000 scrap) for break-ins",
         "Repair bench, research table, elevators, mailboxes, playground",
-        "CCTV: RADTOWNAPARTMENTS (+ per-room feeds in-game)",
+        "CCTV: RADTOWNAPARTMENTS is the only published ID — rented-room cameras are on the basement security terminal in-game (no public list). Most servers disable Rust+ camera streaming.",
         "Rentable shops refrigerate food when Power Plant grid is active",
       ],
     },
@@ -135,7 +139,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       keycards: "Green",
       notes: [
         "Recycler inside green-card + fuse puzzle room",
-        "Three crude pumps (hose to vehicle tanker) — enabled via Oil Rig switch when grid is up",
+        "Three crude pumps (hose to vehicle tanker) — Oil Rig switch starts flow 15 minutes later when the grid is up",
         "Fuel pumps hold 1,000 crude each (Breach and Clear)",
         "Exposed loot at the top",
       ],
@@ -150,7 +154,10 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       lootReset: "Puzzle loot resets after containers are looted (timer starts on first open).",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
       keycards: "Green",
-      notes: ["Underground tunnels"],
+      notes: [
+        "Underground tunnels",
+        "Power-grid loot room: 4 heavy fuses from Power Plant (Livestock)",
+      ],
     },
   },
   {
@@ -163,7 +170,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
       scientists: "Small harbor: few · Large harbor: armed scientists",
       keycards: "Green (large harbor)",
-      notes: ["Boat spawns", "Two size variants on map"],
+      notes: [
+        "Boat spawns",
+        "Two size variants on map",
+        "Power-grid loot room (1 heavy fuse): large harbor 4 basic crates; small harbor 3 basic + 1 military",
+      ],
     },
   },
   {
@@ -179,6 +190,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       scientists: "5–7 patrolling",
       notes: [
         "Control tower terminals (grid-powered): faster airdrops or Chinook resupply crate",
+        "Power-grid loot room: 4 heavy fuses, basic and military crates (Livestock)",
         "Helicopter can visit",
         "Bradley APC nearby on some maps",
       ],
@@ -193,7 +205,10 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       lootReset: "Puzzle loot resets after containers are looted.",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
       keycards: "Green",
-      notes: ["Multiple loot buildings"],
+      notes: [
+        "Multiple loot buildings",
+        "Power-grid loot room: 4 heavy fuses, includes military crates (Livestock)",
+      ],
     },
   },
   {
@@ -208,6 +223,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       notes: [
         "Gearboxes pressurize tank (~3 h each; ~6 h at full pressure) — output scales with pressure",
         "Roadside water pipes are empty until WTP is maintained; pipes lose water when tank depletes",
+        "Power-grid loot room: 4 heavy fuses from Power Plant (Livestock)",
         "Large footprint",
       ],
     },
@@ -225,7 +241,10 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       keycards: "Green + Blue",
       notes: [
         "Heavy fuses in green card room restore island-wide power stages (fuses decay over time)",
+        "The small heavy-fuse box can be reached from outside through a broken window",
+        "Fuse decay is about 4× slower at 10 or fewer players and returns to normal at 100 or more",
         "Bonus loot room unlocks at higher grid stages",
+        "Heavy fuses also open extra loot rooms at Airfield, Ferry Terminal, both Harbors, Junkyard, Launch Site, Military Tunnels, Missile Silo, Radtown, Sewer Branch, Train Yard, and Water Treatment",
         "Powers marketplace, Dome crude pumps, WTP pipes, Airfield terminals, and more",
         "High foot traffic",
       ],
@@ -247,6 +266,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       notes: [
         "Monument blockers in red puzzle rooms (destroy once, no respawn — Breach and Clear)",
         "Satellite Crash terminal — steer a satellite impact when grid is restored (Power Trip)",
+        "Power-grid loot rooms: 10 heavy fuses, two rooms of 2 basic + 2 military crates each (Livestock)",
         "Bradley APC: ~60 min default respawn (server configurable)",
         "Highest-tier puzzle loot",
       ],
@@ -264,6 +284,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       scientists: "~29 armed scientists",
       notes: [
         "Monument blockers in red puzzle rooms (Breach and Clear)",
+        "Power-grid loot room: 10 heavy fuses, 2 basic + 2 military; green-card puzzle still required (Livestock)",
         "Bradley APC outside",
         "No on-site workbench",
       ],
@@ -279,7 +300,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       recyclers: [],
       scientists: "Armed scientists on deck",
       notes: [
-        "Switch in red puzzle room enables Dome crude pumps when island grid is up (Power Trip)",
+        "Switch in red puzzle room starts Dome crude 15 minutes later when the island grid is up",
         "Requires boat or air transport",
         "Locked crate marker appears on map when hacked",
       ],
@@ -296,7 +317,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       scientists: "Heavy scientist presence",
       keycards: "Green + Blue + Red",
       notes: [
-        "Switch in red puzzle room enables Dome crude pumps when island grid is up (Power Trip)",
+        "Switch in red puzzle room starts Dome crude 15 minutes later when the island grid is up",
         "Requires boat or air transport",
         "One of the highest PvE challenges",
       ],
@@ -321,7 +342,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       radiation: "None",
       lootReset: "Standard crates: ~15 min after looted.",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
-      notes: ["Shredder for car parts", "Good component source"],
+      notes: [
+        "Shredder for car parts",
+        "Good component source",
+        "Power-grid loot room: 1 heavy fuse, 2 military crates (Livestock)",
+      ],
     },
   },
   {
@@ -391,7 +416,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
       keycards: "Green + Blue + Red",
       scientists: "Armed scientists in corridors",
-      notes: ["Rebreather or submarine access", "Multiple module layouts"],
+      notes: [
+        "Rebreather or submarine access",
+        "Multiple module layouts",
+        "CCTV prefixes (including SPECTRE****) use a 4-digit wipe suffix from the lab computer station — not streamable on most servers",
+      ],
     },
   },
   {
@@ -406,6 +435,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       scientists: "Heavy scientist presence on all floors",
       notes: [
         "Monument blockers in red puzzle rooms (Breach and Clear)",
+        "Power-grid loot room at the bottom: 10 heavy fuses, 3 military + 1 basic (Livestock)",
         "Hazmat (50%) works but isn't required — mixed armor kits are common",
         "Some objects deal radiation damage regardless of protection",
         "Longest monument run in the game",
@@ -420,11 +450,27 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       radiation: "15% protection in some areas",
       lootReset: "Standard crates: ~15 min after looted.",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
-      notes: ["CCTV: RADTOWNAPARTMENTS, RADTOWNHOUSE, RADTOWNSBL"],
+      notes: [
+        "CCTV: RADTOWNAPARTMENTS, RADTOWNHOUSE, RADTOWNSBL — apartment room cameras are in-game only",
+        "Power-grid loot room: 4 heavy fuses from Power Plant (Livestock)",
+      ],
     },
   },
   {
-    match: /ranch|barn|cabin/i,
+    match: /ranch/i,
+    info: {
+      category: "Tier 1",
+      description: "The Ranch — livestock vendor for cows, sheep, and wool.",
+      radiation: "None",
+      lootReset: "Vendor stock — not a loot-crate monument.",
+      recyclers: [],
+      notes: [
+        "Buy calves (300 scrap) and lambs (150 scrap); sell grown animals and wool (up to 400)",
+      ],
+    },
+  },
+  {
+    match: /barn|cabin/i,
     info: {
       category: "Tier 1",
       description: "Small rural monument with basic loot spawns.",
@@ -443,7 +489,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       lootReset: "Puzzle loot resets after containers are looted.",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
       scientists: "Armed scientists",
-      notes: ["Cobalt-style PvE monument", "Multiple CCTV feeds"],
+      notes: [
+        "Cobalt-style PvE monument",
+        "Multiple CCTV feeds",
+        "Power-grid loot room: 1 heavy fuse, 3 basic crates (Livestock)",
+      ],
     },
   },
   {

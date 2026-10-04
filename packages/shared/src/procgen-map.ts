@@ -1,6 +1,7 @@
 export type ProcgenOverlayId =
   | "building-blocked"
   | "heatmap-ores"
+  | "heatmap-hqm"
   | "heatmap-stones"
   | "heatmap-sulfur";
 
@@ -76,6 +77,7 @@ export interface MapFootprint {
 export interface MapProcgenLayers {
   buildingBlocked: boolean;
   heatmapOres: boolean;
+  heatmapHqm: boolean;
   heatmapStones: boolean;
   heatmapSulfur: boolean;
   paths: boolean;
@@ -86,6 +88,7 @@ export interface MapProcgenLayers {
 export const DEFAULT_PROCGEN_LAYERS: MapProcgenLayers = {
   buildingBlocked: false,
   heatmapOres: false,
+  heatmapHqm: false,
   heatmapStones: false,
   heatmapSulfur: false,
   paths: false,

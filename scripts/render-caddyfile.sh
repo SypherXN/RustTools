@@ -49,6 +49,19 @@ ${API_DOMAIN} {
 	}
 }
 
+EOF
+
+  extra_dir="${EXTRA_CADDY_DIR:-$HOME/caddy-sites}"
+  if [[ -d "$extra_dir" ]]; then
+    shopt -s nullglob
+    for f in "$extra_dir"/*.caddy; do
+      cat "$f"
+      echo
+    done
+    shopt -u nullglob
+  fi
+
+  cat <<EOF
 :80 {
 	respond "RustTools — configure DOMAIN (and WEB_DOMAIN for UI) in .env" 200
 }

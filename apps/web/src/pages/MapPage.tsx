@@ -548,6 +548,7 @@ export function MapPage() {
       vendor: 0,
       bradley: 0,
       convoy: 0,
+      satellite: 0,
       crate: 0,
       other: 0,
     };
@@ -636,16 +637,16 @@ export function MapPage() {
 
   const trackTarget = useMemo(() => {
     if (trackEventId && worldEvents) {
-      const snap =
-        trackEventId === "cargo"
-          ? worldEvents.cargo
-          : trackEventId === "heli"
-            ? worldEvents.heli
-            : trackEventId === "chinook"
-              ? worldEvents.chinook
-              : trackEventId === "vendor"
-                ? worldEvents.vendor
-                : null;
+      const snaps: Record<string, { x: number | null; y: number | null } | undefined> = {
+        cargo: worldEvents.cargo,
+        heli: worldEvents.heli,
+        chinook: worldEvents.chinook,
+        vendor: worldEvents.vendor,
+        bradley: worldEvents.bradley,
+        convoy: worldEvents.convoy,
+        satellite: worldEvents.satellite,
+      };
+      const snap = snaps[trackEventId];
       if (snap?.x != null && snap?.y != null) {
         return { worldX: snap.x, worldY: snap.y };
       }

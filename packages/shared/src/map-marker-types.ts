@@ -43,3 +43,30 @@ export function isBradleyMarker(marker: { type: number; name: string }): boolean
   }
   return false;
 }
+
+const SATELLITE_CRASH_TYPES = new Set<number>([
+  MAP_MARKER_TYPE.GENERIC,
+  MAP_MARKER_TYPE.CRATE,
+  MAP_MARKER_TYPE.EXPLOSION,
+]);
+
+/**
+ * Satellite crash world event (Launch Site terminal). Rust+ has no dedicated
+ * marker type — match named GENERIC/CRATE/EXPLOSION. Exclude Satellite Dish.
+ */
+export function isSatelliteCrashMarker(marker: { type: number; name: string }): boolean {
+  if (!SATELLITE_CRASH_TYPES.has(marker.type)) return false;
+  const name = marker.name.trim();
+  if (!name) return false;
+  if (/dish/i.test(name)) return false;
+  return (
+    /\bsatellite\b/i.test(name) ||
+    /satcrash/i.test(name) ||
+    /sat(?:ellite)?[\s_-]*crash/i.test(name)
+  );
+}
+
+/** True when the crash marker looks landed (not the inbound explosion ping). */
+export function isGroundedSatelliteCrashMarker(marker: { type: number; name: string }): boolean {
+  return isSatelliteCrashMarker(marker) && marker.type !== MAP_MARKER_TYPE.EXPLOSION;
+}

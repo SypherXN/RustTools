@@ -25,6 +25,7 @@ const SHOW_WATER = true;
 const PROCGEN_OVERLAYS: Array<{ layer: keyof MapProcgenLayers; id: string; opacity: number }> = [
   { layer: "buildingBlocked", id: "building-blocked", opacity: 0.75 },
   { layer: "heatmapOres", id: "heatmap-ores", opacity: 1 },
+  { layer: "heatmapHqm", id: "heatmap-hqm", opacity: 1 },
   { layer: "heatmapStones", id: "heatmap-stones", opacity: 1 },
   { layer: "heatmapSulfur", id: "heatmap-sulfur", opacity: 1 },
 ];
