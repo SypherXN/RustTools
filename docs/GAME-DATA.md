@@ -10,7 +10,7 @@ Static Rust gameplay reference in RustTools (map monument facts, CCTV codes, rec
 |-------|--------|
 | **Last verified patch** | Printed and Polished |
 | **Patch date** | 2026-11-05 (November forced wipe) |
-| **RustTools audited** | 2026-11-08 |
+| **RustTools audited** | 2026-11-09 |
 | **Patches applied in data** | Common Ground → Power Trip → Breach and Clear → Livestock → Printed and Polished |
 | **Map data files** | `packages/shared/src/monument-info.ts`, `packages/shared/src/data/cctv-codes.json`, `packages/shared/src/cctv-codes.ts` |
 
@@ -56,13 +56,12 @@ Static Rust gameplay reference in RustTools (map monument facts, CCTV codes, rec
 - **Lighthouse** — lighthouses start damaged each wipe. Repair the light mechanism at the top to restore the island-wide system and open Deep Sea access; one repaired lighthouse restores every lighthouse.
 - **Military Tunnels** — entrance blockers now require explosives, matching the blockers protecting red-card rooms.
 - **The Ranch** — the vendor now focuses on mature, player-raised offspring; livestock vendor rewards are Blueprint Pages (previously Fragments). Animals become yours when purchased or when fed at your trough.
-- **New items** — Uzi 9mm (loot-only, not craftable or researchable), Shears, Wool Armor Insert, Blueprint Fragment / Page / Book, and the Halloween 2026 cosmetics (Alien Costume, Skull Wall Lamp, Tuna Can Skull Lamp, Halloween String Lights). They are in-game but not in the item-name map below.
+- **New items** — Uzi 9mm (loot-only, not craftable or researchable), Shears, Wool Armor Insert, Blueprint Fragment / Page / Book, and the Halloween 2026 cosmetics (Alien Costume, Skull Wall Lamp, Halloween Wreath, Halloween String Lights). All are in the item-name map as of the 2026-11-09 refresh.
 - **Halloween event** — ran 2026-10-22 to 2026-11-05 and was disabled with this patch. It added scarecrows, mummies, candy hunts, portals into seasonal dungeons, and Frankenstein pets, but **no CCTV camera IDs**, so `cctv-codes.json` is unchanged.
 - **Out of scope** — roaming scientist boat encounters (dynamic offshore spawns), fruit trees and bird flocks (visual), controller/gamepad support, stair mirroring, tea and consumable rebalancing, performance work, and Softcore/Hardcore rule changes.
 
 ## Pending (not yet in RustTools data)
 
-- **Item-name map** — `packages/shared/src/data/rust-items.json` was last refreshed 2026-06-24, before Power Trip, Breach and Clear, Livestock, and Printed and Polished. Missing items now include Milk, Wool, Biofuel Generator, Uzi 9mm, Shears, Wool Armor Insert, Blueprint Fragment / Page / Book, and the Halloween 2026 cosmetics. Storage, tool cupboard, and vending panels therefore fall back to the raw numeric item ID for the name, and the `cdn.rusthelp.com` icon URL points at a file that does not exist unless Rust+ supplies the shortname. No current public source of Rust item IDs was found; refreshing needs a live client dump.
 - Camera IDs that only exist in-game (Underwater Lab wipe suffixes, apartment room cameras) are documented as in-game copy, not guessed — most servers also disable Rust+ CCTV streaming (`cctvrender.enabled`).
 
 ## Audit checklist (when a new patch drops)
@@ -71,14 +70,16 @@ Static Rust gameplay reference in RustTools (map monument facts, CCTV codes, rec
 2. Check [RustHelp CCTV codes](https://rusthelp.com/tools/cctv-codes) for new/removed identifiers.
 3. Update `monument-info.ts` for new monuments or recycler/keycard changes.
 4. Update `cctv-codes.json` and `cctv-codes.ts` token aliases.
-5. Bump `RUST_GAME_DATA.patchName`, `patchDate`, `verifiedAt`; append to `RUST_GAME_DATA_PATCHES_APPLIED`; trim `pending`.
-6. Update this file's history table.
-7. Run `npm run build --workspace=@rusttools/shared`.
+5. Run `node scripts/refresh-rust-items.mjs` when the patch adds or renames items — it regenerates `packages/shared/src/data/rust-items.json` from the Corrosion Hour item table (id / shortname / display name) and keeps any local-only entries.
+6. Bump `RUST_GAME_DATA.patchName`, `patchDate`, `verifiedAt`; append to `RUST_GAME_DATA_PATCHES_APPLIED`; trim `pending`.
+7. Update this file's history table.
+8. Run `npm run build --workspace=@rusttools/shared`.
 
 ## History
 
 | Verified | Patch | Notes |
 |----------|-------|--------|
+| 2026-11-09 | Printed and Polished | Item-name map refreshed from the Corrosion Hour item table (1,329 items) via `scripts/refresh-rust-items.mjs`; new items now resolve |
 | 2026-11-08 | Printed and Polished | Blueprint rework (no app impact); Lighthouse repair gates Deep Sea; Military Tunnel entrance blockers need explosives; Ranch vendor update; new items missing from item map |
 | 2026-10-20 | Livestock | No map or CCTV changes from the 2026-10-08 hotfixes; Halloween update pending; item-name map gap recorded |
 | 2026-10-04 | Livestock | Power-grid loot rooms; Bandit `AIRWOLF` and helipad repair; Dome crude 15-minute delay; Ranch livestock vendor |

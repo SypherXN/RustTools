@@ -31,17 +31,16 @@ export const RUST_GAME_DATA_PATCHES_APPLIED: ReadonlyArray<{
 export const RUST_GAME_DATA: RustGameDataCoverage = {
   patchName: "Printed and Polished",
   patchDate: "2026-11-05",
-  verifiedAt: "2026-11-08",
+  verifiedAt: "2026-11-09",
   sources: [
     "https://rust.facepunch.com/news/printed_and_polished",
     "https://www.rustafied.com/updates/2026/11/5/november-update-incoming",
     "https://www.rustafied.com/updates/2026/10/29/blueprint-changes-roaming-scientists-and-more",
     "https://www.rustafied.com/updates/2026/10/22/halloween-event-goes-live",
     "https://rusthelp.com/tools/cctv-codes",
+    "https://www.corrosionhour.com/rust-item-list/",
   ],
-  pending: [
-    "rust-items.json item-name map last refreshed 2026-06-24; Livestock-era items (Milk, Wool, Biofuel Generator) and newer items (Uzi 9mm, Shears, Wool Armor Insert, Blueprint Fragment/Page/Book, Halloween 2026 cosmetics) missing",
-  ],
+  pending: [],
 };
 
 export function formatRustGameDataLabel(data: RustGameDataCoverage = RUST_GAME_DATA): string {
