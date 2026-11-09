@@ -80,7 +80,11 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       radiation: "None",
       lootReset: "Standard crates: ~15 min after looted.",
       recyclers: [{ count: 1, efficiency: "50–60% (grid)" }],
-      notes: ["Good early-wipe scrap run", "Low traffic"],
+      notes: [
+        "Good early-wipe scrap run",
+        "Low traffic",
+        "Lighthouses start damaged each wipe — repair the light mechanism at the top to open the Deep Sea; one repaired lighthouse restores all of them (Printed and Polished)",
+      ],
     },
   },
   {
@@ -284,6 +288,7 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       scientists: "~29 armed scientists",
       notes: [
         "Monument blockers in red puzzle rooms (Breach and Clear)",
+        "Entrance blockers now require explosives, matching red-card-room blockers (Printed and Polished)",
         "Power-grid loot room: 10 heavy fuses, 2 basic + 2 military; green-card puzzle still required (Livestock)",
         "Bradley APC outside",
         "No on-site workbench",
@@ -466,6 +471,8 @@ const MONUMENT_ENTRIES: Array<{ match: RegExp; info: MonumentInfo }> = [
       recyclers: [],
       notes: [
         "Buy calves (300 scrap) and lambs (150 scrap); sell grown animals and wool (up to 400)",
+        "Vendor now favours mature player-raised offspring over wild-caught animals; rewards Blueprint Pages, not Fragments (Printed and Polished)",
+        "Animals become yours when purchased or fed at your trough — no need to stay nearby",
       ],
     },
   },

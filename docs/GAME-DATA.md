@@ -8,10 +8,10 @@ Static Rust gameplay reference in RustTools (map monument facts, CCTV codes, rec
 
 | Field | Value |
 |-------|--------|
-| **Last verified patch** | Livestock |
-| **Patch date** | 2026-10-01 (October forced wipe) |
-| **RustTools audited** | 2026-10-04 |
-| **Patches applied in data** | Common Ground → Power Trip → Breach and Clear → Livestock |
+| **Last verified patch** | Printed and Polished |
+| **Patch date** | 2026-11-05 (November forced wipe) |
+| **RustTools audited** | 2026-11-08 |
+| **Patches applied in data** | Common Ground → Power Trip → Breach and Clear → Livestock → Printed and Polished |
 | **Map data files** | `packages/shared/src/monument-info.ts`, `packages/shared/src/data/cctv-codes.json`, `packages/shared/src/cctv-codes.ts` |
 
 ## Patch coverage summary
@@ -50,9 +50,20 @@ Static Rust gameplay reference in RustTools (map monument facts, CCTV codes, rec
 - **The Ranch** — livestock vendor (calves 300 scrap, lambs 150, sales of grown animals and wool up to 400).
 - Cows, sheep, critters, milk, wool, biofuel generator, stacked sandbags, teas, and the render pipeline — **out of scope**. The smaller HQM pickup is a model change, not a spawn-rule change.
 
+### Printed and Polished (2026-11-05)
+
+- **Blueprint progression** — tech trees now cost Blueprint Fragments (Tier 1), Pages (Tier 2), and Books (Tier 3) instead of scrap; 10 Fragments combine into a Page, and Pages cannot become Books. Workbench crafting is back to scrap (50 / 500 / 1,250). The Research Table still uses scrap. RustTools has no tech-tree or blueprint calculator, so no app data changes.
+- **Lighthouse** — lighthouses start damaged each wipe. Repair the light mechanism at the top to restore the island-wide system and open Deep Sea access; one repaired lighthouse restores every lighthouse.
+- **Military Tunnels** — entrance blockers now require explosives, matching the blockers protecting red-card rooms.
+- **The Ranch** — the vendor now focuses on mature, player-raised offspring; livestock vendor rewards are Blueprint Pages (previously Fragments). Animals become yours when purchased or when fed at your trough.
+- **New items** — Uzi 9mm (loot-only, not craftable or researchable), Shears, Wool Armor Insert, Blueprint Fragment / Page / Book, and the Halloween 2026 cosmetics (Alien Costume, Skull Wall Lamp, Tuna Can Skull Lamp, Halloween String Lights). They are in-game but not in the item-name map below.
+- **Halloween event** — ran 2026-10-22 to 2026-11-05 and was disabled with this patch. It added scarecrows, mummies, candy hunts, portals into seasonal dungeons, and Frankenstein pets, but **no CCTV camera IDs**, so `cctv-codes.json` is unchanged.
+- **Out of scope** — roaming scientist boat encounters (dynamic offshore spawns), fruit trees and bird flocks (visual), controller/gamepad support, stair mirroring, tea and consumable rebalancing, performance work, and Softcore/Hardcore rule changes.
+
 ## Pending (not yet in RustTools data)
 
-None for the Livestock baseline. Camera IDs that only exist in-game (Underwater Lab wipe suffixes, apartment room cameras) are documented as in-game copy, not guessed — most servers also disable Rust+ CCTV streaming (`cctvrender.enabled`). A Halloween content update is scheduled for 2026-10-22 and is not in this data.
+- **Item-name map** — `packages/shared/src/data/rust-items.json` was last refreshed 2026-06-24, before Power Trip, Breach and Clear, Livestock, and Printed and Polished. Missing items now include Milk, Wool, Biofuel Generator, Uzi 9mm, Shears, Wool Armor Insert, Blueprint Fragment / Page / Book, and the Halloween 2026 cosmetics. Storage, tool cupboard, and vending panels therefore fall back to the raw numeric item ID for the name, and the `cdn.rusthelp.com` icon URL points at a file that does not exist unless Rust+ supplies the shortname. No current public source of Rust item IDs was found; refreshing needs a live client dump.
+- Camera IDs that only exist in-game (Underwater Lab wipe suffixes, apartment room cameras) are documented as in-game copy, not guessed — most servers also disable Rust+ CCTV streaming (`cctvrender.enabled`).
 
 ## Audit checklist (when a new patch drops)
 
@@ -68,6 +79,8 @@ None for the Livestock baseline. Camera IDs that only exist in-game (Underwater 
 
 | Verified | Patch | Notes |
 |----------|-------|--------|
+| 2026-11-08 | Printed and Polished | Blueprint rework (no app impact); Lighthouse repair gates Deep Sea; Military Tunnel entrance blockers need explosives; Ranch vendor update; new items missing from item map |
+| 2026-10-20 | Livestock | No map or CCTV changes from the 2026-10-08 hotfixes; Halloween update pending; item-name map gap recorded |
 | 2026-10-04 | Livestock | Power-grid loot rooms; Bandit `AIRWOLF` and helipad repair; Dome crude 15-minute delay; Ranch livestock vendor |
 | 2026-09-20 | Breach and Clear | Satellite crash tracking; SPECTRE prefix documented (suffix in-game); apartment room CCTV in-game-only; HQM spawn-ground overlay |
 | 2026-09-09 | Breach and Clear | Monument blockers; marketplace power; WTP rework notes; Dome fuel cap; grid recycler labels across monuments |

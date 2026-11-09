@@ -4,6 +4,8 @@ build/
 .env
 .env.local
 .local/
+/ssh-info/
+
 *.log
 .DS_Store
 .cursor/
@@ -16,3 +18,5 @@ coverage/
 .vite/
 Caddyfile.generated
 *.tsbuildinfo
+/plans/
+/*-usage.json
