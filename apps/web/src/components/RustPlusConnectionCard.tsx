@@ -3,11 +3,13 @@ import { apiFetch } from "../lib/api";
 import { useRustPlusStatus } from "../hooks/useRustPlusStatus";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
+import { useFcmStatus } from "../hooks/useFcmStatus";
 
 export function RustPlusConnectionCard() {
   const canAdmin = useCan("admin");
   const { status, health } = useRustPlusStatus();
   const { notifyActivated } = useActiveServer();
+  const activeStatus = useFcmStatus(canAdmin);
   const [reconnecting, setReconnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +73,32 @@ export function RustPlusConnectionCard() {
       </p>
       <p>
         Status: <strong>{statusLabel}</strong>
+        {" — "}
+        <span className="muted">
+          this is the bot's live Rust+ websocket to the active server, separate from the push
+          registration and the 14-day Rust+ relay login (Admin → Push/FCM master accounts).
+        </span>
       </p>
+      {canAdmin && status === "warn" && activeStatus && !activeStatus.companion?.configured && (
+        <p className="muted">
+          This master has no Rust+ relay login. UUID/relay connections require one; legacy direct
+          connections do not. For a relay server, run the RustTools registration helper and upload
+          its private combined file with Renew on this master's slot in Admin. Keep the paired slot.
+        </p>
+      )}
+      {canAdmin && activeStatus?.companion?.expired && (
+        <p className="muted">
+          Rust+ relay login: <strong>expired</strong>. Relay features for Facepunch relay
+          connections are paused until you renew — run the helper with{" "}
+          <code>--credentials &lt;private file&gt;</code> and upload it to Renew on that master.
+        </p>
+      )}
+      {canAdmin && activeStatus?.companion?.warning && !activeStatus.companion.expired && (
+        <p className="muted">
+          Rust+ relay login expires in {activeStatus.companion.daysRemaining ?? "…"} day(s) — renew
+          soon with a fresh helper file.
+        </p>
+      )}
       {canAdmin && status === "ok" && (
         <button
           type="button"

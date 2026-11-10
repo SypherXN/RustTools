@@ -23,6 +23,7 @@ declare module "@liamcottle/rustplus.js" {
       playerId: string | number,
       playerToken: string | number,
       useFacepunchProxy?: boolean,
+      companion?: { serverId: string; authToken: string } | null,
     );
     connect(): void;
     disconnect(): void;

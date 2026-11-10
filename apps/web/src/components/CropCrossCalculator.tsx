@@ -4,9 +4,12 @@ import {
   cropTargetStatus,
   findTwoDonorCrosses,
   isValidCropGenes,
+  planCropPath,
   simulateCropCross,
   type CropCrossResult,
   type CropCrossSearch,
+  type CropPathPlan,
+  type CropPathStep,
 } from "@rusttools/shared";
 import { breedingById, isBreedingAvailable } from "../lib/breeding-utils";
 import { GeneStrip } from "./BreedingGenes";
@@ -35,6 +38,10 @@ export function CropCrossCalculator({
   const [manual, setManual] = useState<{ result: CropCrossResult | null; error: string | null }>({ result: null, error: null });
   const [search, setSearch] = useState<{ result: CropCrossSearch | null; error: string | null }>({ result: null, error: null });
   const [note, setNote] = useState<string | null>(null);
+  const [maxGenerations, setMaxGenerations] = useState("5");
+  const [maxDonors, setMaxDonors] = useState("2");
+  const [minutesPerGeneration, setMinutesPerGeneration] = useState("");
+  const [path, setPath] = useState<{ result: CropPathPlan | null; error: string | null }>({ result: null, error: null });
 
   const cropEntries = useMemo(() => allEntries.filter((entry) => entry.kind === "crop"), [allEntries]);
   const speciesOptions = useMemo(
@@ -87,7 +94,8 @@ export function CropCrossCalculator({
   useEffect(() => {
     setManual({ result: null, error: null });
     setSearch({ result: null, error: null });
-  }, [allEntries, preset, species, serverLabel, centre, donorsText, target, anyOrder]);
+    setPath({ result: null, error: null });
+  }, [allEntries, preset, species, serverLabel, centre, donorsText, target, anyOrder, maxGenerations, maxDonors, minutesPerGeneration]);
 
   const donorLines = useMemo(
     () => donorsText.split("\n").map((line) => line.trim()).filter(Boolean),
@@ -139,11 +147,116 @@ export function CropCrossCalculator({
     }
   };
 
+  const runPath = () => {
+    setPath({ result: null, error: null });
+    if (speciesRequired) { setPath({ result: null, error: "Pick a species first." }); return; }
+    if (!serverLabel) { setPath({ result: null, error: "Pick a server + wipe to search the shared pool." }); return; }
+    if (!isValidCropGenes(target)) { setPath({ result: null, error: "Target must be six letters from G, Y, H, W, X." }); return; }
+    const generations = Number(maxGenerations);
+    const donors = Number(maxDonors);
+    const minutes = minutesPerGeneration.trim() === "" ? null : Number(minutesPerGeneration);
+    if (!Number.isInteger(generations) || generations < 1 || generations > 8) {
+      setPath({ result: null, error: "Max generations must be a whole number from 1 to 8." });
+      return;
+    }
+    if (!Number.isInteger(donors) || donors < 1 || donors > 3) {
+      setPath({ result: null, error: "Max donors must be a whole number from 1 to 3." });
+      return;
+    }
+    if (minutes !== null && (!Number.isFinite(minutes) || minutes < 0)) {
+      setPath({ result: null, error: "Minutes per generation must be a non-negative number, or blank to skip the estimate." });
+      return;
+    }
+    try {
+      const plan = planCropPath(searchPool, target, anyOrder, { maxGenerations: generations, maxDonors: donors });
+      setPath({ result: plan, error: null });
+    } catch (err) {
+      setPath({ result: null, error: err instanceof Error ? err.message : "Fastest-path search failed." });
+    }
+  };
+
+  const renderRoute = (title: string, steps: CropPathStep[], strains: CropPathPlan["startingStrains"]) => {
+    if (steps.length === 0) return null;
+    return (
+      <>
+        <h4>{title}</h4>
+        <ul className="breeding-strains">
+          {strains.map((strain) => (
+            <li key={strain.genome} className="breeding-strain">
+              <GeneStrip genes={strain.genome} />
+              <span className="breeding-strain-meta">
+                {strain.poolIds
+                  .map((id) => {
+                    const entry = entryById.get(id);
+                    return entry ? `${entry.name} (${entry.location})` : id;
+                  })
+                  .join(" · ")}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <ol className="breeding-path-steps">
+          {steps.map((step, index) => (
+            <li key={`${step.generation}-${index}`} className="breeding-path-step">
+              <div className="breeding-plan-row">
+                <span className="breeding-path-gen">Generation {step.generation}</span>
+                <span>
+                  Centre <GeneStrip genes={step.centre} />
+                  {describeGenome(step.centre, steps, index) && (
+                    <span className="breeding-strain-meta"> {describeGenome(step.centre, steps, index)}</span>
+                  )}
+                </span>
+                <span>
+                  Donors{" "}
+                  {step.donors.map((donor, donorIndex) => {
+                    const donorTag = describeGenome(donor, steps, index);
+                    return (
+                      <span key={`${index}-${donorIndex}`} className="breeding-path-donor">
+                        <GeneStrip genes={donor} />
+                        {donorTag && <span className="breeding-strain-meta">{donorTag}</span>}
+                      </span>
+                    );
+                  })}
+                </span>
+                <span className="breeding-path-arrow">
+                  → <GeneStrip genes={step.result} />
+                </span>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </>
+    );
+  };
+
   const manualStatus = manual.result
     ? isValidCropGenes(target)
       ? cropTargetStatus(manual.result, target, anyOrder)
       : null
     : null;
+
+  // Genome → "Name (pickup)" tag for every pool entry in the current scope.
+  // Multiple entries sharing a genome are chained with " · ".
+  const strainTags = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const entry of searchPool) {
+      const entry0 = entryById.get(entry.id);
+      const tag = entry0 ? `${entry0.name} (${entry0.location})` : entry.id;
+      map.set(entry.genes, map.has(entry.genes) ? `${map.get(entry.genes)} · ${tag}` : tag);
+    }
+    return map;
+  }, [searchPool, entryById]);
+
+  // Pool name when known, otherwise "produced in generation k" for intermediates.
+  const describeGenome = (genome: string, steps: CropPathStep[], index: number): string => {
+    const poolTag = strainTags.get(genome);
+    if (poolTag) return poolTag;
+    for (let i = 0; i < index; i += 1) {
+      const prior = steps[i];
+      if (prior !== undefined && prior.result === genome) return `produced in generation ${prior.generation}`;
+    }
+    return "";
+  };
 
   return (
     <section className="card breeding-calculator">
@@ -151,7 +264,8 @@ export function CropCrossCalculator({
       <p className="muted">
         Manual calculator for one cross at a time — centre seed plus donor genes. Tied slots are
         listed as options, never probabilities; the game's tie-break is undocumented in the
-        sources.
+        sources. Animals are not planned here — cow/sheep inheritance is undocumented, so animal
+        records stay observational.
       </p>
 
       <div className="breeding-form-grid">
@@ -236,6 +350,49 @@ export function CropCrossCalculator({
         <button type="button" className="btn-secondary" onClick={runSearch}>
           Find a 2-donor cross in the shared pool
         </button>
+        <button type="button" className="btn-secondary" onClick={runPath}>
+          Find fastest path
+        </button>
+      </div>
+
+      <div className="breeding-path-row">
+        <label className="breeding-field breeding-numfield">
+          Max generations (1–8)
+          <input
+            type="number"
+            inputMode="numeric"
+            aria-label="Max generations for the fastest-path search, 1 to 8"
+            min={1}
+            max={8}
+            value={maxGenerations}
+            onChange={(e) => setMaxGenerations(e.target.value.replace(/[^0-9]/g, ""))}
+          />
+        </label>
+        <label className="breeding-field breeding-numfield">
+          Max donors (1–3)
+          <input
+            type="number"
+            inputMode="numeric"
+            aria-label="Max donors per cross in the fastest-path search, 1 to 3"
+            min={1}
+            max={3}
+            value={maxDonors}
+            onChange={(e) => setMaxDonors(e.target.value.replace(/[^0-9]/g, ""))}
+          />
+        </label>
+        <label className="breeding-field breeding-numfield">
+          Minutes per generation (your measured value, optional)
+          <input
+            type="number"
+            inputMode="decimal"
+            aria-label="Your measured minutes per generation, used only for a total time estimate"
+            min={0}
+            step="any"
+            value={minutesPerGeneration}
+            onChange={(e) => setMinutesPerGeneration(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="e.g. 12"
+          />
+        </label>
       </div>
 
       {manual.error && <div className="alert alert-error">{manual.error}</div>}
@@ -331,6 +488,57 @@ export function CropCrossCalculator({
         </div>
       )}
 
+      {path.error && <div className="alert alert-error">{path.error}</div>}
+      {path.result && (
+        <div className="breeding-result">
+          <h3>
+            Fastest path to {target}
+            {anyOrder ? " (any slot order)" : ""} — {path.result.limits.maxGenerations} generations ×{" "}
+            {path.result.limits.maxDonors} donors
+          </h3>
+          {path.result.found ? (
+            <p className="breeding-status breeding-status-ok">
+              Target reachable in {path.result.generations} generation
+              {path.result.generations === 1 ? "" : "s"} and {path.result.crosses} cross
+              {path.result.crosses === 1 ? "" : "es"}.
+              {minutesPerGeneration.trim() !== "" && Number(minutesPerGeneration) >= 0 && (
+                <span className="breeding-strain-meta">
+                  {" "}Estimated total ≈ {Math.round(Number(minutesPerGeneration) * path.result.generations)} min at
+                  your measured {minutesPerGeneration} min per generation.
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="breeding-status breeding-status-warn">
+              Not reachable within these limits.
+              {path.result.closest && (
+                <>
+                  {" "}Closest: <strong>{path.result.closest.genome}</strong> — {path.result.closest.matchingSlots}/6
+                  slots matched over {path.result.closest.generations} generation
+                  {path.result.closest.generations === 1 ? "" : "s"}. Partial route, not the target.
+                </>
+              )}
+            </p>
+          )}
+          {path.result.limits.truncated && (
+            <p className="muted breeding-hint">
+              The search hit its {path.result.limits.maxGenerations}-generation ×{" "}
+              {path.result.limits.maxDonors}-donor limit, so a faster path may exist.
+            </p>
+          )}
+          {path.result.found &&
+            renderRoute("Starting strains to collect from the shared pool", path.result.steps, path.result.startingStrains)}
+          {!path.result.found && path.result.closest &&
+            renderRoute("Closest partial route — not the target", path.result.closest.steps, path.result.closest.startingStrains)}
+          <p className="muted breeding-path-note">
+            Every planned cross has a certain result — tied slots are never planned through because the game's
+            tie-break is undocumented in the sources. Each generation crosses only strains that existed by the end
+            of the previous one, assuming clones of any strain you hold. Planting reminders: same planter, same
+            species, donors within 1.5 m of the centre.
+          </p>
+        </div>
+      )}
+
       <p className="muted breeding-sources">
         Sources:{" "}
         <a href="https://rustfront.com/genetics" target="_blank" rel="noopener noreferrer">
@@ -342,8 +550,8 @@ export function CropCrossCalculator({
         </a>
         . Tied-slot gene outcomes are modelled here as possibilities; the game's
         tie-break is undocumented in these sources. Integer 3/5 weights preserve
-        the exact 0.6/1 source weights. One generation, up to 2 donors per
-        search.
+        the exact 0.6/1 source weights. The 2-donor search is single-generation;
+        the fastest-path planner uses the generation and donor limits you set.
       </p>
     </section>
   );

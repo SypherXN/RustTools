@@ -5,9 +5,11 @@ import type { Database } from "@rusttools/db";
 import { fcmCredentials, rustServers } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
+  computeCompanionAuthStatus,
   computeFcmCredentialStatus,
   prepareFcmConfigForSave,
   validateFcmConfigPayload,
+  type FcmConfig,
 } from "@rusttools/rustplus-client";
 import type { FcmCredentialStatus, FcmCredentialSummary } from "@rusttools/shared";
 import { env } from "../config.js";
@@ -15,7 +17,56 @@ import { logAudit } from "./audit.js";
 import { decrypt, encrypt } from "./crypto.js";
 import { generateId } from "./ids.js";
 import { deleteRustServer } from "./rust-server-lifecycle.js";
-import { reconnectRustServer } from "../services/rustplus-bootstrap.js";
+import {
+  reconnectRustServer,
+  sanitizeRustPlusError,
+} from "../services/rustplus-bootstrap.js";
+
+function companionStatusFromEncrypted(configEncrypted: string) {
+  try {
+    return computeCompanionAuthStatus(decryptFcmConfig(configEncrypted) as FcmConfig);
+  } catch {
+    return computeCompanionAuthStatus({});
+  }
+}
+
+function configGcmPair(config: Record<string, unknown>): string | null {
+  const creds = config.fcm_credentials;
+  if (!creds || typeof creds !== "object" || Array.isArray(creds)) return null;
+  const gcm = (creds as Record<string, unknown>).gcm;
+  if (!gcm || typeof gcm !== "object" || Array.isArray(gcm)) return null;
+  const row = gcm as Record<string, unknown>;
+  const androidId = row.androidId ?? row.android_id;
+  const securityToken = row.securityToken ?? row.security_token;
+  if (androidId == null || securityToken == null) return null;
+  return `${String(androidId)}:${String(securityToken)}`;
+}
+
+function companionSteamId(config: Record<string, unknown>): string | null {
+  const companion = config.companion;
+  if (!companion || typeof companion !== "object" || Array.isArray(companion)) return null;
+  const steamId = (companion as Record<string, unknown>).steamId;
+  return typeof steamId === "string" && steamId.length > 0 ? steamId : null;
+}
+
+/** Reject a renewal that would attach a different Steam identity to this slot. */
+function assertCompanionIdentityMatches(
+  nextConfig: Record<string, unknown>,
+  previousConfig: Record<string, unknown>,
+  servers: Array<{ playerId: string }>,
+): void {
+  const nextSteamId = companionSteamId(nextConfig);
+  if (!nextSteamId) return;
+
+  const known = new Set<string>();
+  const previousSteamId = companionSteamId(previousConfig);
+  if (previousSteamId) known.add(previousSteamId);
+  for (const server of servers) known.add(server.playerId);
+
+  if ([...known].some((steamId) => steamId !== nextSteamId)) {
+    throw new Error("Companion auth Steam ID does not match this master account");
+  }
+}
 
 function parseRegisteredAtFromConfig(config: Record<string, unknown>): Date {
   const raw = config.registered_at ?? config.registeredAt;
@@ -66,6 +117,7 @@ export function summarizeFcmCredential(
     serverCount,
     activeServerName: activeServer?.name ?? null,
     masterPlayerId: activeServer?.playerId ?? null,
+    companion: companionStatusFromEncrypted(row.configEncrypted),
   };
 }
 
@@ -114,11 +166,14 @@ export async function getActiveFcmCredentialStatus(
     };
   }
 
-  return computeFcmCredentialStatus(
-    active.registeredAt.getTime(),
-    rustPlus.getStatus().fcmListening,
-    true,
-  );
+  return {
+    ...computeFcmCredentialStatus(
+      active.registeredAt.getTime(),
+      rustPlus.getStatus().fcmListening,
+      true,
+    ),
+    companion: companionStatusFromEncrypted(active.configEncrypted),
+  };
 }
 
 async function setExclusiveActiveFcm(db: Database, credentialId: string): Promise<void> {
@@ -137,7 +192,9 @@ export async function createFcmCredential(
   config: Record<string, unknown>,
   options?: { activate?: boolean },
 ): Promise<FcmCredentialSummary> {
-  const prepared = prepareFcmConfigForSave(config, { replace: true });
+  // Create honors the uploaded acquisition time; only a changed-GCM replacement
+  // may reset the 90-day clock.
+  const prepared = prepareFcmConfigForSave(config);
   const registeredAt = parseRegisteredAtFromConfig(prepared);
   const now = new Date();
   const id = generateId();
@@ -179,10 +236,38 @@ export async function replaceFcmCredentialConfig(
     .limit(1);
   if (!existing) throw new Error("FCM credential not found");
 
-  const prepared = prepareFcmConfigForSave(config, { replace: true });
-  const registeredAt = parseRegisteredAtFromConfig(prepared);
-  const now = new Date();
+  let existingConfig: Record<string, unknown>;
+  try {
+    existingConfig = decryptFcmConfig(existing.configEncrypted);
+  } catch {
+    throw new Error("Stored master account config cannot be read");
+  }
 
+  const prepared = prepareFcmConfigForSave(config, { replace: true });
+
+  // A GCM-only re-import must not wipe companion relay auth (and its 14-day
+  // metadata clock); a supplied companion block still replaces it.
+  if (prepared.companion == null && existingConfig.companion != null) {
+    prepared.companion = existingConfig.companion;
+  }
+
+  // Same GCM pairing means an auth renewal, not a new 90-day credential clock.
+  const sameGcm = configGcmPair(existingConfig) !== null &&
+    configGcmPair(existingConfig) === configGcmPair(prepared);
+  const registeredAt = sameGcm
+    ? existing.registeredAt
+    : parseRegisteredAtFromConfig(prepared);
+  if (sameGcm) prepared.registered_at = registeredAt.toISOString();
+
+  const servers = await db
+    .select()
+    .from(rustServers)
+    .where(eq(rustServers.fcmCredentialId, credentialId));
+
+  // Reject identity changes before touching the DB or any connection.
+  assertCompanionIdentityMatches(prepared, existingConfig, servers);
+
+  const now = new Date();
   await db
     .update(fcmCredentials)
     .set({
@@ -193,15 +278,30 @@ export async function replaceFcmCredentialConfig(
     .where(eq(fcmCredentials.id, credentialId));
 
   if (existing.isActive) {
+    const status = rustPlus.getStatus();
+    if (status.activeServerId) {
+      await rustPlus.disconnectServer(status.activeServerId, { dropCredentials: true });
+    }
+    try {
+      await rustPlus.unsubscribeCamera();
+    } catch {
+      // No camera session; nothing to clear.
+    }
     await rustPlus.reloadFcmListener({ config: prepared });
+
+    const activeServer = servers.find((s) => s.isActive) ?? null;
+    if (activeServer) {
+      try {
+        await reconnectRustServer(db, rustPlus, activeServer);
+      } catch (err) {
+        console.warn(
+          `[FCM] Credential renewed but reconnect is unavailable: ${sanitizeRustPlusError(err)}`,
+        );
+      }
+    }
   }
 
-  const servers = await db
-    .select()
-    .from(rustServers)
-    .where(eq(rustServers.fcmCredentialId, credentialId));
   const activeServer = servers.find((s) => s.isActive) ?? null;
-
   const [row] = await db
     .select()
     .from(fcmCredentials)
@@ -251,6 +351,11 @@ export async function switchRustPlusToFcmCredential(
   const status = rustPlus.getStatus();
   if (status.activeServerId) {
     await rustPlus.disconnectServer(status.activeServerId);
+  }
+  try {
+    await rustPlus.unsubscribeCamera();
+  } catch {
+    // No camera session; nothing to clear.
   }
 
   const config = decryptFcmConfig(credential.configEncrypted);
@@ -341,6 +446,8 @@ export async function purgeExpiredFcmCredentials(
   const rows = await db.select().from(fcmCredentials);
   let removed = 0;
 
+  // Only the 90-day GCM clock expires a slot. Companion auth expiry (14 days)
+  // is a relay-only warning and must never purge slots, servers, or pairs.
   for (const row of rows) {
     const status = computeFcmCredentialStatus(row.registeredAt.getTime(), false);
     if (!status.expired) continue;

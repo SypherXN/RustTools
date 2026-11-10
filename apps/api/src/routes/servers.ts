@@ -6,7 +6,6 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import { mergeTeamChatMessages, parseTeamChatMessages } from "@rusttools/shared";
 import { logAudit } from "../lib/audit.js";
 import { requireCapability } from "../lib/auth.js";
-import { decrypt } from "../lib/crypto.js";
 import { parseInGameTime, parseTeamRoster, parseWipeCountdown, resolveWorldSize, getActiveServer, getActiveServerId } from "../lib/rust-data.js";
 import { buildActiveServerConnectInfo } from "./map-overlays.js";
 import { applyTeamTrackingWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
@@ -33,7 +32,10 @@ import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
 import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
 import { listDiscordGuildRoles } from "../lib/discord-guild.js";
-import { reconnectRustServer } from "../services/rustplus-bootstrap.js";
+import {
+  reconnectRustServer,
+  sanitizeRustPlusError,
+} from "../services/rustplus-bootstrap.js";
 import { getActiveFcmCredential } from "../lib/fcm-credentials.js";
 import type { ServerNotificationSettings } from "@rusttools/shared";
 
@@ -53,6 +55,7 @@ export async function registerServerRoutes(
             name: rustServers.name,
             ip: rustServers.ip,
             port: rustServers.port,
+            companionServerId: rustServers.companionServerId,
             isActive: rustServers.isActive,
             createdAt: rustServers.createdAt,
           })
@@ -510,15 +513,7 @@ export async function registerServerRoutes(
     await deps.db.update(rustServers).set({ isActive: true }).where(eq(rustServers.id, id));
 
     try {
-      await deps.rustPlus.connectServer({
-        id: server.id,
-        ip: server.ip,
-        port: server.port,
-        playerId: server.playerId,
-        playerToken: decrypt(server.playerTokenEncrypted),
-        name: server.name,
-      });
-      deps.rustPlus.setActiveServer(server.id);
+      await reconnectRustServer(deps.db, deps.rustPlus, server);
       await logAudit(deps.db, {
         userId: user.id,
         action: "server_activate",
@@ -527,7 +522,7 @@ export async function registerServerRoutes(
       });
     } catch (err) {
       return reply.status(502).send({
-        error: err instanceof Error ? err.message : "Failed to connect to Rust+ server",
+        error: sanitizeRustPlusError(err),
       });
     }
 
@@ -586,7 +581,7 @@ export async function registerServerRoutes(
       return { ok: true, rustplus: deps.rustPlus.getStatus() };
     } catch (err) {
       return reply.status(502).send({
-        error: err instanceof Error ? err.message : "Failed to reconnect Rust+",
+        error: sanitizeRustPlusError(err),
       });
     }
   });

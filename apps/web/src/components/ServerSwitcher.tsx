@@ -9,6 +9,17 @@ interface Server {
   ip: string;
   port: number;
   isActive: boolean;
+  companionServerId?: string | null;
+}
+
+/**
+ * UUID-paired relay rows carry no legacy ip/port (`""`/`0`). Rendering them as
+ * "Rust+ relay · <uuid>" avoids a fake client.connect address.
+ */
+function serverAddressLabel(server: Server): string {
+  if (server.companionServerId) return `Rust+ relay · ${server.companionServerId}`;
+  if (!server.ip && server.port === 0) return "Rust+ relay (no direct address)";
+  return `${server.ip}:${server.port}`;
 }
 
 export function ServerSwitcher() {
@@ -78,7 +89,7 @@ export function ServerSwitcher() {
           <li key={s.id} className={s.isActive ? "active" : ""}>
             <div>
               <strong>{s.name}</strong>
-              <span className="muted">{s.ip}:{s.port}</span>
+              <span className="muted">{serverAddressLabel(s)}</span>
             </div>
             {!s.isActive && canAdmin && (
               <button type="button" disabled={loading} onClick={() => void activate(s.id)}>

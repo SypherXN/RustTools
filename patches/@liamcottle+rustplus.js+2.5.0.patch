@@ -30,7 +30,95 @@ diff --git a/node_modules/@liamcottle/rustplus.js/rustplus.js b/node_modules/@li
 index 4497096..73128f5 100644
 --- a/node_modules/@liamcottle/rustplus.js/rustplus.js
 +++ b/node_modules/@liamcottle/rustplus.js/rustplus.js
-@@ -74,8 +74,14 @@ class RustPlus extends EventEmitter {
+@@ -26,10 +26,11 @@ class RustPlus extends EventEmitter {
+-    constructor(server, port, playerId, playerToken, useFacepunchProxy = false) {
++    constructor(server, port, playerId, playerToken, useFacepunchProxy = false, companion = null) {
+ 
+         super();
+ 
+         this.server = server;
+         this.port = port;
+         this.playerId = playerId;
+         this.playerToken = playerToken;
+         this.useFacepunchProxy = useFacepunchProxy;
++        this.companion = companion;
+ 
+@@ -36,8 +37,41 @@ class RustPlus extends EventEmitter {
+         this.seq = 0;
+         this.seqCallbacks = [];
+ 
+     }
++
++    /**
++     * Resolve the fixed Rust+ companion relay target. Only a validated GUID is
++     * placed in the URL; the auth token travels only as the second WebSocket
++     * subprotocol. Returns null for legacy direct connections.
++     */
++    _getRelayConnection() {
++
++        if(!this.companion) {
++            return null;
++        }
++
++        const serverId = String(this.companion.serverId || '').trim().toLowerCase();
++        const zeroGuid = '00000000-0000-0000-0000-000000000000';
++
++        // pin the origin and reject anything that could rewrite the relay path
++        if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(serverId) || serverId === zeroGuid) {
++            throw new Error('Invalid Rust+ companion server id');
++        }
++
++        if(typeof this.companion.authToken !== 'string' || this.companion.authToken.length === 0) {
++            throw new Error('Missing Rust+ companion auth token');
++        }
++
++        return {
++            address: `wss://companion-rust.facepunch.com/socket/${serverId}`,
++            protocols: [
++                'rustplus.auth.v1',
++                Buffer.from(this.companion.authToken, 'utf8').toString('base64url'),
++            ],
++        };
++
++    }
+ 
+     /**
+      * This sets everything up and then connects to the Rust Server via WebSocket.
+      */
+@@ -44,5 +78,14 @@ class RustPlus extends EventEmitter {
+     connect() {
+ 
++        // resolve relay target before any network work; never fall back to ip:port
++        let relay = null;
++        try {
++            relay = this._getRelayConnection();
++        } catch (error) {
++            this.emit('error', error);
++            return;
++        }
++
+         // load protobuf then connect
+         protobuf.load(path.resolve(__dirname, "rustplus.proto")).then((root) => {
+ 
+@@ -61,13 +104,14 @@ class RustPlus extends EventEmitter {
+             // connect to websocket
+-            var address = this.useFacepunchProxy ? `wss://companion-rust.facepunch.com/game/${this.server}/${this.port}` : `ws://${this.server}:${this.port}`;
+-            this.websocket = new WebSocket(address);
++            var address = relay ? relay.address : this.useFacepunchProxy ? `wss://companion-rust.facepunch.com/game/${this.server}/${this.port}` : `ws://${this.server}:${this.port}`;
++            this.websocket = relay ? new WebSocket(address, relay.protocols, { followRedirects: false }) : new WebSocket(address);
+ 
+             // fire event when connected
+             this.websocket.on('open', () => {
+                 this.emit('connected');
+             });
+ 
+             // fire event for websocket errors
+             this.websocket.on('error', (e) => {
+-                this.emit('error', e);
++                // never surface relay request metadata (URL/subprotocols/token)
++                this.emit('error', relay ? new Error('Rust+ relay connection failed') : e);
+             });
+@@ -74,8 +118,14 @@ class RustPlus extends EventEmitter {
  
              this.websocket.on('message', (data) => {
  
@@ -47,7 +135,7 @@ index 4497096..73128f5 100644
  
                  // check if received message is a response and if we have a callback registered for it
                  if(message.response && message.response.seq && this.seqCallbacks[message.response.seq]){
-@@ -97,7 +103,7 @@ class RustPlus extends EventEmitter {
+@@ -97,7 +147,7 @@ class RustPlus extends EventEmitter {
                  }
  
                  // fire message event for received messages that aren't handled by callback
@@ -55,6 +143,20 @@ index 4497096..73128f5 100644
 +                this.emit('message', message);
  
              });
+ 
+@@ -104,8 +154,11 @@ class RustPlus extends EventEmitter {
+             // fire event when disconnected
+             this.websocket.on('close', () => {
+                 this.emit('disconnected');
+             });
+ 
+-        });
++        }).catch((error) => {
++            // relay setup failures must not surface request metadata
++            this.emit('error', relay ? new Error('Rust+ relay setup failed') : error);
++        });
+ 
+     }
  
 diff --git a/node_modules/@liamcottle/rustplus.js/rustplus.proto b/node_modules/@liamcottle/rustplus.js/rustplus.proto
 index d893865..2b5822d 100644

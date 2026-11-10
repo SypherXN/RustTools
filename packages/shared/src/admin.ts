@@ -1,3 +1,20 @@
+export interface CompanionAuth {
+  authToken: string;
+  steamId: string;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface CompanionAuthStatus {
+  configured: boolean;
+  steamId: string | null;
+  issuedAt: string | null;
+  expiresAt: string | null;
+  daysRemaining: number | null;
+  expired: boolean;
+  warning: boolean;
+}
+
 export interface FcmCredentialStatus {
   configured: boolean;
   listening: boolean;
@@ -6,6 +23,7 @@ export interface FcmCredentialStatus {
   daysRemaining: number | null;
   warning: boolean;
   expired: boolean;
+  companion?: CompanionAuthStatus;
 }
 
 export interface FcmCredentialSummary {
@@ -21,6 +39,7 @@ export interface FcmCredentialSummary {
   serverCount: number;
   activeServerName: string | null;
   masterPlayerId: string | null;
+  companion?: CompanionAuthStatus;
 }
 
 /** GCM push credentials from rustplus.js typically need refresh after ~90 days. */

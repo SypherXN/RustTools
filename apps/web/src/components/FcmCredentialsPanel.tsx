@@ -5,8 +5,9 @@ import { apiFetch, apiUpload } from "../lib/api";
 import { invalidateApiCache } from "../lib/api-cache";
 import { invalidateFcmStatusCache, useFcmStatus } from "../hooks/useFcmStatus";
 
-const FCM_REGISTER_CMD =
-  "npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm/your-master.json";
+const HELPER_REGISTER_CMD = "dotnet run --project tools/rustplus-register";
+const HELPER_RENEW_CMD =
+  'dotnet run --project tools/rustplus-register -- --credentials "C:\\Private Folder\\existing-config.json"';
 
 function statusClass(row: FcmCredentialSummary): string {
   if (!row.isActive && !row.expired) return "fcm-status--muted";
@@ -17,11 +18,29 @@ function statusClass(row: FcmCredentialSummary): string {
 }
 
 function statusLabel(row: FcmCredentialSummary): string {
-  if (row.expired) return "Expired";
-  if (row.isActive && row.listening) return "Active · listening";
-  if (row.isActive) return "Active";
-  if (row.warning) return "Expiring soon";
-  return "Standby";
+  if (row.expired) return "Push registration expired";
+  if (row.isActive && row.listening) return "Push active · listening";
+  if (row.isActive) return "Push active · not listening";
+  if (row.warning) return "Push expiring soon";
+  return "Push standby";
+}
+
+/** Separate 14-day Rust+ relay login (Facepunch companion auth) per slot. */
+function companionState(row: FcmCredentialSummary): { label: string; cls: string; needsRenew: boolean } {
+  const companion = row.companion;
+  if (!companion || !companion.configured) {
+    return { label: "Not set up — push only", cls: "fcm-status--muted", needsRenew: false };
+  }
+  if (companion.expired) return { label: "Expired — renew", cls: "fcm-status--critical", needsRenew: true };
+  if (companion.warning) return { label: "Expiring soon — renew", cls: "fcm-status--warning", needsRenew: true };
+  if (companion.daysRemaining != null) {
+    return {
+      label: `Active · ${companion.daysRemaining} day${companion.daysRemaining === 1 ? "" : "s"} left`,
+      cls: "fcm-status--ok",
+      needsRenew: false,
+    };
+  }
+  return { label: "Active", cls: "fcm-status--ok", needsRenew: false };
 }
 
 export function FcmCredentialsPanel() {
@@ -32,7 +51,7 @@ export function FcmCredentialsPanel() {
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,7 +72,7 @@ export function FcmCredentialsPanel() {
 
   useEffect(() => {
     if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
+    const timer = setTimeout(() => setCopied(null), 2000);
     return () => clearTimeout(timer);
   }, [copied]);
 
@@ -165,10 +184,10 @@ export function FcmCredentialsPanel() {
     }
   };
 
-  const copyCommand = async () => {
+  const copyCommand = async (cmd: string) => {
     try {
-      await navigator.clipboard.writeText(FCM_REGISTER_CMD);
-      setCopied(true);
+      await navigator.clipboard.writeText(cmd);
+      setCopied(cmd);
     } catch {
       setError("Could not copy — select the command and copy manually.");
     }
@@ -184,7 +203,8 @@ export function FcmCredentialsPanel() {
       <p className="muted">
         Each FCM slot is a separate Rust+ master bot (Steam account). Pairing, devices, map
         overlays, and notification settings are kept per slot — switch masters without losing the
-        other account&apos;s setup. Credentials last about {FCM_CREDENTIAL_LIFETIME_DAYS} days.
+        other account&apos;s setup. Push registration lasts about {FCM_CREDENTIAL_LIFETIME_DAYS}
+        days; the separate Rust+ relay login lasts 14 days.
       </p>
 
       {loading ? (
@@ -193,18 +213,28 @@ export function FcmCredentialsPanel() {
         <div className="fcm-wizard">
           <p className="fcm-wizard-callout">
             No FCM credentials yet — pairing and in-game alarms will not work until you add one.
+            The Rust+ relay login (Facepunch auth) is part of the same private file; a legacy
+            push-only file still works for alarms, but relay needs the Rust+ login.
           </p>
           <ol className="setup-steps fcm-wizard-steps">
             <li>
-              <strong>Register FCM</strong>
+              <strong>Register with the RustTools helper (Windows)</strong>
               <p className="muted fcm-wizard-note">
-                Run on a machine with Chrome. Sign in with the Steam account that will be this
-                master bot.
+                Requires the .NET 10 SDK and Edge or Chrome. Run the command below, sign in with the
+                Steam account that will be this master bot. The helper exports the file and exits;
+                it does not wait for server pairing. The
+                helper writes one private combined auth file (push registration + Rust+ login) to
+                your private folder — <code>%LOCALAPPDATA%\RustTools</code> when you omit
+                <code> --output</code>. Keep the file private; never paste its contents into chat.
               </p>
               <div className="fcm-command-block">
-                <code className="fcm-command-block__cmd">{FCM_REGISTER_CMD}</code>
-                <button type="button" className="btn-secondary" onClick={() => void copyCommand()}>
-                  {copied ? "Copied!" : "Copy command"}
+                <code className="fcm-command-block__cmd">{HELPER_REGISTER_CMD}</code>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void copyCommand(HELPER_REGISTER_CMD)}
+                >
+                  {copied === HELPER_REGISTER_CMD ? "Copied!" : "Copy command"}
                 </button>
               </div>
             </li>
@@ -219,7 +249,7 @@ export function FcmCredentialsPanel() {
                   onChange={(e) => setNewLabel(e.target.value)}
                 />
                 <label className="btn-secondary procgen-upload-label">
-                  {busyId === "new" ? "Uploading…" : "Upload fcm-config.json"}
+                  {busyId === "new" ? "Uploading…" : "Upload combined auth file"}
                   <input
                     type="file"
                     accept=".json,application/json"
@@ -306,7 +336,28 @@ export function FcmCredentialsPanel() {
                       </dd>
                     </div>
                   )}
+                  <div>
+                    <dt>Rust+ login (14 d)</dt>
+                    <dd className={companionState(row).cls}>{companionState(row).label}</dd>
+                  </div>
                 </dl>
+
+                {(companionState(row).needsRenew || !row.companion?.configured) && row.isActive && (
+                  <p className="muted fcm-credential-note">
+                    {companionState(row).needsRenew
+                      ? `Push registration is ${row.listening ? "listening fine" : "active"}, but the Rust+ relay login ${row.companion?.expired ? "has expired" : "expires soon"} — relay features stop when it does. Renew: run the helper with --credentials on the private file from this slot, then upload it with Renew below.`
+                      : "This slot only has push registration. The Rust+ relay login needs Facepunch auth — register with the helper and upload the combined file with Renew."}
+                  </p>
+                )}
+                <p className="muted fcm-credential-note">
+                  For normal renewal, use Renew rather than Delete: it replaces this slot's file
+                  while keeping paired servers. The clocks are independent: a fresh Steam login
+                  lasts 14 days; reusing push credentials preserves their original ~90-day clock.
+                  Only a new push registration starts a new push clock.{" "}
+                  {row.companion?.expiresAt && row.companion?.configured
+                    ? `Rust+ login expires ${new Date(row.companion.expiresAt).toLocaleDateString()}.`
+                    : null}
+                </p>
 
                 <div className="fcm-rename-row">
                   <input
@@ -326,19 +377,43 @@ export function FcmCredentialsPanel() {
           </div>
 
           <details className="fcm-renew-details">
-            <summary>Add another master account</summary>
+            <summary>Add another master account or renew an existing one</summary>
             <div className="fcm-wizard fcm-wizard--nested">
               <p className="muted fcm-wizard-note">
-                Register a separate <code>fcm-config.json</code> for each Steam account, then upload
-                it with a label. Warning at {FCM_WARNING_DAYS_BEFORE} days; expired slots and their
-                server data are removed automatically.
+                The helper (Windows, .NET 10 SDK + Edge or Chrome) writes one private combined auth
+                file per Steam account — push registration (~90 days) plus the Rust+ relay login
+                (14 days). Keep the file private; never paste its contents into chat. Push
+                warning at {FCM_WARNING_DAYS_BEFORE} days; expired push slots and
+                their server data are removed automatically.
               </p>
               <div className="fcm-command-block">
-                <code className="fcm-command-block__cmd">{FCM_REGISTER_CMD}</code>
-                <button type="button" className="btn-secondary" onClick={() => void copyCommand()}>
-                  {copied ? "Copied!" : "Copy command"}
+                <code className="fcm-command-block__cmd">{HELPER_REGISTER_CMD}</code>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void copyCommand(HELPER_REGISTER_CMD)}
+                >
+                  {copied === HELPER_REGISTER_CMD ? "Copied!" : "Copy command"}
                 </button>
               </div>
+              <div className="fcm-command-block">
+                <code className="fcm-command-block__cmd">{HELPER_RENEW_CMD}</code>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => void copyCommand(HELPER_RENEW_CMD)}
+                >
+                  {copied === HELPER_RENEW_CMD ? "Copied!" : "Copy command"}
+                </button>
+              </div>
+              <p className="muted fcm-wizard-note">
+                New slot: the first command writes to the private folder by default; upload below
+                with a label. <strong>Renew:</strong> replace the quoted example path in the second
+                command with your existing private file's full path (keep the quotes for spaces).
+                Upload the freshly exported combined file using the existing slot's Renew button
+                to preserve its paired servers. Reusing push credentials keeps their original
+                expiry; a fresh Steam login starts its own 14-day clock.
+              </p>
               <div className="fcm-add-row">
                 <input
                   type="text"
@@ -348,7 +423,7 @@ export function FcmCredentialsPanel() {
                   onChange={(e) => setNewLabel(e.target.value)}
                 />
                 <label className="btn-secondary procgen-upload-label">
-                  {busyId === "new" ? "Uploading…" : "Upload fcm-config.json"}
+                  {busyId === "new" ? "Uploading…" : "Upload combined auth file"}
                   <input
                     type="file"
                     accept=".json,application/json"
@@ -364,8 +439,10 @@ export function FcmCredentialsPanel() {
           {!hasHealthyActive && activeStatus && (
             <p className="settings-error fcm-wizard-callout">
               {activeStatus.expired
-                ? "Active FCM has expired — renew or switch to another master."
+                ? "Active push registration has expired — renew or switch to another master."
                 : "Active FCM needs attention — renew soon or switch master."}
+              {activeStatus.companion?.expired &&
+                " The Rust+ relay login has also expired — relay features need a fresh helper file."}
             </p>
           )}
         </>

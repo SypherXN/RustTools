@@ -62,6 +62,14 @@ export const demoServers = [
     port: 28016,
     isActive: false,
   },
+  {
+    id: "demo-relay-1",
+    name: "Relay demo (UUID pair)",
+    ip: "",
+    port: 0,
+    isActive: false,
+    companionServerId: "9ba06ad1-a8de-42be-924c-4023346e88bc",
+  },
 ];
 
 let demoNotificationSettings: NotificationSettingsResponse = {
@@ -817,6 +825,16 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
 
   // ── Admin (prefix catch-all after specific fixtures) ─────────────────
+  const demoFcmNow = Date.now();
+  const demoFcmHealthyCompanion = {
+    configured: true,
+    steamId: "76561198000000000",
+    issuedAt: new Date(demoFcmNow - 5 * 86400000).toISOString(),
+    expiresAt: new Date(demoFcmNow + 9 * 86400000).toISOString(),
+    daysRemaining: 9,
+    expired: false,
+    warning: false,
+  };
   if (path === "/admin/fcm-credentials") {
     return {
       credentials: [
@@ -825,7 +843,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
           label: "Demo master",
           isActive: true,
           registeredAt: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+          expiresAt: new Date(demoFcmNow + 45 * 86400000).toISOString(),
           daysRemaining: 45,
           warning: false,
           expired: false,
@@ -833,6 +851,44 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
           serverCount: 1,
           activeServerName: "Demo Server",
           masterPlayerId: "76561198000000000",
+          companion: demoFcmHealthyCompanion,
+        },
+        {
+          id: "demo-fcm-relay-expired",
+          label: "Forgotten login slot",
+          isActive: false,
+          registeredAt: new Date().toISOString(),
+          expiresAt: new Date(demoFcmNow + 30 * 86400000).toISOString(),
+          daysRemaining: 30,
+          warning: false,
+          expired: false,
+          listening: false,
+          serverCount: 0,
+          activeServerName: null,
+          masterPlayerId: "76561198000000001",
+          companion: {
+            configured: true,
+            steamId: "76561198000000001",
+            issuedAt: new Date(demoFcmNow - 20 * 86400000).toISOString(),
+            expiresAt: new Date(demoFcmNow - 6 * 86400000).toISOString(),
+            daysRemaining: 0,
+            expired: true,
+            warning: false,
+          },
+        },
+        {
+          id: "demo-fcm-push-only",
+          label: "Push-only slot",
+          isActive: false,
+          registeredAt: new Date().toISOString(),
+          expiresAt: new Date(demoFcmNow + 10 * 86400000).toISOString(),
+          daysRemaining: 10,
+          warning: true,
+          expired: false,
+          listening: false,
+          serverCount: 0,
+          activeServerName: null,
+          masterPlayerId: null,
         },
       ],
     } as T;
@@ -843,10 +899,11 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       configured: true,
       listening: true,
       registeredAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 45 * 86400000).toISOString(),
+      expiresAt: new Date(demoFcmNow + 45 * 86400000).toISOString(),
       daysRemaining: 45,
       warning: false,
       expired: false,
+      companion: demoFcmHealthyCompanion,
     } as T;
   }
 

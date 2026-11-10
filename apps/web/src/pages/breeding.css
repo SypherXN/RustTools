@@ -377,6 +377,89 @@
   font-size: 0.78rem;
 }
 
+/* Fastest-path planner */
+.breeding-path-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: flex-end;
+}
+
+.breeding-numfield {
+  min-width: 10rem;
+  max-width: 15rem;
+}
+
+.breeding-strains {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.breeding-strain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+}
+
+.breeding-strain-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.breeding-path-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.breeding-path-step {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 0.75rem;
+}
+
+.breeding-path-gen {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+
+.breeding-path-donor {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-right: 0.8rem;
+}
+
+.breeding-path-arrow {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.breeding-path-note {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.breeding-result h4 {
+  margin: 0.4rem 0 0.25rem;
+  font-size: 0.88rem;
+  letter-spacing: 0.05em;
+}
 .breeding-sources a {
   color: var(--info);
 }

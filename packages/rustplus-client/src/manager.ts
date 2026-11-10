@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import RustPlus from "@liamcottle/rustplus.js";
-import type { EntityType, RustPlusEvent } from "@rusttools/shared";
+import type { CompanionAuth, EntityType, RustPlusEvent } from "@rusttools/shared";
 import { EventBus } from "./event-bus.js";
 import { FcmListener, type FcmConfig, type ParsedFcmNotification } from "./fcm-listener.js";
+import { getCompanionAuth } from "./fcm-status.js";
 import { JobScheduler } from "./job-scheduler.js";
 import { createNotificationService, type NotificationService } from "./notification-service.js";
 
@@ -13,6 +14,104 @@ export interface ServerCredentials {
   playerId: string;
   playerToken: string;
   name: string;
+  /** Companion relay server GUID. When present, ip/port are never dialled. */
+  companionServerId?: string | null;
+  companionAuth?: CompanionAuth;
+}
+
+export type ServerConnectionCredentials = Pick<
+  ServerCredentials,
+  "ip" | "port" | "playerId" | "playerToken"
+> &
+  Partial<Pick<ServerCredentials, "companionServerId" | "companionAuth">>;
+
+export class RustPlusConnectionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RustPlusConnectionError";
+  }
+}
+
+const COMPANION_GUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ZERO_COMPANION_GUID = "00000000-0000-0000-0000-000000000000";
+const PLAYER_TOKEN_MIN = -2_147_483_648; // signed int32
+const PLAYER_TOKEN_MAX = 2_147_483_647;
+const RELAY_HANDSHAKE_TIMEOUT_MS = 20_000;
+
+function companionServerId(credentials: ServerConnectionCredentials): string | null {
+  return credentials.companionServerId == null
+    ? null
+    : String(credentials.companionServerId).trim().toLowerCase();
+}
+
+function normalizePlayerToken(value: unknown): number {
+  const raw = String(value).trim();
+  if (!/^-?[0-9]+$/.test(raw)) {
+    throw new RustPlusConnectionError("Rust+ player token must be a signed decimal integer");
+  }
+  const token = Number(raw);
+  if (!Number.isSafeInteger(token) || token < PLAYER_TOKEN_MIN || token > PLAYER_TOKEN_MAX) {
+    throw new RustPlusConnectionError("Rust+ player token is out of range");
+  }
+  return token;
+}
+
+/** Validate relay metadata before any socket is constructed. Never echoes secrets. */
+function validateCompanionConnection(
+  credentials: ServerConnectionCredentials,
+  serverId: string,
+  now = Date.now(),
+): CompanionAuth {
+  if (!COMPANION_GUID_PATTERN.test(serverId) || serverId === ZERO_COMPANION_GUID) {
+    throw new RustPlusConnectionError("Invalid Rust+ companion server id");
+  }
+  const playerId = String(credentials.playerId).trim();
+  if (!/^[0-9]{17}$/.test(playerId)) {
+    throw new RustPlusConnectionError("Rust+ companion player id is invalid");
+  }
+  try {
+    return getCompanionAuth({ companion: credentials.companionAuth }, playerId, now);
+  } catch (error) {
+    throw new RustPlusConnectionError(
+      error instanceof Error ? error.message : "Rust+ companion auth is invalid",
+    );
+  }
+}
+
+/**
+ * Build a Rust+ client for either the legacy ip:port protocol or the fixed
+ * companion relay. Relay mode never falls back to ip:port.
+ */
+export function createRustPlusClient(
+  credentials: ServerConnectionCredentials,
+  now = Date.now(),
+): InstanceType<typeof RustPlus> {
+  const serverId = companionServerId(credentials);
+  const playerToken = normalizePlayerToken(credentials.playerToken);
+  if (serverId !== null) {
+    const auth = validateCompanionConnection(credentials, serverId, now);
+    try {
+      return new RustPlus("", 0, credentials.playerId, playerToken, false, {
+        serverId,
+        authToken: auth.authToken,
+      });
+    } catch {
+      throw new RustPlusConnectionError("Rust+ relay client setup failed");
+    }
+  }
+  const ip = typeof credentials.ip === "string" ? credentials.ip.trim() : "";
+  if (ip.length === 0) {
+    throw new RustPlusConnectionError("Rust+ legacy server address is invalid");
+  }
+  if (
+    !Number.isInteger(credentials.port) ||
+    credentials.port < 1 ||
+    credentials.port > 65535
+  ) {
+    throw new RustPlusConnectionError("Rust+ legacy server port is invalid");
+  }
+  return new RustPlus(ip, credentials.port, credentials.playerId, playerToken);
 }
 
 export interface EntityPairingPayload {
@@ -362,6 +461,11 @@ export class RustPlusManager {
   }
 
   async connectServer(credentials: ServerCredentials): Promise<void> {
+    // Validate before tearing down an existing connection; relay auth failures
+    // must never fall back to ip:port or leave a retry loop behind.
+    const client = createRustPlusClient(credentials);
+    const relay = companionServerId(credentials) !== null;
+
     if (this.connections.has(credentials.id)) {
       await this.disconnectServer(credentials.id, { dropCredentials: false });
     }
@@ -371,14 +475,16 @@ export class RustPlusManager {
       this.subscribedEntitiesByServer.set(credentials.id, new Set());
     }
 
-    const client = new RustPlus(
-      credentials.ip,
-      credentials.port,
-      credentials.playerId,
-      Number.parseInt(String(credentials.playerToken), 10),
-    );
-
-    await this.waitForConnection(client);
+    try {
+      await this.waitForConnection(client, relay ? RELAY_HANDSHAKE_TIMEOUT_MS : undefined);
+    } catch (err) {
+      try {
+        client.disconnect();
+      } catch {
+        // ignore cleanup errors
+      }
+      throw err;
+    }
 
     client.on("disconnected", () => {
       this.readCache.clear();
@@ -422,23 +528,45 @@ export class RustPlusManager {
     this.eventBus.emit({ type: "connectionRestored", serverId: credentials.id });
   }
 
-  private waitForConnection(client: InstanceType<typeof RustPlus>): Promise<void> {
+  private waitForConnection(
+    client: InstanceType<typeof RustPlus>,
+    timeoutMs?: number,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const onConnected = () => {
-        cleanup();
-        resolve();
-      };
-      const onError = (err: Error) => {
-        cleanup();
-        reject(err);
-      };
-      const cleanup = () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let settled = false;
+      function settle(error?: Error): void {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
         client.removeListener("connected", onConnected);
+        if (error) {
+          // Keep the error listener attached as an absorber: terminate() can
+          // emit asynchronously while the client is being torn down.
+          reject(error);
+          return;
+        }
         client.removeListener("error", onError);
-      };
+        resolve();
+      }
+      function onConnected(): void {
+        settle();
+      }
+      function onError(err: Error): void {
+        settle(err);
+      }
+      if (timeoutMs != null) {
+        timer = setTimeout(() => {
+          settle(new Error("Rust+ relay handshake timed out"));
+        }, timeoutMs);
+      }
       client.on("connected", onConnected);
       client.on("error", onError);
-      client.connect();
+      try {
+        client.connect();
+      } catch (err) {
+        settle(err instanceof Error ? err : new Error("Rust+ connection failed"));
+      }
     });
   }
 
@@ -501,10 +629,27 @@ export class RustPlusManager {
   }
 
   private scheduleReconnect(serverId: string): void {
-    if (!this.storedCredentials.has(serverId)) return;
+    const credentials = this.storedCredentials.get(serverId);
+    if (!credentials) return;
 
     const existingTimer = this.reconnectTimersByServer.get(serverId);
-    if (existingTimer) clearTimeout(existingTimer);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      this.reconnectTimersByServer.delete(serverId);
+    }
+
+    // A stale relay auth must not queue endless retries. Drop it and wait for
+    // the backend to supply freshly written credentials.
+    const relay = companionServerId(credentials);
+    if (relay !== null) {
+      try {
+        validateCompanionConnection(credentials, relay);
+      } catch {
+        this.storedCredentials.delete(serverId);
+        this.reconnectAttemptsByServer.delete(serverId);
+        return;
+      }
+    }
 
     const attempts = this.reconnectAttemptsByServer.get(serverId) ?? 0;
     const delay = Math.min(BASE_RECONNECT_MS * 2 ** Math.min(attempts, 8), MAX_RECONNECT_DELAY_MS);
@@ -513,6 +658,12 @@ export class RustPlusManager {
     const timer = setTimeout(() => {
       this.reconnectTimersByServer.delete(serverId);
       void this.reconnectServer(serverId).catch((err) => {
+        if (err instanceof RustPlusConnectionError) {
+          this.storedCredentials.delete(serverId);
+          this.reconnectAttemptsByServer.delete(serverId);
+          console.warn(`[RustPlus] Reconnect paused for ${serverId}: credentials need refresh.`);
+          return;
+        }
         console.error(`[RustPlus] Reconnect failed for ${serverId}:`, err);
         this.scheduleReconnect(serverId);
       });
@@ -821,18 +972,14 @@ export class RustPlusManager {
   }
 
   async promoteToLeaderWithCredentials(
-    credentials: Pick<ServerCredentials, "ip" | "port" | "playerId" | "playerToken">,
+    credentials: ServerConnectionCredentials,
     targetSteamId: string,
   ): Promise<void> {
-    const client = new RustPlus(
-      credentials.ip,
-      credentials.port,
-      credentials.playerId,
-      Number.parseInt(String(credentials.playerToken), 10),
-    );
+    const client = createRustPlusClient(credentials);
+    const relay = companionServerId(credentials) !== null;
 
     try {
-      await this.waitForConnection(client);
+      await this.waitForConnection(client, relay ? RELAY_HANDSHAKE_TIMEOUT_MS : undefined);
       await this.promoteOnClient(client, targetSteamId);
     } finally {
       try {

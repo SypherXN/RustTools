@@ -20,8 +20,13 @@ export function validateCompanionCredentials(playerId: string, playerToken: stri
   if (!/^\d{1,20}$/.test(normalized.playerId)) {
     return "playerId must be a numeric Steam ID (max 20 digits)";
   }
-  if (!/^\d{1,12}$/.test(normalized.playerToken)) {
-    return "playerToken must be numeric (max 12 digits)";
+  // Wire AppRequest.playerToken is a signed int32; reject overflow before use.
+  if (!/^-?\d+$/.test(normalized.playerToken)) {
+    return "playerToken must be a signed 32-bit integer";
+  }
+  const token = Number(normalized.playerToken);
+  if (!Number.isInteger(token) || token < -2147483648 || token > 2147483647) {
+    return "playerToken must be a signed 32-bit integer";
   }
   return null;
 }

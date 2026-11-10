@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import PushReceiverClient from "@liamcottle/push-receiver/src/client.js";
+import type { CompanionAuth } from "@rusttools/shared";
 
 export interface FcmConfig {
   fcm_credentials?: {
@@ -11,6 +12,8 @@ export interface FcmConfig {
       security_token?: string;
     };
   };
+  /** Optional modern companion relay metadata; legacy FCM-only configs stay valid. */
+  companion?: CompanionAuth;
 }
 
 export interface ParsedFcmNotification {
@@ -29,30 +32,38 @@ function readFcmConfig(configPath: string): FcmConfig {
   return JSON.parse(fs.readFileSync(resolved, "utf8")) as FcmConfig;
 }
 
-export function parseFcmData(data: {
-  appData?: Array<{ key: string; value: string }>;
-}): ParsedFcmNotification | null {
-  const appData = data.appData;
-  if (!appData) return null;
+export function parseFcmData(data: unknown): ParsedFcmNotification | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const appData = (data as { appData?: unknown }).appData;
+  if (!Array.isArray(appData)) return null;
 
-  const get = (key: string) => appData.find((item) => item.key === key)?.value;
+  const get = (key: string): string | undefined => {
+    for (const item of appData) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const entry = item as { key?: unknown; value?: unknown };
+      if (entry.key === key && typeof entry.value === "string") return entry.value;
+    }
+    return undefined;
+  };
   const channelId = get("channelId");
   const bodyRaw = get("body");
   if (!channelId || !bodyRaw) return null;
 
-  let body: Record<string, unknown>;
+  let body: unknown;
   try {
-    body = JSON.parse(bodyRaw) as Record<string, unknown>;
+    body = JSON.parse(bodyRaw);
   } catch {
     return null;
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
 
+  const bodyRecord = body as Record<string, unknown>;
   return {
     channelId,
     title: get("title"),
     message: get("message"),
-    body,
-    playerId: body.playerId != null ? String(body.playerId) : undefined,
+    body: bodyRecord,
+    playerId: bodyRecord.playerId != null ? String(bodyRecord.playerId) : undefined,
   };
 }
 

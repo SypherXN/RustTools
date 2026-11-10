@@ -1,0 +1,4 @@
+bin/
+obj/
+rustplus-fcm-*.json
+rustplus.config.json

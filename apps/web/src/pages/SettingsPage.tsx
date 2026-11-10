@@ -535,10 +535,11 @@ export function SettingsPage() {
       <section className="card">
         <h2>Companion Rust+</h2>
         <p className="muted">
-          Optional. Lets RustTools promote you to team leader when you hold leader in-game but the
-          master bot account does not. Run{" "}
-          <code>npx @liamcottle/rustplus.js fcm-register</code> locally, pair with server in Rust+,
-          then paste <code>playerId</code> and <code>playerToken</code> from the pairing notification.
+          Legacy direct connections only: use existing per-server <code>playerId</code> and{" "}
+          <code>playerToken</code> credentials for your account to allow promotions when you hold
+          leader in-game. The master registration helper does not produce these credentials.
+          Relay connections cannot act for another leader without separate account authentication,
+          which is not supported yet — promote the master bot to team leader instead.
         </p>
         {user?.companionLinked ? (
           <p>

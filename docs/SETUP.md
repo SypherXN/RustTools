@@ -466,49 +466,38 @@ FCM registration links the **master bot’s** Facepunch/Rust+ account to the API
 
 Teammates do **not** need FCM on the server. They link **Steam ID** (and optionally **companion Rust+** credentials) in **Settings → Account** without touching the master connection.
 
-**This step requires Chrome with a display** (run on your laptop, not headless on the VM). Use a dedicated Rust+ account / phone for the bot if possible.
+Run registration on a desktop with **.NET 10 SDK** and a supported browser (Edge/Chrome), not on the headless VM. RustTools uses the RustPlusApi registration library locally; no .NET service is needed on the VM.
 
 ### 9.1 Register locally
 
-On your computer (with the repo cloned or any directory):
+From your local RustTools checkout:
 
 ```bash
-mkdir -p data
-npx @liamcottle/rustplus.js fcm-register --config-file=./data/fcm-config.json
+dotnet run --project tools/rustplus-register
 ```
 
-Follow the browser prompts and sign in with the **Steam account used for the master bot** (the account that will stay paired 24/7).
+Complete the browser login using the **Steam account used for the master bot**. The helper writes a private JSON bundle to your user profile and prints its path, then exits. It does not wait for server pairing or print tokens. Keep the file private; never paste its contents into chat or commit it.
 
-### 9.2 Copy config to the VM
+### 9.2 Upload or renew in the web UI
 
-Copy `data/fcm-config.json` to the server and into the Docker volume.
+Open **Settings → Admin → FCM master accounts** with an admin Discord login:
 
-**Option A — copy before first deploy** (simplest):
+1. For your first master account, upload the helper's JSON under **Add**.
+2. For an existing master, use that slot's **Renew** upload instead. Do not delete and recreate it: deleting a slot also deletes its paired servers and related data.
+3. Activate the desired slot if needed. Credentials are stored encrypted in the database; no `scp` or Docker-volume file copy is required.
+
+### 9.3 Two independent expiry clocks
+
+- **Push registration:** about 90 days. Receives pairing and alarm notifications.
+- **Companion relay login:** about 14 days after Steam login. Required to connect to servers identified by a companion server GUID. Expiry does not delete the saved slot or its paired servers.
+
+To refresh the Steam login while reusing your private registration file, run (replace the quoted example path):
 
 ```bash
-# On your laptop
-scp data/fcm-config.json ubuntu@YOUR_VM_IP:~/RustTools/data/
+dotnet run --project tools/rustplus-register -- --credentials "C:/Users/YOU/private/fcm-config.json"
 ```
 
-Ensure `data/` exists on the VM before `docker compose up`. The API container mounts the named volume at `/app/data`; on first run you may need to copy into the volume:
-
-```bash
-# On the VM, after first docker compose up
-docker compose cp data/fcm-config.json api:/app/data/fcm-config.json
-docker compose restart api
-```
-
-**Option B — register on a machine with a desktop, then scp** (same as above).
-
-### 9.3 Upload via web UI (alternative)
-
-If the API is already running and you have **Admin** permission:
-
-1. Run `fcm-register` locally to produce `fcm-config.json` (section 9.1)
-2. Open the web UI → **Settings → Admin → FCM credentials**
-3. Upload the JSON file — the API saves it to `data/fcm-config.json` and restarts the FCM listener
-
-Use this instead of `scp` when shell access to the VM is inconvenient. You can also **replace** credentials here when they expire (~90 days; warning banner appears within 14 days of expiry).
+Upload the newly exported bundle using the existing slot's **Renew** action. Reusing the same push credentials preserves their original 90-day clock; it does not extend it. A legacy GCM-only file can receive pairing pushes but cannot authenticate a GUID relay connection without the separate Steam login.
 
 ### 9.4 Confirm FCM is listening
 
@@ -516,11 +505,7 @@ Use this instead of `scp` when shell access to the VM is inconvenient. You can a
 curl -s https://rusttools.yourdomain.com/health | jq '.fcm'
 ```
 
-Expected: `"listening": true`. If `false`, check that the file exists at `/app/data/fcm-config.json` inside the container:
-
-```bash
-docker compose exec api ls -la /app/data/
-```
+Expected: `"listening": true`. Also check the slot's separate **Companion login** status in Admin settings. Listening alone is not proof that pairing arrived or that the Rust+ connection authenticated; complete section 10.1 and check the Dashboard. If a server is saved but its relay login is missing or expired, renew the existing slot rather than repeatedly re-pairing it.
 
 ---
 
@@ -534,15 +519,15 @@ RustTools uses three separate link types. Only **master bot** pairing affects th
 | **Steam identity** | Any teammate (View+) | **Account → Steam Identity** | `users.steam_id` |
 | **Companion Rust+** | Optional (View+) | **Account → Companion Rust+** | Encrypted on `users` row only |
 
-Companion credentials are used **only** for brief leader promotion when the in-game leader is not the master bot. Saving or using companion links **does not** disconnect the master bot or take down other features.
+Account companion credentials are used **only** for brief leader promotion on legacy direct-IP servers when the in-game leader is not the master bot. They are separate from the master's companion relay login. Saving account credentials does not disconnect the master bot.
 
 ### 10.1 Pair the master server (admin)
 
-1. Confirm FCM is listening (section 9.4)
+1. Confirm FCM is listening and the master slot has a valid companion login for GUID relay servers (section 9.4)
 2. Open the web UI → log in with Discord (admin role)
 3. **Settings → Server & Map → Master Bot Server Pair** → click **Re-pair Server**
-4. In-game on the **bot’s Rust+ account**: **Pair with Server**
-5. Within a minute, the Dashboard should show the server connected
+4. Join the desired Rust server using that **same Steam account**, then **Esc → Rust+ → Pair with Server**
+5. Check the Dashboard for the correct server and **Connected** status. A GUID relay pair can be saved even when its login is missing or expired; renew that slot to connect. **Reconnect** retries a saved server, not initial pairing.
 
 In **production**, unprompted server pairs (FCM notifications without a pending admin-started link) are **rejected**. In local dev, unprompted pairing is allowed by default (`RUSTPLUS_ALLOW_UNPROMPTED_PAIR` defaults to true unless set to `false`).
 
@@ -556,21 +541,13 @@ Required for `!leader` / `/leader` (bot must know your Steam ID).
 
 Steam linking does **not** give teammates device control; permissions still come from Discord roles.
 
-### 10.3 Link companion Rust+ (optional)
+### 10.3 Link account companion Rust+ (optional, legacy direct servers)
 
-Only needed if you want RustTools to promote someone **while you are in-game leader** but the master bot is not leader.
+Only needed for legacy direct-IP servers if you want RustTools to promote someone **while you are in-game leader** but the master bot is not leader.
 
-1. On your own computer (not the VM):
-   ```bash
-   npx @liamcottle/rustplus.js fcm-register --config-file=./fcm-companion.json
-   ```
-2. In **your** Rust+ app: **Pair with Server** on the same Rust server
-3. Copy `playerId` and `playerToken` from the pairing output / notification
-4. **Settings → Account → Companion Rust+** → paste both → **Save companion credentials**
+Obtain your own per-server `playerId` and `playerToken` privately using a compatible pairing client, then save them under **Settings → Account → Companion Rust+**. The registration helper in section 9 does **not** export these per-server credentials.
 
-The master bot keeps running. During promote, RustTools opens a **short-lived** second connection as your account, sends `promoteToLeader`, then disconnects.
-
-Do **not** use the bot’s FCM listener for companion pairing unless you intend to capture that notification on the server — the recommended path is **local `fcm-register` + paste**.
+On legacy direct servers, RustTools opens a short-lived connection as your account for promotion and then disconnects. On **GUID relay servers**, acting as another leader is not supported by this account form: it would require that person's separate relay login. Make the master bot the in-game leader instead; never reuse its Steam login token for another player.
 
 ### 10.4 Pair devices (admin / bot account)
 

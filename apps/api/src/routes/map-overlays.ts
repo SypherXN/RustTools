@@ -285,20 +285,26 @@ export async function buildActiveServerConnectInfo(
   }
 
   const [server] = await db
-    .select({ ip: rustServers.ip, port: rustServers.port })
+    .select({
+      ip: rustServers.ip,
+      port: rustServers.port,
+      companionServerId: rustServers.companionServerId,
+    })
     .from(rustServers)
     .where(eq(rustServers.id, active.id))
     .limit(1);
 
   const mapMeta = parseServerMapMeta(info);
   const data = info as { password?: string };
-  const connectString = server
-    ? buildConnectString({
-        ip: server.ip,
-        port: server.port,
-        password: data.password ?? null,
-      })
-    : null;
+  // Relay rows carry '' / 0 sentinels for NOT NULL legacy columns — never emit ':0'.
+  const connectString =
+    server && !server.companionServerId && server.ip.trim().length > 0 && server.port >= 1
+      ? buildConnectString({
+          ip: server.ip,
+          port: server.port,
+          password: data.password ?? null,
+        })
+      : null;
 
   return { mapMeta, connectString };
 }

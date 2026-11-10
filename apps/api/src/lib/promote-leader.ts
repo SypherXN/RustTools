@@ -20,6 +20,7 @@ export type ActiveServerRow = {
   playerId: string;
   ip: string;
   port: number;
+  companionServerId: string | null;
 };
 
 export async function getActiveServerRow(db: Database): Promise<ActiveServerRow | null> {
@@ -32,6 +33,7 @@ export async function getActiveServerRow(db: Database): Promise<ActiveServerRow 
       playerId: rustServers.playerId,
       ip: rustServers.ip,
       port: rustServers.port,
+      companionServerId: rustServers.companionServerId,
     })
     .from(rustServers)
     .where(
@@ -88,6 +90,9 @@ export async function canPromoteViaRustPlus(
 ): Promise<boolean> {
   if (!activeServer || !leaderSteamId) return false;
   if (leaderSteamId === activeServer.playerId) return true;
+  // A companion account's direct credentials cannot ride the master relay auth
+  // for a different Steam identity, so relay servers never allow this path.
+  if (activeServer.companionServerId) return false;
   return (await findCompanionCredentialsForLeader(db, leaderSteamId, activeServer)) != null;
 }
 
@@ -124,6 +129,13 @@ export async function promoteTeamLeader(
   if (leaderSteamId === activeServer.playerId) {
     await rustPlus.promoteToLeader(targetSteamId);
     return;
+  }
+
+  if (activeServer.companionServerId) {
+    throw new PromoteLeaderError(
+      "Team leader promotion needs a direct Rust+ connection. This server uses the companion relay, and its auth cannot act for another Steam account.",
+      403,
+    );
   }
 
   const companion = await findCompanionCredentialsForLeader(db, leaderSteamId, activeServer);

@@ -48,8 +48,19 @@ export const rustServers = sqliteTable("rust_servers", {
     onDelete: "cascade",
   }),
   name: text("name").notNull(),
+  /**
+   * Legacy direct-connect endpoint. Relay rows (companionServerId set) keep the
+   * '' / 0 sentinel only because these columns are NOT NULL; never dial them.
+   * ponytail: sentinel ceiling — upgrade by making ip/port nullable in a table
+   * rebuild migration once relay-only rows are common.
+   */
   ip: text("ip").notNull(),
   port: integer("port").notNull(),
+  /**
+   * Companion relay server GUID. When set, Rust+ connects through the relay and
+   * ip/port are ignored. Legacy ip:port rows keep this null.
+   */
+  companionServerId: text("companion_server_id"),
   playerId: text("player_id").notNull(),
   playerTokenEncrypted: text("player_token_encrypted").notNull(),
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(false),
