@@ -176,6 +176,13 @@
       "when": 1740000023000,
       "tag": "0023_fcm_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1740000024000,
+      "tag": "0024_breeding_entries",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,22 @@
+CREATE TABLE `breeding_entries` (
+  `id` text PRIMARY KEY NOT NULL,
+  `kind` text NOT NULL,
+  `name` text NOT NULL,
+  `species` text NOT NULL,
+  `server_label` text NOT NULL,
+  `genes` text DEFAULT '' NOT NULL,
+  `traits` text DEFAULT '' NOT NULL,
+  `quantity` integer DEFAULT 1 NOT NULL,
+  `location` text NOT NULL,
+  `available` integer DEFAULT true NOT NULL,
+  `sex` text DEFAULT 'unknown' NOT NULL,
+  `potential` text DEFAULT '' NOT NULL,
+  `mother_id` text,
+  `father_id` text,
+  `notes` text DEFAULT '' NOT NULL,
+  `created_by` text NOT NULL,
+  `created_at` integer NOT NULL,
+  `updated_at` integer NOT NULL,
+  FOREIGN KEY (`mother_id`) REFERENCES `breeding_entries`(`id`) ON UPDATE no action ON DELETE set null,
+  FOREIGN KEY (`father_id`) REFERENCES `breeding_entries`(`id`) ON UPDATE no action ON DELETE set null
+);

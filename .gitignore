@@ -20,3 +20,4 @@ Caddyfile.generated
 *.tsbuildinfo
 /plans/
 /*-usage.json
+/.openchamber/

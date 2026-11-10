@@ -90,6 +90,17 @@ export function IconBoard() {
   );
 }
 
+export function IconFarming() {
+  return (
+    <svg {...iconProps}>
+      <path d="M12 22V8" />
+      <path d="M12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z" />
+      <path d="M12 11c0-3 2.5-5 6-5 0 3-2.5 5-6 5z" />
+      <path d="M9 22h6" />
+    </svg>
+  );
+}
+
 export function IconAudit() {
   return (
     <svg {...iconProps}>

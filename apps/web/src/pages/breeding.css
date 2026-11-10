@@ -1,0 +1,419 @@
+/* Farming (breeding) page — extends the app's dark orange theme. */
+
+.breeding-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.breeding-toolbar .page-tabs {
+  margin-bottom: 0.15rem;
+}
+
+.breeding-toolbar-actions {
+  margin-left: auto;
+}
+
+.breeding-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  min-width: 11rem;
+}
+
+.breeding-availability-toggle {
+  color: var(--text);
+  font-size: 0.85rem;
+  padding-bottom: 0.2rem;
+}
+
+.breeding-section {
+  margin: 1.5rem 0;
+}
+
+.breeding-section h2 {
+  margin-bottom: 0.75rem;
+}
+
+.breeding-count {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.breeding-count-note {
+  margin-top: 1.25rem;
+  font-size: 0.78rem;
+}
+
+.breeding-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.breeding-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border-left: 2px solid var(--border);
+}
+
+.breeding-item:hover {
+  transform: none;
+}
+
+.breeding-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.breeding-item-unavailable {
+  opacity: 0.6;
+  border-left-color: var(--error);
+}
+
+.breeding-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.breeding-item-title h4 {
+  margin: 0.2rem 0 0;
+  font-size: 1.02rem;
+  letter-spacing: 0.03em;
+}
+
+.breeding-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.breeding-kind-crop {
+  color: var(--ok);
+  border-color: rgba(61, 214, 140, 0.4);
+}
+
+.breeding-kind-animal {
+  color: var(--accent-bright);
+  border-color: var(--border-strong);
+}
+
+.breeding-sex-female {
+  color: var(--info);
+}
+
+.breeding-sex-male {
+  color: var(--warn);
+}
+
+.breeding-unavailable-badge {
+  color: var(--error);
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.breeding-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+}
+
+.breeding-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem 0.9rem;
+}
+
+.breeding-meta div {
+  min-width: 0;
+}
+
+.breeding-meta dt {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin-bottom: 0.1rem;
+}
+
+.breeding-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.breeding-meta-wide {
+  grid-column: 1 / -1;
+}
+
+.breeding-lineage {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--accent-bright);
+}
+
+.breeding-notes {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  border-top: 1px dashed var(--border);
+  padding-top: 0.4rem;
+}
+
+/* Gene tiles */
+.gene-strip {
+  display: inline-flex;
+  gap: 0.22rem;
+  flex-wrap: wrap;
+}
+
+.gene-tile {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.55rem;
+  min-height: 1.55rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.gene-tile.gene-g {
+  color: var(--ok);
+  border-color: rgba(61, 214, 140, 0.45);
+}
+
+.gene-tile.gene-y {
+  color: var(--warn);
+  border-color: rgba(255, 179, 71, 0.45);
+}
+
+.gene-tile.gene-h {
+  color: var(--info);
+  border-color: rgba(94, 184, 255, 0.45);
+}
+
+.gene-tile.gene-w {
+  color: #5eead4;
+  border-color: rgba(94, 234, 212, 0.45);
+}
+
+.gene-tile.gene-x {
+  color: var(--muted);
+}
+
+/* Compose form */
+.breeding-compose {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  border-top: 2px solid var(--border-strong);
+}
+
+.breeding-kind-tabs,
+.breeding-form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+/* Bottom-align labels so wrapped field captions don't stagger inputs */
+.breeding-form-grid {
+  align-items: flex-end;
+}
+
+.breeding-kind-tabs {
+  align-items: center;
+}
+
+.breeding-form-grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  flex: 1 1 9rem;
+  min-width: 9rem;
+}
+
+.breeding-compose > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.breeding-genes-input {
+  font-family: var(--font-mono);
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+}
+
+.breeding-hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+/* Warnings + results */
+.breeding-warning {
+  border: 1px solid rgba(255, 179, 71, 0.5);
+  background: rgba(255, 179, 71, 0.08);
+  color: var(--warn);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+.breeding-result {
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.breeding-result h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.breeding-result-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.breeding-badge-warn {
+  color: var(--warn);
+  border-color: rgba(255, 179, 71, 0.45);
+}
+
+.breeding-status {
+  margin: 0;
+  font-size: 0.88rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.breeding-status-ok {
+  color: var(--ok);
+  border-color: rgba(61, 214, 140, 0.35);
+  background: rgba(61, 214, 140, 0.06);
+}
+
+.breeding-status-warn {
+  color: var(--warn);
+  border-color: rgba(255, 179, 71, 0.35);
+  background: rgba(255, 179, 71, 0.06);
+}
+
+.breeding-status-error {
+  color: var(--error);
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.06);
+}
+
+.breeding-planting {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.breeding-planting strong {
+  color: var(--text);
+}
+
+.breeding-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.breeding-plan {
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.breeding-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-size: 0.85rem;
+  align-items: center;
+}
+
+.breeding-sources {
+  font-size: 0.78rem;
+}
+
+.breeding-sources a {
+  color: var(--info);
+}
+
+/* Calculator */
+.breeding-calculator {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+  border-top: 2px solid var(--border-strong);
+}
+
+.breeding-calculator > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.breeding-calculator .breeding-calculator h2 {
+  margin: 0;
+}
+
+/* Responsive tweaks */
+@media (max-width: 900px) {
+  .breeding-form-grid > label {
+    /* two clean columns instead of a 4-up row that overflows narrow fills */
+    flex: 1 1 calc(50% - 0.75rem);
+    min-width: 12rem;
+  }
+}
+
+@media (max-width: 700px) {  .breeding-list {
+    grid-template-columns: 1fr;
+  }
+
+  .breeding-toolbar-actions {
+    margin-left: 0;
+  }
+}

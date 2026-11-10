@@ -3,6 +3,7 @@ import type { Database } from "@rusttools/db";
 import {
   auditEvents,
   automationRules,
+  breedingEntries,
   discordLiveEmbeds,
 } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
@@ -61,6 +62,15 @@ export async function executeDataReset(
     case "audit_log": {
       await db.delete(auditEvents);
       return { scope, detail: "Cleared audit log" };
+    }
+    case "farming_pool": {
+      // Global pool: every crop/animal record for all servers and wipes.
+      // One DELETE is atomic; self-referencing parent FKs are set null as rows go.
+      const result = await db.delete(breedingEntries);
+      return {
+        scope,
+        detail: `Cleared ${result.changes} crop/animal pool record(s) across all servers and wipes`,
+      };
     }
     default:
       throw new Error(`Unknown reset scope: ${scope satisfies never}`);

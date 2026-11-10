@@ -18,6 +18,7 @@ import { MapPage } from "./pages/MapPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { StoragePage } from "./pages/StoragePage";
 import { TeamBoardPage } from "./pages/TeamBoardPage";
+import { BreedingPage } from "./pages/BreedingPage";
 import { TeamPage } from "./pages/TeamPage";
 import { FcmWarningBanner } from "./components/FcmWarningBanner";
 import { AlarmNotifier } from "./components/AlarmNotifier";
@@ -30,6 +31,7 @@ import {
   IconCamera,
   IconDashboard,
   IconDevices,
+  IconFarming,
   IconMap,
   IconSettings,
   IconStorage,
@@ -143,6 +145,9 @@ function Shell() {
             <NavItem to="/board" icon={<IconBoard />}>
               Team board
             </NavItem>
+            <NavItem to="/breeding" icon={<IconFarming />}>
+              Farming
+            </NavItem>
             {user.permissions.admin && (
               <NavItem to="/audit" icon={<IconAudit />}>
                 Audit
@@ -178,6 +183,7 @@ function Shell() {
             <Route path="/map" element={<MapPage />} />
             <Route path="/team" element={<TeamPage />} />
             <Route path="/board" element={<TeamBoardPage />} />
+            <Route path="/breeding" element={<BreedingPage />} />
             <Route path="/audit" element={<RequirePermission capability="admin"><AuditPage /></RequirePermission>} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>

@@ -1,5 +1,6 @@
 import type {
   AuthUserResponse,
+  BreedingEntry,
   NotificationSettingsResponse,
   TeamApiResponse,
   TeamChatMessage,
@@ -424,8 +425,194 @@ const demoBoardEntries = [
   },
 ];
 
-export const demoMapSize = { width: 2000, height: 2000 };
+function demoBreedingStamp(offsetMinutes: number): string {
+  return new Date(demoNow * 1000 - offsetMinutes * 60_000).toISOString();
+}
 
+let demoBreedingEntries: BreedingEntry[] = [
+  {
+    id: "demo-breed-1",
+    kind: "crop",
+    name: "AAA hemp",
+    species: "hemp",
+    serverLabel: "US West — wipe 4d",
+    genes: "GGGYYY",
+    traits: "",
+    quantity: 24,
+    location: "Base 2×2, ground floor planter",
+    available: true,
+    sex: "unknown",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "Banked clones, never let it hit crossbreed stage.",
+    createdBy: "DemoAdmin",
+    createdAt: demoBreedingStamp(2880),
+    updatedAt: demoBreedingStamp(45),
+  },
+  {
+    id: "demo-breed-2",
+    kind: "crop",
+    name: "Red berry batch B",
+    species: "red berry",
+    serverLabel: "US West — wipe 4d",
+    genes: "YYYGGG",
+    traits: "",
+    quantity: 3,
+    location: "Base 2×2, roof planters — ring the doorbell",
+    available: true,
+    sex: "unknown",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "",
+    createdBy: "Teammate One",
+    createdAt: demoBreedingStamp(1440),
+    updatedAt: demoBreedingStamp(1440),
+  },
+  {
+    id: "demo-breed-3",
+    kind: "crop",
+    name: "Potato starter pack",
+    species: "potato",
+    serverLabel: "EU Main — weekly",
+    genes: "YYYHXG",
+    traits: "",
+    quantity: 0,
+    location: "Outpost cabin floorside crate",
+    available: true,
+    sex: "unknown",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "All handed out, keep the card so new people can ask for a regrow.",
+    createdBy: "DemoAdmin",
+    createdAt: demoBreedingStamp(7200),
+    updatedAt: demoBreedingStamp(1440),
+  },
+  {
+    id: "demo-breed-4",
+    kind: "crop",
+    name: "Sunflower rows",
+    species: "sunflower",
+    serverLabel: "EU Main — weekly",
+    genes: "XGGYYG",
+    traits: "",
+    quantity: 12,
+    location: "Bandit camp hut — ask for Teammate Two",
+    available: true,
+    sex: "unknown",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "",
+    createdBy: "Teammate Two",
+    createdAt: demoBreedingStamp(360),
+    updatedAt: demoBreedingStamp(360),
+  },
+  {
+    id: "demo-breed-5",
+    kind: "animal",
+    name: "Daisy",
+    species: "cow",
+    serverLabel: "US West — wipe 4d",
+    genes: "",
+    traits: "Dark coat, docile near walls",
+    quantity: 1,
+    location: "Stable wing, base 2×2 corral",
+    available: true,
+    sex: "female",
+    potential: "High milk — seen filling pans quickly",
+    motherId: "demo-breed-6",
+    fatherId: "demo-breed-7",
+    notes: "",
+    createdBy: "DemoAdmin",
+    createdAt: demoBreedingStamp(10080),
+    updatedAt: demoBreedingStamp(2880),
+  },
+  {
+    id: "demo-breed-6",
+    kind: "animal",
+    name: "Ole Bessie",
+    species: "cow",
+    serverLabel: "US West — wipe 4d",
+    genes: "",
+    traits: "Branded, huge frame",
+    quantity: 1,
+    location: "Stable wing, base 2×2 corral",
+    available: true,
+    sex: "female",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "Found at Dome on day 2.",
+    createdBy: "DemoAdmin",
+    createdAt: demoBreedingStamp(14400),
+    updatedAt: demoBreedingStamp(10080),
+  },
+  {
+    id: "demo-breed-7",
+    kind: "animal",
+    name: "Big John",
+    species: "cow",
+    serverLabel: "US West — wipe 4d",
+    genes: "",
+    traits: "Calmed fast with hemp",
+    quantity: 1,
+    location: "Stable wing, base 2×2 corral",
+    available: true,
+    sex: "male",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "",
+    createdBy: "Teammate One",
+    createdAt: demoBreedingStamp(14400),
+    updatedAt: demoBreedingStamp(10080),
+  },
+  {
+    id: "demo-breed-8",
+    kind: "animal",
+    name: "Clover",
+    species: "cow",
+    serverLabel: "US West — wipe 4d",
+    genes: "",
+    traits: "Skittish, light coat",
+    quantity: 1,
+    location: "Stable wing, base 2×2 corral",
+    available: true,
+    sex: "unknown",
+    potential: "",
+    motherId: "demo-breed-6",
+    fatherId: "demo-breed-7",
+    notes: "Youngest offspring — shares parents with Daisy, so check lineage before pairing.",
+    createdBy: "Teammate One",
+    createdAt: demoBreedingStamp(4320),
+    updatedAt: demoBreedingStamp(4320),
+  },
+  {
+    id: "demo-breed-9",
+    kind: "animal",
+    name: "Wooly",
+    species: "sheep",
+    serverLabel: "EU Main — weekly",
+    genes: "",
+    traits: "Osprey-grey fleece",
+    quantity: 1,
+    location: "Wool shed behind supermarket",
+    available: true,
+    sex: "female",
+    potential: "",
+    motherId: null,
+    fatherId: null,
+    notes: "",
+    createdBy: "Teammate Two",
+    createdAt: demoBreedingStamp(10080),
+    updatedAt: demoBreedingStamp(720),
+  },
+];
+
+export const demoMapSize = { width: 2000, height: 2000 };
 export const demoMapTransform = {
   imageWidth: demoMapSize.width,
   imageHeight: demoMapSize.height,
@@ -696,6 +883,15 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { entries: [] } as T;
   }
 
+  if (path === "/admin/data-reset" && method === "POST" && (body as { scope?: string }).scope === "farming_pool") {
+    demoBreedingEntries = [];
+    return {
+      ok: true,
+      scope: "farming_pool",
+      detail: "Cleared all crop and animal pool records across all servers and wipes",
+    } as T;
+  }
+
   if (path.startsWith("/admin/")) {
     if (method === "GET") return { ok: true, entries: [], users: [], credentials: [] } as T;
     return ok;
@@ -782,6 +978,154 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
   }
   if (path.startsWith("/board/") || path.startsWith("/servers/active/board/")) {
     return ok;
+  }
+
+  // ── Breeding (shared pool, session-scoped writes) ────────────────────
+  const breedingError = (candidate: Record<string, unknown>, selfId: string | null): string | null => {
+    const isUpdate = selfId !== null;
+    if (candidate.kind !== "crop" && candidate.kind !== "animal") return "kind must be crop or animal";
+    const requiredText = candidate.name && candidate.species && candidate.serverLabel && candidate.location;
+    if (!requiredText) return "name, species, serverLabel and location are required";
+    if (candidate.kind === "crop") {
+      const genes = typeof candidate.genes === "string" ? candidate.genes.trim().toUpperCase() : "";
+      if (!/^[GYHWX]{6}$/.test(genes)) return "genes must be exactly six characters from GYHWX";
+      if (typeof candidate.quantity !== "number" || !Number.isInteger(candidate.quantity) || candidate.quantity < 0) {
+        return "quantity must be a non-negative integer";
+      }
+    } else {
+      if (candidate.quantity !== 1) return "quantity must be 1 for animals";
+      if (candidate.species !== "cow" && candidate.species !== "sheep") {
+        return "animal species must be cow or sheep";
+      }
+    }
+    for (const [key, label, sexes] of [
+      ["motherId", "Mother", ["female", "unknown"]],
+      ["fatherId", "Father", ["male", "unknown"]],
+    ] as const) {
+      const parentId = candidate[key];
+      if (!parentId) continue;
+      if (parentId === selfId) return `${label} cannot be the entry itself`;
+      const parent = demoBreedingEntries.find((entry) => entry.id === parentId);
+      if (!parent) return `${label} entry not found`;
+      if (parent.kind !== "animal") return `${label} must reference an animal entry`;
+      if (parent.species !== candidate.species) return `${label} must be the same species`;
+      if (parent.serverLabel !== candidate.serverLabel) return `${label} must be on the same serverLabel`;
+      if (!sexes.some((sex) => sex === parent.sex)) return `${label} must be ${sexes[0]} or unknown`;
+      // Cycle check: parent must not lead back to self
+      if (isUpdate) {
+        const seen = new Set<string>();
+        const stack = [parentId as string];
+        while (stack.length > 0) {
+          const current = stack.pop()!;
+          if (current === selfId) return "Parent reference would create a cycle";
+          if (seen.has(current)) continue;
+          seen.add(current);
+          const node = demoBreedingEntries.find((entry) => entry.id === current);
+          if (node?.motherId) stack.push(node.motherId);
+          if (node?.fatherId) stack.push(node.fatherId);
+        }
+      }
+    }
+    return null;
+  };
+
+  const breedingBaseEntry = (candidate: Record<string, unknown>, base?: BreedingEntry): Record<string, unknown> => ({
+    kind: base?.kind ?? candidate.kind,
+    name: candidate.name ?? base?.name ?? "",
+    species: typeof candidate.species === "string" ? candidate.species.trim().toLowerCase() : (base?.species ?? ""),
+    serverLabel: typeof candidate.serverLabel === "string" ? candidate.serverLabel.trim() : (base?.serverLabel ?? ""),
+    genes: base?.genes === "" && base?.kind === "animal" ? "" : (typeof candidate.genes === "string" ? candidate.genes.trim().toUpperCase() : (base?.genes ?? "")),
+    traits: typeof candidate.traits === "string" ? candidate.traits.trim() : (base?.traits ?? ""),
+    quantity: base?.kind === "animal" ? 1 : (candidate.quantity ?? base?.quantity ?? 1),
+    location: typeof candidate.location === "string" ? candidate.location.trim() : (base?.location ?? ""),
+    available: base?.quantity === 0 && candidate.quantity === undefined ? base.available : (candidate.available ?? base?.available ?? true),
+    sex: candidate.sex ?? base?.sex ?? "unknown",
+    potential: typeof candidate.potential === "string" ? candidate.potential.trim() : (base?.potential ?? ""),
+    motherId: candidate.motherId !== undefined ? candidate.motherId : (base?.motherId ?? null),
+    fatherId: candidate.fatherId !== undefined ? candidate.fatherId : (base?.fatherId ?? null),
+    notes: typeof candidate.notes === "string" ? candidate.notes.trim() : (base?.notes ?? ""),
+  });
+
+  const breedingEntry = (data: Record<string, unknown>, id: string, createdBy: string): BreedingEntry => {
+    const now = new Date().toISOString();
+    return {
+      id,
+      kind: data.kind as BreedingEntry["kind"],
+      name: String(data.name ?? ""),
+      species: String(data.species ?? ""),
+      serverLabel: String(data.serverLabel ?? ""),
+      genes: String(data.genes ?? ""),
+      traits: String(data.traits ?? ""),
+      quantity: typeof data.quantity === "number" ? data.quantity : 1,
+      location: String(data.location ?? ""),
+      available: Boolean(data.available),
+      sex: (data.sex as BreedingEntry["sex"]) ?? "unknown",
+      potential: String(data.potential ?? ""),
+      motherId: (data.motherId as string | null) ?? null,
+      fatherId: (data.fatherId as string | null) ?? null,
+      notes: String(data.notes ?? ""),
+      createdBy,
+      createdAt: now,
+      updatedAt: now,
+    };
+  };
+
+  if (path === "/breeding") {
+    if (method === "GET") return { entries: [...demoBreedingEntries] } as T;
+    if (method === "POST") {
+      const base = breedingBaseEntry(body);
+      const problem = breedingError(base, null);
+      if (problem) throw new Error(problem);
+      const entry = breedingEntry(base, `demo-breed-${Date.now()}`, "Demo Player");
+      demoBreedingEntries.push(entry);
+      return entry as T;
+    }
+  }
+
+  const breedingIdMatch = path.match(/^\/breeding\/([^/]+)$/);
+  if (breedingIdMatch) {
+    const id = breedingIdMatch[1];
+    const index = demoBreedingEntries.findIndex((entry) => entry.id === id);
+    if (method === "PATCH") {
+      if (index < 0) throw new Error("Entry not found");
+      const existing = demoBreedingEntries[index]!;
+      const base = breedingBaseEntry(body, existing);
+      const problem = breedingError(base, id);
+      if (problem) throw new Error(problem);
+      // Deleting a parent is handled here too: clear links pointing at removed ids
+      if (base.available === false || (typeof base.quantity === "number" && base.quantity === 0)) {
+        base.available = false;
+      }
+      const updated: BreedingEntry = {
+        ...existing,
+        kind: existing.kind,
+        name: String(base.name ?? existing.name),
+        species: String(base.species ?? existing.species),
+        serverLabel: String(base.serverLabel ?? existing.serverLabel),
+        genes: String(base.genes ?? ""),
+        traits: String(base.traits ?? ""),
+        quantity: typeof base.quantity === "number" ? base.quantity : existing.quantity,
+        location: String(base.location ?? existing.location),
+        available: Boolean(base.available),
+        sex: (base.sex as BreedingEntry["sex"]) ?? existing.sex,
+        potential: String(base.potential ?? ""),
+        motherId: (base.motherId as string | null) ?? null,
+        fatherId: (base.fatherId as string | null) ?? null,
+        notes: String(base.notes ?? ""),
+        updatedAt: new Date().toISOString(),
+      };
+      demoBreedingEntries[index] = updated;
+      return updated as T;
+    }
+    if (method === "DELETE") {
+      if (index < 0) throw new Error("Entry not found");
+      demoBreedingEntries.splice(index, 1);
+      for (const entry of demoBreedingEntries) {
+        if (entry.motherId === id) entry.motherId = null;
+        if (entry.fatherId === id) entry.fatherId = null;
+      }
+      return { ok: true } as T;
+    }
   }
 
   // ── Team ─────────────────────────────────────────────────────────────

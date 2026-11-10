@@ -35,6 +35,7 @@ export const DATA_RESET_SCOPES = [
   "smart_devices",
   "server_pairing",
   "audit_log",
+  "farming_pool",
 ] as const;
 
 export type DataResetScope = (typeof DATA_RESET_SCOPES)[number];
@@ -47,6 +48,7 @@ export const DATA_RESET_SCOPE_LABELS: Record<DataResetScope, string> = {
   smart_devices: "Paired smart devices, groups & library (templates kept)",
   server_pairing: "Active server pairing (disconnect Rust+; removes all server data)",
   audit_log: "Audit log (all servers)",
+  farming_pool: "Shared farming pool — every crop & animal record across all servers & wipes",
 };
 
 export function isDataResetScope(value: string): value is DataResetScope {

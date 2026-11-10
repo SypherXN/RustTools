@@ -9,6 +9,7 @@ import { registerServerRoutes } from "./map.js";
 import { registerInternalRoutes } from "./internal.js";
 import { registerAdminRoutes } from "./admin.js";
 import { registerPushRoutes } from "./push.js";
+import { registerBreedingRoutes } from "./breeding.js";
 import { getActiveFcmCredentialStatus } from "../lib/fcm-credentials.js";
 
 export async function registerRoutes(
@@ -45,5 +46,6 @@ export async function registerRoutes(
   await registerAuditRoutes(app, deps.db);
   await registerAdminRoutes(app, deps);
   await registerPushRoutes(app, deps.db);
+  await registerBreedingRoutes(app, deps);
   await registerInternalRoutes(app, deps);
 }

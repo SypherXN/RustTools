@@ -1,4 +1,10 @@
-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  primaryKey,
+  type AnySQLiteColumn,
+} from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -325,4 +331,36 @@ export const pushSubscriptions = sqliteTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+});
+
+/**
+ * Shared, manually maintained crop/animal pool. Not tied to a rust server row —
+ * entries carry their own serverLabel/wipe tag so the pool works offline.
+ */
+export const breedingEntries = sqliteTable("breeding_entries", {
+  id: text("id").primaryKey(),
+  /** `crop` or `animal` (immutable after create). */
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  /** Crop: lowercase crop name (berry variants allowed). Animal: cow | sheep. */
+  species: text("species").notNull(),
+  serverLabel: text("server_label").notNull(),
+  /** Six GYHWX genes for crops; blank for animals. */
+  genes: text("genes").notNull().default(""),
+  traits: text("traits").notNull().default(""),
+  quantity: integer("quantity", { mode: "number" }).notNull().default(1),
+  location: text("location").notNull(),
+  available: integer("available", { mode: "boolean" }).notNull().default(true),
+  sex: text("sex").notNull().default("unknown"),
+  potential: text("potential").notNull().default(""),
+  motherId: text("mother_id").references((): AnySQLiteColumn => breedingEntries.id, {
+    onDelete: "set null",
+  }),
+  fatherId: text("father_id").references((): AnySQLiteColumn => breedingEntries.id, {
+    onDelete: "set null",
+  }),
+  notes: text("notes").notNull().default(""),
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
 });
