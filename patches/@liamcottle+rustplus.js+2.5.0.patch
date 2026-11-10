@@ -157,7 +157,6 @@ index 4497096..73128f5 100644
 +        });
  
      }
- 
 diff --git a/node_modules/@liamcottle/rustplus.js/rustplus.proto b/node_modules/@liamcottle/rustplus.js/rustplus.proto
 index d893865..2b5822d 100644
 --- a/node_modules/@liamcottle/rustplus.js/rustplus.proto
