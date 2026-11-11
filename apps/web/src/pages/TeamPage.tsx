@@ -33,6 +33,10 @@ export function TeamPage() {
   const [worldSize, setWorldSize] = useState<number | null>(null);
   const [messages, setMessages] = useState<TeamChatMessage[]>([]);
   const [chatMessage, setChatMessage] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
+  // Ref lock, not just state: a second synchronous Enter/click can run before
+  // a state re-render commits, so only a ref reliably blocks re-entry.
+  const sendingChatRef = useRef(false);
   const chatFeedRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,8 +203,12 @@ export function TeamPage() {
   };
 
   const sendChat = async () => {
+    if (sendingChatRef.current) return;
     const text = chatMessage.trim();
     if (!text) return;
+    sendingChatRef.current = true;
+    setSendingChat(true);
+    setError(null);
     try {
       const result = await apiFetch<{ ok: boolean; message?: TeamChatMessage }>(
         "/servers/active/chat",
@@ -215,6 +223,9 @@ export function TeamPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
+    } finally {
+      sendingChatRef.current = false;
+      setSendingChat(false);
     }
   };
 
@@ -286,10 +297,21 @@ export function TeamPage() {
                 value={chatMessage}
                 onChange={(e) => setChatMessage(e.target.value)}
                 placeholder="Message to team..."
-                onKeyDown={(e) => e.key === "Enter" && void sendChat()}
+                aria-label="Message to team"
+                disabled={sendingChat}
+                onKeyDown={(e) => {
+                  // Block repeats; ignore IME composition Enter (Korean users).
+                  if (e.key !== "Enter" || e.repeat || e.nativeEvent.isComposing) return;
+                  e.preventDefault();
+                  void sendChat();
+                }}
               />
-              <button type="button" onClick={() => void sendChat()}>
-                Send
+              <button
+                type="button"
+                onClick={() => void sendChat()}
+                disabled={sendingChat}
+              >
+                {sendingChat ? "Sending…" : "Send"}
               </button>
             </div>
           ) : (

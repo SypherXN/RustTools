@@ -956,12 +956,12 @@ export class RustPlusManager {
   async sendTeamMessage(message: string): Promise<void> {
     await this.enqueueRustRequest(() => {
       const conn = this.getActiveConnection();
-      return withRustRetry("sendTeamMessage", () =>
-        withRustTimeout(
-          "sendTeamMessage",
-          (cb) => conn.client.sendTeamMessage(message, cb),
-          () => undefined,
-        ),
+      // Chat is not idempotent: never retry. The server may accept the message
+      // and lose the ack, so a retry would send it twice.
+      return withRustTimeout(
+        "sendTeamMessage",
+        (cb) => conn.client.sendTeamMessage(message, cb),
+        () => undefined,
       );
     });
   }
