@@ -11,6 +11,7 @@ import {
   formatDurationSince,
   formatWebHelpCategories,
   sortTeamRoster,
+  stripRustMarkup,
   teamMemberStatus,
   type ParsedTeamInfo,
   worldToGridLabel,
@@ -381,10 +382,10 @@ export function buildTeamChatMirrorEmbed(
   senderName: string,
   message: string,
 ): DiscordEmbedPayload {
-  const name = senderName.trim() || "Unknown";
+  const name = stripRustMarkup(senderName).trim() || "Unknown";
   return {
     title: name,
-    description: message,
+    description: stripRustMarkup(message),
     color: EMBED_COLORS.primary,
     footer: { text: "RustTools" },
   };
