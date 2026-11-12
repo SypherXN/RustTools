@@ -1,6 +1,5 @@
 import type {
   AuthUserResponse,
-  BreedingEntry,
   NotificationSettingsResponse,
   TeamApiResponse,
   TeamChatMessage,
@@ -8,8 +7,15 @@ import type {
   TeamRosterMember,
 } from "@rusttools/shared";
 import {
+  ANIMAL_GRADES,
+  ANIMAL_MODEL_VERSION,
+  ANIMAL_TRAITS,
   aggregateStorageItemSearch,
+  describeAnimalModel,
+  expressedGrade,
+  fitAnimalModel,
   mergeNotificationSettings,
+  offspringTraitOdds,
   DEFAULT_AUTOMATION_BASE_SETTINGS,
   DEFAULT_SERVER_NOTIFICATION_SETTINGS,
   FULL_USER_PERMISSIONS,
@@ -17,6 +23,11 @@ import {
   resolveStorageMonitorIcon,
   STORAGE_CONTAINER_ICON_CATALOG,
 } from "@rusttools/shared";
+import {
+  animalGenotypeFromWire,
+  type AnimalAnalysis,
+  type BreedingWireEntry as BreedingEntry,
+} from "./breeding-utils";
 
 export function isDemoMode(): boolean {
   if (import.meta.env.VITE_DEMO_MODE === "true") return true;
@@ -413,6 +424,15 @@ let demoBreedingEntries: BreedingEntry[] = [
     serverLabel: "US West — wipe 4d",
     genes: "",
     traits: "Dark coat, docile near walls",
+    animalGenotype: {
+      traits: {
+        dung: { a: "good", b: "bad" },
+        yield: { a: "good", b: "okay" },
+        fertility: { a: "good", b: "good" },
+        hardiness: { a: "okay", b: "bad" },
+      },
+      markers: ["BESSIE", "JOHN"],
+    },
     quantity: 1,
     location: "Stable wing, base 2×2 corral",
     available: true,
@@ -433,6 +453,15 @@ let demoBreedingEntries: BreedingEntry[] = [
     serverLabel: "US West — wipe 4d",
     genes: "",
     traits: "Branded, huge frame",
+    animalGenotype: {
+      traits: {
+        dung: { a: "okay", b: "bad" },
+        yield: { a: "okay", b: "okay" },
+        fertility: { a: "good", b: "okay" },
+        hardiness: { a: "okay", b: "bad" },
+      },
+      markers: ["BESSIE", "NORTH"],
+    },
     quantity: 1,
     location: "Stable wing, base 2×2 corral",
     available: true,
@@ -453,6 +482,15 @@ let demoBreedingEntries: BreedingEntry[] = [
     serverLabel: "US West — wipe 4d",
     genes: "",
     traits: "Calmed fast with hemp",
+    animalGenotype: {
+      traits: {
+        dung: { a: "good", b: "okay" },
+        yield: { a: "good", b: "okay" },
+        fertility: { a: "good", b: "okay" },
+        hardiness: { a: "good", b: "okay" },
+      },
+      markers: ["JOHN", "SOUTH"],
+    },
     quantity: 1,
     location: "Stable wing, base 2×2 corral",
     available: true,
@@ -506,6 +544,68 @@ let demoBreedingEntries: BreedingEntry[] = [
     updatedAt: demoBreedingStamp(720),
   },
 ];
+
+/** Derive evidence from the mutable demo pool so edits/deletes stay consistent. */
+function demoAnimalAnalysis(): AnimalAnalysis {
+  const animals = demoBreedingEntries.filter((entry) => entry.kind === "animal");
+  const byId = new Map(animals.map((entry) => [entry.id, entry]));
+  let withBothParents = 0;
+  const births = animals.map((entry) => {
+    const mother = entry.motherId ? byId.get(entry.motherId) : null;
+    const father = entry.fatherId ? byId.get(entry.fatherId) : null;
+    if (mother && father) withBothParents++;
+    return {
+      mother: mother?.animalGenotype ? animalGenotypeFromWire(mother.animalGenotype) : null,
+      father: father?.animalGenotype ? animalGenotypeFromWire(father.animalGenotype) : null,
+      offspring: entry.animalGenotype ? animalGenotypeFromWire(entry.animalGenotype) : null,
+    };
+  });
+  const usableFor = (birth: (typeof births)[number], trait: (typeof ANIMAL_TRAITS)[number]) =>
+    Boolean(birth.mother?.[trait] && birth.father?.[trait] && birth.offspring?.[trait]);
+  const fitted = fitAnimalModel(births);
+  const perTrait = ANIMAL_TRAITS.map((trait) => {
+    const expressed = { bad: 0, okay: 0, good: 0 };
+    const predicted = { bad: 0, okay: 0, good: 0 };
+    let sampleSize = 0;
+    for (const birth of births) {
+      if (!usableFor(birth, trait)) continue;
+      expressed[expressedGrade(birth.offspring![trait])!]++;
+      const odds = offspringTraitOdds(birth.mother, birth.father, trait, fitted.params);
+      for (const grade of ANIMAL_GRADES) predicted[grade] += odds[grade];
+      sampleSize++;
+    }
+    if (sampleSize > 0) {
+      for (const grade of ANIMAL_GRADES) predicted[grade] /= sampleSize;
+    }
+    return { trait, expressed, predicted: sampleSize >= 30 ? predicted : null, sampleSize };
+  });
+  const relatedPairs = { related: 0, unrelated: 0, unknown: 0 };
+  // ponytail: O(n²) demo pair scan; index markers if large demo pools need it.
+  for (let i = 0; i < animals.length; i++) {
+    for (let j = i + 1; j < animals.length; j++) {
+      const left = animals[i].animalGenotype?.markers;
+      const right = animals[j].animalGenotype?.markers;
+      if (!left || !right) relatedPairs.unknown++;
+      else if (left.some((marker) => right.includes(marker))) relatedPairs.related++;
+      else relatedPairs.unrelated++;
+    }
+  }
+  return {
+    coverage: {
+      animals: animals.length,
+      withBothParents,
+      birthsUsable: births.filter((birth) => ANIMAL_TRAITS.some((trait) => usableFor(birth, trait))).length,
+    },
+    model: { version: ANIMAL_MODEL_VERSION, params: fitted.params, evidence: fitted.evidence },
+    perTrait,
+    relatedPairs,
+    notes: [
+      ...describeAnimalModel(fitted.params),
+      "Trait samples compare recorded offspring with both parents' trait genotypes known; predictions require 30 samples per trait.",
+      "Relatedness counts unordered pairs of distinct animals; missing markers are unknown.",
+    ],
+  };
+}
 
 export const demoMapSize = { width: 2000, height: 2000 };
 export const demoMapTransform = {
@@ -856,6 +956,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     const requiredText = candidate.name && candidate.species && candidate.serverLabel && candidate.location;
     if (!requiredText) return "name, species, serverLabel and location are required";
     if (candidate.kind === "crop") {
+      if (candidate.animalGenotype !== undefined) return "animalGenotype is only supported on animal entries";
       const genes = typeof candidate.genes === "string" ? candidate.genes.trim().toUpperCase() : "";
       if (!/^[GYHWX]{6}$/.test(genes)) return "genes must be exactly six characters from GYHWX";
       if (typeof candidate.quantity !== "number" || !Number.isInteger(candidate.quantity) || candidate.quantity < 0) {
@@ -865,6 +966,26 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       if (candidate.quantity !== 1) return "quantity must be 1 for animals";
       if (candidate.species !== "cow" && candidate.species !== "sheep") {
         return "animal species must be cow or sheep";
+      }
+      if (candidate.animalGenotype !== undefined) {
+        const object = (value: unknown): value is Record<string, unknown> =>
+          typeof value === "object" && value !== null && !Array.isArray(value);
+        const genotype = candidate.animalGenotype;
+        if (!object(genotype) || Object.keys(genotype).some((key) => key !== "traits" && key !== "markers") ||
+            !object(genotype.traits)) return "Invalid animalGenotype";
+        for (const [trait, pair] of Object.entries(genotype.traits)) {
+          if (!ANIMAL_TRAITS.some((value) => value === trait)) return "Invalid animalGenotype";
+          if (pair === null) continue;
+          if (!object(pair) || Object.keys(pair).some((key) => key !== "a" && key !== "b") ||
+              !ANIMAL_GRADES.some((grade) => grade === pair.a) ||
+              !ANIMAL_GRADES.some((grade) => grade === pair.b)) return "Invalid animalGenotype";
+        }
+        if (Object.hasOwn(genotype, "markers")) {
+          const markers = genotype.markers;
+          if (!Array.isArray(markers) || markers.length !== 2 || markers.some((marker) =>
+            typeof marker !== "string" || !marker.trim() || marker.length > 8,
+          )) return "Invalid animalGenotype";
+        }
       }
     }
     for (const [key, label, sexes] of [
@@ -905,6 +1026,9 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     serverLabel: typeof candidate.serverLabel === "string" ? candidate.serverLabel.trim() : (base?.serverLabel ?? ""),
     genes: base?.genes === "" && base?.kind === "animal" ? "" : (typeof candidate.genes === "string" ? candidate.genes.trim().toUpperCase() : (base?.genes ?? "")),
     traits: typeof candidate.traits === "string" ? candidate.traits.trim() : (base?.traits ?? ""),
+    ...(Object.hasOwn(candidate, "animalGenotype")
+      ? { animalGenotype: candidate.animalGenotype }
+      : base?.animalGenotype ? { animalGenotype: base.animalGenotype } : {}),
     quantity: base?.kind === "animal" ? 1 : (candidate.quantity ?? base?.quantity ?? 1),
     location: typeof candidate.location === "string" ? candidate.location.trim() : (base?.location ?? ""),
     available: base?.quantity === 0 && candidate.quantity === undefined ? base.available : (candidate.available ?? base?.available ?? true),
@@ -925,6 +1049,8 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       serverLabel: String(data.serverLabel ?? ""),
       genes: String(data.genes ?? ""),
       traits: String(data.traits ?? ""),
+      ...(data.kind === "animal" && data.animalGenotype !== undefined
+        ? { animalGenotype: data.animalGenotype as BreedingEntry["animalGenotype"] } : {}),
       quantity: typeof data.quantity === "number" ? data.quantity : 1,
       location: String(data.location ?? ""),
       available: Boolean(data.available),
@@ -938,6 +1064,8 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       updatedAt: now,
     };
   };
+
+  if (path === "/breeding/analysis/animals" && method === "GET") return demoAnimalAnalysis() as T;
 
   if (path === "/breeding") {
     if (method === "GET") return { entries: [...demoBreedingEntries] } as T;
@@ -973,6 +1101,8 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
         serverLabel: String(base.serverLabel ?? existing.serverLabel),
         genes: String(base.genes ?? ""),
         traits: String(base.traits ?? ""),
+        ...(existing.kind === "animal" && base.animalGenotype !== undefined
+          ? { animalGenotype: base.animalGenotype as BreedingEntry["animalGenotype"] } : {}),
         quantity: typeof base.quantity === "number" ? base.quantity : existing.quantity,
         location: String(base.location ?? existing.location),
         available: Boolean(base.available),

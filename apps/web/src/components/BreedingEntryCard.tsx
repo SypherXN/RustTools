@@ -1,4 +1,4 @@
-import type { BreedingEntry } from "@rusttools/shared";
+import { ANIMAL_TRAITS, expressedGrade, isGodCloneGenome } from "@rusttools/shared";
 import { GeneStrip } from "./BreedingGenes";
 import {
   breedingKindLabel,
@@ -7,6 +7,8 @@ import {
   breedingById,
   formatBreedingUpdated,
   isBreedingAvailable,
+  animalGenotypeFromWire,
+  type BreedingWireEntry as BreedingEntry,
 } from "../lib/breeding-utils";
 
 export function BreedingEntryCard({
@@ -32,6 +34,10 @@ export function BreedingEntryCard({
   const mother = entry.motherId ? byId.get(entry.motherId) : null;
   const father = entry.fatherId ? byId.get(entry.fatherId) : null;
   const available = isBreedingAvailable(entry);
+  const godClone = entry.kind === "crop" && !!entry.genes && isGodCloneGenome(entry.species, entry.genes);
+  const genotype = entry.kind === "animal" && entry.animalGenotype
+    ? animalGenotypeFromWire(entry.animalGenotype)
+    : null;
 
   return (
     <li className={`card breeding-item${available ? "" : " breeding-item-unavailable"}`}>
@@ -96,7 +102,37 @@ export function BreedingEntryCard({
           </div>
         )}
 
-        {entry.genes && <GeneStrip genes={entry.genes} />}
+        {entry.genes && (
+          <div className="breeding-item-genes">
+            <GeneStrip genes={entry.genes} />
+            {godClone && (
+              <span
+                className="badge breeding-god-clone-badge"
+                aria-label={`God clone genome for ${breedingSpeciesLabel(entry)}`}
+              >
+                God clone
+              </span>
+            )}
+          </div>
+        )}
+        {genotype && (
+          <div className="breeding-item-genes" aria-label="Animal genotype">
+            {ANIMAL_TRAITS.map((trait) => {
+              const pair = genotype[trait];
+              const grade = expressedGrade(pair);
+              return (
+                <span key={trait}>
+                  <span className="badge">{trait} {grade ?? "not recorded"}</span>
+                  {pair && pair.a !== pair.b && (
+                    <span className="muted breeding-hint">
+                      {" "}{trait} carries {pair.a === grade ? pair.b : pair.a}
+                    </span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
         <dl className="breeding-meta">
           <div>
             <dt>Species</dt>

@@ -38,3 +38,5 @@ export * from "./game-data-version.js";
 export * from "./team-board.js";
 export * from "./breeding.js";
 export * from "./crop-breeding.js";
+export * from "./god-clones.js";
+export * from "./animal-breeding.js";

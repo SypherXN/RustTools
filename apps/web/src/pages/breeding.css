@@ -133,6 +133,14 @@
   font-size: 0.9rem;
 }
 
+/* Gene strip plus the god-clone tag, kept on one line where room allows. */
+.breeding-item-genes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
 .breeding-meta {
   margin: 0;
   display: grid;
@@ -269,6 +277,33 @@
 .breeding-hint {
   margin: 0;
   font-size: 0.8rem;
+}
+
+.breeding-genotype {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.breeding-genotype-trait {
+  min-width: 0;
+  margin: 0;
+}
+
+.breeding-genotype .breeding-form-grid > label {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.breeding-genotype input,
+.breeding-genotype select {
+  min-width: 0;
+  width: 100%;
+}
+
+.breeding-herd {
+  overflow-wrap: anywhere;
 }
 
 /* Warnings + results */
@@ -481,6 +516,36 @@
 
 .breeding-calculator .breeding-calculator h2 {
   margin: 0;
+}
+
+/* God clone target: default badge or custom-target line with a reset button. */
+.breeding-target-note {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  color: var(--muted);
+}
+
+.breeding-god-clone-badge {
+  letter-spacing: 0.04em;
+}
+
+/* Beat the shared .badge margin regardless of stylesheet order. */
+.breeding-target-note .breeding-god-clone-badge,
+.breeding-item-genes .breeding-god-clone-badge {
+  margin-left: 0;
+}
+
+.breeding-target-reset {
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+}
+
+.breeding-target-reset:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
 }
 
 /* Responsive tweaks */

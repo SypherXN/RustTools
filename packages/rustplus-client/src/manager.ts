@@ -783,14 +783,6 @@ export class RustPlusManager {
     return null;
   }
 
-  invalidateEntityInfoCache(entityId?: number): void {
-    if (entityId != null) {
-      this.entityInfoCache.delete(entityId);
-      return;
-    }
-    this.entityInfoCache.clear();
-  }
-
   async toggleSwitch(entityId: number, value: boolean): Promise<void> {
     await this.subscribeEntity(entityId);
 
@@ -805,13 +797,6 @@ export class RustPlusManager {
       );
     });
     this.entityInfoCache.delete(entityId);
-  }
-
-  async toggleSwitchGroup(name: string, value: boolean): Promise<number> {
-    // Group toggling is handled at API layer using DB entity list
-    void name;
-    void value;
-    return 0;
   }
 
   async getServerInfo(): Promise<unknown> {

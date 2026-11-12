@@ -359,6 +359,8 @@ export const breedingEntries = sqliteTable("breeding_entries", {
   /** Six GYHWX genes for crops; blank for animals. */
   genes: text("genes").notNull().default(""),
   traits: text("traits").notNull().default(""),
+  /** Animal genotype JSON only; crops and legacy rows are null. */
+  animalGenotypeJson: text("animal_genotype_json"),
   quantity: integer("quantity", { mode: "number" }).notNull().default(1),
   location: text("location").notNull(),
   available: integer("available", { mode: "boolean" }).notNull().default(true),

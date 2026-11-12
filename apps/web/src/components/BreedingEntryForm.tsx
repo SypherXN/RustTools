@@ -1,10 +1,38 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { BreedingEntry, BreedingEntryInput, BreedingKind, BreedingSex } from "@rusttools/shared";
 import {
+  ANIMAL_GRADES,
+  ANIMAL_TRAITS,
+  expressedGrade,
+  type AnimalGrade,
+  type AnimalTrait,
+  type BreedingKind,
+  type BreedingSex,
+} from "@rusttools/shared";
+import {
+  animalGenotypeFromWire,
   breedingPairWarning,
   breedingSexLabel,
   breedingWouldCycle,
+  type AnimalGenotypeWire,
+  type BreedingWireEntry as BreedingEntry,
+  type BreedingWireInput as BreedingEntryInput,
 } from "../lib/breeding-utils";
+
+type AlleleDraft = Record<AnimalTrait, { a: AnimalGrade | ""; b: AnimalGrade | "" }>;
+
+function genotypeDraft(entry: BreedingEntry | null): AlleleDraft {
+  const model = animalGenotypeFromWire(entry?.kind === "animal" ? entry.animalGenotype : null);
+  return {
+    dung: model.dung ?? { a: "", b: "" },
+    yield: model.yield ?? { a: "", b: "" },
+    fertility: model.fertility ?? { a: "", b: "" },
+    hardiness: model.hardiness ?? { a: "", b: "" },
+  };
+}
+
+function draftExpression(pair: AlleleDraft[AnimalTrait]): AnimalGrade | null {
+  return pair.a && pair.b ? expressedGrade({ a: pair.a, b: pair.b }) : null;
+}
 
 interface FormState {
   kind: BreedingKind;
@@ -21,6 +49,9 @@ interface FormState {
   motherId: string;
   fatherId: string;
   notes: string;
+  genotype: AlleleDraft;
+  markerA: string;
+  markerB: string;
 }
 
 function formFromEntry(entry: BreedingEntry | null, defaultKind: BreedingKind): FormState {
@@ -40,6 +71,9 @@ function formFromEntry(entry: BreedingEntry | null, defaultKind: BreedingKind): 
       motherId: "",
       fatherId: "",
       notes: "",
+      genotype: genotypeDraft(null),
+      markerA: "",
+      markerB: "",
     };
   }
   return {
@@ -57,6 +91,9 @@ function formFromEntry(entry: BreedingEntry | null, defaultKind: BreedingKind): 
     motherId: entry.motherId ?? "",
     fatherId: entry.fatherId ?? "",
     notes: entry.notes,
+    genotype: genotypeDraft(entry),
+    markerA: entry.kind === "animal" ? entry.animalGenotype?.markers?.[0] ?? "" : "",
+    markerB: entry.kind === "animal" ? entry.animalGenotype?.markers?.[1] ?? "" : "",
   };
 }
 
@@ -81,6 +118,15 @@ export function BreedingEntryForm({
   const [localError, setLocalError] = useState<string | null>(null);
   const [formNote, setFormNote] = useState<string | null>(null);
   const lineageScopeRef = useRef<string>("");
+  const incompleteTrait = ANIMAL_TRAITS.find((trait) =>
+    Boolean(form.genotype[trait].a) !== Boolean(form.genotype[trait].b));
+  const markerA = form.markerA.trim();
+  const markerB = form.markerB.trim();
+  const genotypeError = incompleteTrait
+    ? `${incompleteTrait}: record both alleles or clear both to Not recorded.`
+    : Boolean(markerA) !== Boolean(markerB)
+      ? "Record both lineage markers or clear both."
+      : null;
 
   // Lineage selections are scoped to species + serverLabel. When either
   // changes, the option lists move — clear the parents explicitly instead of
@@ -138,6 +184,8 @@ export function BreedingEntryForm({
   // Kind switch (create mode only) resets kind-specific fields so hidden
   // traits/potential/lineage never survive into the other kind's record.
   const switchKind = (kind: BreedingKind) => {
+    if (kind === form.kind) return;
+    setLocalError(null);
     setForm((prev) => ({
       ...prev,
       kind,
@@ -148,12 +196,19 @@ export function BreedingEntryForm({
       sex: "unknown",
       motherId: "",
       fatherId: "",
+      genotype: genotypeDraft(null),
+      markerA: "",
+      markerB: "",
     }));
     setFormNote(`Switched to ${kind === "crop" ? "crop seed" : "animal"} — gene, trait, and lineage fields for the other kind were reset.`);
   };
 
   const save = async () => {
     setLocalError(null);
+    if (form.kind === "animal" && genotypeError) {
+      setLocalError(genotypeError);
+      return;
+    }
 
     const name = form.name.trim();
     const species = form.species.trim().toLowerCase();
@@ -220,6 +275,16 @@ export function BreedingEntryForm({
       fatherId = father?.id ?? null;
     }
 
+    // Only complete pairs cross the API boundary; blank pairs are explicit nulls
+    // so editing can clear previously recorded traits and markers.
+    const animalGenotype: AnimalGenotypeWire = { traits: {} };
+    if (form.kind === "animal") {
+      for (const trait of ANIMAL_TRAITS) {
+        const { a, b } = form.genotype[trait];
+        animalGenotype.traits[trait] = a && b ? { a, b } : null;
+      }
+      if (markerA && markerB) animalGenotype.markers = [markerA, markerB];
+    }
     const input: BreedingEntryInput = {
       kind: form.kind,
       name,
@@ -235,6 +300,7 @@ export function BreedingEntryForm({
       motherId,
       fatherId,
       notes: form.notes.trim(),
+      ...(form.kind === "animal" ? { animalGenotype } : {}),
     };
     await onSave(input);
   };
@@ -348,9 +414,70 @@ export function BreedingEntryForm({
 
       {form.kind === "animal" && (
         <>
+          <section className="breeding-genotype" aria-labelledby="breeding-genotype-heading">
+            <h3 id="breeding-genotype-heading">Genotype</h3>
+            <p className="muted breeding-hint">
+              The stronger allele shows; the hidden one is what offspring can inherit.
+              Record both alleles for a trait, or leave both not recorded.
+            </p>
+            {ANIMAL_TRAITS.map((trait) => (
+              <fieldset key={trait} className="breeding-genotype-trait">
+                <legend>{trait[0].toUpperCase() + trait.slice(1)}</legend>
+                <div className="breeding-form-grid">
+                  {(["a", "b"] as const).map((allele) => (
+                    <label key={allele}>
+                      Allele {allele.toUpperCase()}
+                      <select
+                        aria-label={`${trait} allele ${allele.toUpperCase()}`}
+                        aria-describedby="breeding-genotype-error"
+                        aria-invalid={Boolean(form.genotype[trait].a) !== Boolean(form.genotype[trait].b)}
+                        value={form.genotype[trait][allele]}
+                        onChange={(e) => {
+                          const value = e.target.value as AnimalGrade | "";
+                          setForm((prev) => ({
+                            ...prev,
+                            genotype: {
+                              ...prev.genotype,
+                              [trait]: { ...prev.genotype[trait], [allele]: value },
+                            },
+                          }));
+                        }}
+                      >
+                        <option value="">Not recorded</option>
+                        {ANIMAL_GRADES.map((grade) => <option key={grade} value={grade}>{grade}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+                <p className="muted breeding-hint" aria-live="polite">
+                  Expressed: {draftExpression(form.genotype[trait]) ?? "not recorded"}
+                </p>
+              </fieldset>
+            ))}
+            <p className="breeding-hint" aria-live="polite">
+              {ANIMAL_TRAITS.map((trait) =>
+                `${trait[0].toUpperCase() + trait.slice(1)} ${draftExpression(form.genotype[trait]) ?? "not recorded"}`,
+              ).join(" · ")}
+            </p>
+            <div className="breeding-form-grid">
+              <label>
+                Lineage marker A (optional)
+                <input value={form.markerA} maxLength={8} onChange={(e) => set("markerA", e.target.value)}
+                  aria-describedby="breeding-genotype-error" />
+              </label>
+              <label>
+                Lineage marker B (optional)
+                <input value={form.markerB} maxLength={8} onChange={(e) => set("markerB", e.target.value)}
+                  aria-describedby="breeding-genotype-error" />
+              </label>
+            </div>
+            <p id="breeding-genotype-error" className="breeding-hint" role="status">
+              {genotypeError ?? "Lineage markers: record both or leave both blank (up to 8 characters each)."}
+            </p>
+          </section>
           <p className="muted breeding-hint" role="note">
-            This tracker records what you observe — traits, lineage, and pickup notes. It does
-            <strong> not predict inheritance</strong>; animal genetics stay observational.
+            Record observed traits, genotypes, lineage, and pickup notes.
+            Herd analysis uses an unverified Rust Lite model, not guaranteed inheritance.
           </p>
           <label>
             Observed traits

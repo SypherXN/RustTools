@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BreedingEntry } from "@rusttools/shared";
 import {
+  DEFAULT_GOD_CLONE_GENOME,
   cropTargetStatus,
   findTwoDonorCrosses,
+  godCloneGenomeForSpecies,
   isValidCropGenes,
   planCropPath,
   simulateCropCross,
@@ -33,7 +35,8 @@ export function CropCrossCalculator({
   const [serverLabel, setServerLabel] = useState("");
   const [centre, setCentre] = useState("");
   const [donorsText, setDonorsText] = useState("");
-  const [target, setTarget] = useState("GGGYYY");
+  const [target, setTarget] = useState(DEFAULT_GOD_CLONE_GENOME);
+  const [targetCustom, setTargetCustom] = useState(false);
   const [anyOrder, setAnyOrder] = useState(false);
   const [manual, setManual] = useState<{ result: CropCrossResult | null; error: string | null }>({ result: null, error: null });
   const [search, setSearch] = useState<{ result: CropCrossSearch | null; error: string | null }>({ result: null, error: null });
@@ -70,6 +73,11 @@ export function CropCrossCalculator({
       setServerLabel(preset.serverLabel);
       setCentre("");
       setDonorsText("");
+      // A new crop means a new god clone target; a server-only switch keeps it.
+      if (!sameSpecies) {
+        setTarget(godCloneGenomeForSpecies(preset.species));
+        setTargetCustom(false);
+      }
       setNote(`Switched to ${preset.species} on “${preset.serverLabel}” — previous centre and donor lines cleared.`);
     }
     if (preset.centre) {
@@ -104,6 +112,8 @@ export function CropCrossCalculator({
   const invalidDonors = donorLines.filter((line) => !isValidCropGenes(line));
   const tooManyDonors = donorLines.length > 8;
   const speciesRequired = !species.trim();
+  const speciesLabel = species.trim();
+  const godClone = godCloneGenomeForSpecies(species);
 
   const searchPool = useMemo(() => {
     const wantedSpecies = species.trim().toLowerCase();
@@ -262,10 +272,11 @@ export function CropCrossCalculator({
     <section className="card breeding-calculator">
       <h2>Crop cross planner</h2>
       <p className="muted">
-        Manual calculator for one cross at a time — centre seed plus donor genes. Tied slots are
-        listed as options, never probabilities; the game's tie-break is undocumented in the
-        sources. Animals are not planned here — cow/sheep inheritance is undocumented, so animal
-        records stay observational.
+        Manual calculator for one cross at a time — centre seed plus donor genes. Targets default
+        to each crop's god clone, the max-growth and max-yield genome (3 G + 3 Y); type a different
+        target if you need one. Tied slots are listed as options, never probabilities; the game's
+        tie-break is undocumented in the sources. Animals are not planned here — cow/sheep
+        inheritance is undocumented, so animal records stay observational.
       </p>
 
       <div className="breeding-form-grid">
@@ -276,10 +287,22 @@ export function CropCrossCalculator({
             value={species}
             onChange={(e) => {
               const next = e.target.value;
+              const speciesChanged = next.trim().toLowerCase() !== species.trim().toLowerCase();
               if (next !== species && (centre || donorsText)) {
                 setCentre("");
                 setDonorsText("");
                 setNote(`Species changed manually — cleared the pooled centre and donor lines; they may belong to “${species || "the previous species"}”.`);
+              }
+              if (speciesChanged) {
+                if (next.trim()) {
+                  // Default to the new crop's god clone; a target typed for the
+                  // same crop is left alone because speciesChanged is false then.
+                  setTarget(godCloneGenomeForSpecies(next));
+                  setTargetCustom(false);
+                } else {
+                  // Empty species: keep the typed target, re-check it against the fallback.
+                  setTargetCustom(target !== godCloneGenomeForSpecies(next));
+                }
               }
               setSpecies(next);
               setServerLabel("");
@@ -314,10 +337,39 @@ export function CropCrossCalculator({
             value={target}
             maxLength={6}
             spellCheck={false}
-            onChange={(e) => setTarget(e.target.value.toUpperCase().replace(/[^GYHWX]/g, ""))}
+            onChange={(e) => {
+              const next = e.target.value.toUpperCase().replace(/[^GYHWX]/g, "");
+              setTarget(next);
+              setTargetCustom(next !== godClone);
+            }}
           />
         </label>
       </div>
+      <p className="breeding-hint breeding-target-note" aria-live="polite">
+        {targetCustom ? (
+          <>
+            <span>Custom target — god clone for {speciesLabel || "this crop"} is {godClone}</span>
+            <button
+              type="button"
+              className="btn-secondary breeding-target-reset"
+              aria-label={`Use the god clone genome ${godClone} as the target`}
+              onClick={() => {
+                setTarget(godClone);
+                setTargetCustom(false);
+              }}
+            >
+              Use god clone
+            </button>
+          </>
+        ) : (
+          <span
+            className="badge breeding-god-clone-badge"
+            aria-label={`Target is the god clone genome ${godClone}${speciesLabel ? ` for ${speciesLabel}` : ""}`}
+          >
+            God clone{speciesLabel ? ` for ${speciesLabel}` : ""}: {godClone}
+          </span>
+        )}
+      </p>
       <datalist id="breeding-calc-species">
         {speciesOptions.map((option) => (<option key={option} value={option} />))}
       </datalist>

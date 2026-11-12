@@ -306,4 +306,14 @@ assert.throws(() => planCropPath([{ id: "a", genes: "ZZZZZZ", quantity: 1 }], "G
 assert.throws(() => planCropPath([], "GGGGGG", false, { maxGenerations: NaN }), /finite number/);
 assert.throws(() => planCropPath([], "GGGGGG", false, null), /options must be an object/);
 
+// God clone defaults and order-insensitive validation.
+assert.equal(shared.godCloneGenomeForSpecies("unknown species"), "GGGYYY");
+assert.equal(shared.godCloneGenomeForSpecies(""), "GGGYYY");
+assert.equal(shared.godCloneGenomeForSpecies(" Hemp "), "GGGYYY");
+assert.equal(shared.isGodCloneGenome("hemp", "YYYGGG"), true);
+assert.equal(shared.isGodCloneGenome("hemp", "gggyyy"), true);
+assert.equal(shared.isGodCloneGenome("hemp", "GGGGGG"), false);
+assert.equal(shared.isGodCloneGenome("hemp", "GGGYY"), false);
+assert.equal(shared.godCloneGenomeForSpecies("space tomato"), shared.DEFAULT_GOD_CLONE_GENOME);
+
 console.log("crop-breeding checks passed");

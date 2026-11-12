@@ -23,16 +23,20 @@ import {
 } from "@rusttools/shared";
 import { requireCapability } from "../lib/auth.js";
 import { generateId } from "../lib/ids.js";
+import { parseAnimalGenotype, type AnimalGenotypeJson } from "../lib/animal-genotype.js";
+import { analyzeAnimals } from "../lib/animal-analysis.js";
 
 type Row = typeof breedingEntries.$inferSelect;
 type Body = Record<string, unknown>;
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type ReaderDb = Pick<Tx, "select">;
+type Entry = BreedingEntry & { animalGenotype?: AnimalGenotypeJson | null };
+type Draft = BreedingEntryInput & { animalGenotypeJson: string | null };
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 
 type MutationResult =
-  | { ok: true; entry: BreedingEntry }
+  | { ok: true; entry: Entry }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 const ALLOWED_KEYS = new Set([
@@ -42,6 +46,7 @@ const ALLOWED_KEYS = new Set([
   "serverLabel",
   "genes",
   "traits",
+  "animalGenotype",
   "quantity",
   "location",
   "available",
@@ -60,7 +65,8 @@ function isPlainObject(value: unknown): value is Body {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseEntry(row: Row): BreedingEntry {
+function parseEntry(row: Row): Entry {
+  const genotype = parseAnimalGenotype(row.animalGenotypeJson, "storage");
   return {
     id: row.id,
     kind: row.kind as BreedingEntry["kind"],
@@ -69,6 +75,7 @@ function parseEntry(row: Row): BreedingEntry {
     serverLabel: row.serverLabel,
     genes: row.genes,
     traits: row.traits,
+    ...(row.kind === "animal" ? { animalGenotype: genotype.ok ? genotype.value.genotype : null } : {}),
     quantity: row.quantity,
     location: row.location,
     available: row.available,
@@ -83,7 +90,7 @@ function parseEntry(row: Row): BreedingEntry {
   };
 }
 
-function toInput(row: Row): BreedingEntryInput {
+function toInput(row: Row): Draft {
   return {
     kind: row.kind as BreedingKind,
     name: row.name,
@@ -91,6 +98,7 @@ function toInput(row: Row): BreedingEntryInput {
     serverLabel: row.serverLabel,
     genes: row.genes,
     traits: row.traits,
+    animalGenotypeJson: row.animalGenotypeJson,
     quantity: row.quantity,
     location: row.location,
     available: row.available,
@@ -166,7 +174,7 @@ function parseParent(
   return { ok: true, value };
 }
 
-function buildDraft(body: Body, base: BreedingEntryInput | null): Parsed<BreedingEntryInput> {
+function buildDraft(body: Body, base: Draft | null): Parsed<Draft> {
   for (const key of Object.keys(body)) {
     if (!ALLOWED_KEYS.has(key)) return fail(`Unknown field: ${key}`);
   }
@@ -181,6 +189,14 @@ function buildDraft(body: Body, base: BreedingEntryInput | null): Parsed<Breedin
   } else {
     if (!isBreedingKind(body.kind)) return fail("kind must be crop or animal");
     kind = body.kind;
+  }
+
+  let animalGenotypeJson = base?.animalGenotypeJson ?? null;
+  if (Object.hasOwn(body, "animalGenotype")) {
+    if (kind !== "animal") return fail("animalGenotype is only supported on animal entries");
+    const genotype = parseAnimalGenotype(body.animalGenotype, "input");
+    if (!genotype.ok) return genotype;
+    animalGenotypeJson = genotype.value.json;
   }
 
   const name = parseText(body, "name", "name", BREEDING_NAME_MAX_LEN, base?.name ?? "", {
@@ -293,6 +309,7 @@ function buildDraft(body: Body, base: BreedingEntryInput | null): Parsed<Breedin
       serverLabel: serverLabel.value,
       genes,
       traits: traits.value,
+      animalGenotypeJson,
       quantity: quantity.value,
       location: location.value,
       available: available.value,
@@ -408,6 +425,14 @@ export async function registerBreedingRoutes(
   app: FastifyInstance,
   deps: { db: Database },
 ): Promise<void> {
+  app.get("/breeding/analysis/animals", async (request, reply) => {
+    const user = await requireCapability(deps.db, request, reply, "view");
+    if (!user) return;
+
+    const rows = await deps.db.select().from(breedingEntries).where(eq(breedingEntries.kind, "animal"));
+    return analyzeAnimals(rows);
+  });
+
   app.get("/breeding", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "view");
     if (!user) return;
@@ -524,4 +549,3 @@ export async function registerBreedingRoutes(
     return { ok: true };
   });
 }
-

@@ -1,14 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { BreedingEntry, BreedingEntryInput, BreedingKind } from "@rusttools/shared";
+import { ANIMAL_GRADES, type BreedingKind } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { useCan } from "../hooks/usePermissions";
-import { breedingById, isBreedingAvailable } from "../lib/breeding-utils";
+import {
+  breedingById,
+  isBreedingAvailable,
+  type AnimalAnalysis,
+  type BreedingWireEntry as BreedingEntry,
+  type BreedingWireInput as BreedingEntryInput,
+} from "../lib/breeding-utils";
 import { BreedingEntryCard } from "../components/BreedingEntryCard";
 import { BreedingEntryForm } from "../components/BreedingEntryForm";
 import { CropCrossCalculator, type CalculatorPreset } from "../components/CropCrossCalculator";
 import "./breeding.css";
 
-type KindFilter = "all" | "crop" | "animal";
+type KindFilter = "crop" | "animal";
 
 export function BreedingPage() {
   const canEdit = useCan("switch");
@@ -16,8 +22,10 @@ export function BreedingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<AnimalAnalysis | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("crop");
   const [searchText, setSearchText] = useState("");
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [serverFilter, setServerFilter] = useState("");
@@ -31,23 +39,40 @@ export function BreedingPage() {
 
   const [preset, setPreset] = useState<CalculatorPreset | null>(null);
   const poolFingerprint = useRef("");
+  const loadRequest = useRef(0);
 
   const load = useCallback(async (silent = false) => {
+    const request = ++loadRequest.current;
     if (!silent) setLoading(true);
     try {
-      const data = await apiFetch<{ entries: BreedingEntry[] }>("/breeding");
+      // apiFetch uses cachedApiFetch; keep analysis on the same poll and write refresh.
+      // A failed analysis request must not hide an otherwise usable breeding pool.
+      const [poolResult, analysisResult] = await Promise.allSettled([
+        apiFetch<{ entries: BreedingEntry[] }>("/breeding"),
+        apiFetch<AnimalAnalysis>("/breeding/analysis/animals"),
+      ]);
+      // An older poll must not overwrite a newer refresh after a save/delete.
+      if (request !== loadRequest.current) return;
       // Skip identical payloads so the 30s poll doesn't churn state (and
       // doesn't invalidate calculator results) when nothing changed.
-      const fingerprint = JSON.stringify(data.entries);
-      if (fingerprint !== poolFingerprint.current) {
-        poolFingerprint.current = fingerprint;
-        setEntries(data.entries);
+      if (poolResult.status === "fulfilled") {
+        const fingerprint = JSON.stringify(poolResult.value.entries);
+        if (fingerprint !== poolFingerprint.current) {
+          poolFingerprint.current = fingerprint;
+          setEntries(poolResult.value.entries);
+        }
+        setError(null);
+      } else {
+        setError(poolResult.reason instanceof Error ? poolResult.reason.message : "Failed to load breeding pool");
       }
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load breeding pool");
+      if (analysisResult.status === "fulfilled") {
+        setAnalysis(analysisResult.value);
+        setAnalysisError(null);
+      } else {
+        setAnalysisError(analysisResult.reason instanceof Error ? analysisResult.reason.message : "Failed to load herd analysis");
+      }
     } finally {
-      if (!silent) setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
   }, []);
 
@@ -71,7 +96,6 @@ export function BreedingPage() {
     const query = searchText.trim().toLowerCase();
     return entries
       .filter((entry) => {
-        if (kindFilter !== "all" && entry.kind !== kindFilter) return false;
         if (!visuallyAvailable(entry)) return false;
         if (speciesFilter && entry.species !== speciesFilter) return false;
         if (serverFilter && entry.serverLabel !== serverFilter) return false;
@@ -91,7 +115,7 @@ export function BreedingPage() {
         if (a.species !== b.species) return a.species.localeCompare(b.species);
         return a.name.localeCompare(b.name);
       });
-  }, [entries, kindFilter, visuallyAvailable, speciesFilter, serverFilter, searchText]);
+  }, [entries, visuallyAvailable, speciesFilter, serverFilter, searchText]);
 
   const crops = visible.filter((entry) => entry.kind === "crop");
   const animals = visible.filter((entry) => entry.kind === "animal");
@@ -208,11 +232,29 @@ export function BreedingPage() {
         <h1>Farming</h1>
         <p>
           Manual crop planner and cow/sheep tracker. The shared breeding pool is visible to the whole
-          team — record seeds with genes, animals with lineage, and where to pick them up. Animals
-          are tracked by <strong>observed traits and recorded lineage only</strong>; this page does
-          not predict inheritance.
+          team — record seeds with genes, animals with genotypes and lineage, and where to pick them up.
+          Herd analysis compares recorded evidence with an unverified Rust Lite model.
         </p>
       </header>
+
+      <nav className="page-tabs" aria-label="Farming sections">
+        {(["crop", "animal"] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            className={kindFilter === tab ? "btn-primary" : "btn-secondary"}
+            aria-current={kindFilter === tab ? "page" : undefined}
+            onClick={() => {
+              if (tab !== kindFilter) {
+                if (showForm) resetForm();
+                setKindFilter(tab);
+              }
+            }}
+          >
+            {tab === "crop" ? `Crops (${crops.length} shown)` : `Animals (${animals.length} shown)`}
+          </button>
+        ))}
+      </nav>
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {message && <div className="alert alert-ok">{message}</div>}
@@ -230,21 +272,58 @@ export function BreedingPage() {
         />
       )}
 
-      <CropCrossCalculator allEntries={entries} preset={preset} />
+      {/* Kept mounted across tabs so a half-built cross survives a look at the herd. */}
+      <div hidden={kindFilter !== "crop"}>
+        <CropCrossCalculator allEntries={entries} preset={preset} />
+      </div>
+
+      {kindFilter === "animal" && <section className="card breeding-section breeding-herd" aria-labelledby="breeding-herd-heading">
+        <h2 id="breeding-herd-heading">Herd analysis</h2>
+        {analysisError && <p className="alert alert-error" role="alert">{analysisError}</p>}
+        {loading && !analysis && <p className="muted">Loading herd analysis…</p>}
+        {analysis && (
+          <>
+            <p>Animals: {analysis.coverage.animals} · With both parents: {analysis.coverage.withBothParents}
+              {" · "}Usable births: {analysis.coverage.birthsUsable}</p>
+            <p>Pairs — related: {analysis.relatedPairs.related} · unrelated: {analysis.relatedPairs.unrelated}
+              {" · "}unknown: {analysis.relatedPairs.unknown}</p>
+            {analysis.coverage.birthsUsable === 0 && (
+              <p className="muted">Record animals with parents and genotypes to build evidence.</p>
+            )}
+            <p className="muted breeding-hint">Model: {analysis.model.version}</p>
+            <dl className="breeding-meta">
+              {analysis.perTrait.map(({ trait, expressed, predicted, sampleSize }) => (
+                <div key={trait} className="breeding-meta-wide">
+                  <dt>{trait}</dt>
+                  <dd>
+                    <p className="breeding-hint">
+                      Observed: {ANIMAL_GRADES.map((grade) => `${grade} ${expressed[grade]}`).join(" · ")}
+                    </p>
+                    {predicted !== null ? (
+                      <p className="breeding-hint">
+                        model estimate — {analysis.model.version} (expected counts): {ANIMAL_GRADES.map((grade) =>
+                          `${grade} ${(predicted[grade] * sampleSize).toFixed(1)}`,
+                        ).join(" · ")}
+                      </p>
+                    ) : (
+                      <p className="muted breeding-hint">needs 30 usable births ({sampleSize} so far)</p>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            <ul className="muted breeding-hint">
+              {analysis.notes.map((note, index) => <li key={index}>{note}</li>)}
+            </ul>
+          </>
+        )}
+        <p className="muted breeding-hint">
+          Rust Lite model: priors and inbreeding multiplier are unverified soft parameters;
+          counts instead of percentages until enough evidence.
+        </p>
+      </section>}
 
       <section className="card breeding-toolbar">
-        <nav className="page-tabs" aria-label="Kind filter">
-          {(["all", "crop", "animal"] as const).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={kindFilter === tab ? "btn-primary" : "btn-secondary"}
-              onClick={() => setKindFilter(tab)}
-            >
-              {tab === "all" ? "All" : tab === "crop" ? "Crops" : "Animals"}
-            </button>
-          ))}
-        </nav>
         <label className="breeding-field">
           Search
           <input
@@ -289,14 +368,9 @@ export function BreedingPage() {
             {loading ? "Refreshing…" : "Refresh"}
           </button>
           {canEdit && (
-            <>
-              <button type="button" className="btn-secondary" onClick={() => openCreate("crop")}>
-                + Add crop
-              </button>
-              <button type="button" className="btn-secondary" onClick={() => openCreate("animal")}>
-                + Add animal
-              </button>
-            </>
+            <button type="button" className="btn-secondary" onClick={() => openCreate(kindFilter)}>
+              {kindFilter === "crop" ? "+ Add crop" : "+ Add animal"}
+            </button>
           )}
         </div>
       </section>
@@ -305,7 +379,7 @@ export function BreedingPage() {
         <p className="muted">Loading pool…</p>
       ) : (
         <>
-          {(kindFilter === "all" || kindFilter === "crop") && (
+          {kindFilter === "crop" && (
             <section className="breeding-section">
               <h2>Crops <span className="muted breeding-count">({crops.length} shown)</span></h2>
               {crops.length === 0 ? (
@@ -319,7 +393,7 @@ export function BreedingPage() {
               )}
             </section>
           )}
-          {(kindFilter === "all" || kindFilter === "animal") && (
+          {kindFilter === "animal" && (
             <section className="breeding-section">
               <h2>Animals <span className="muted breeding-count">({animals.length} shown)</span></h2>
               {animals.length === 0 ? (

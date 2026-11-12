@@ -1,4 +1,48 @@
-import type { BreedingEntry } from "@rusttools/shared";
+import {
+  type AnimalGenotype,
+  type AnimalGrade,
+  type AnimalModelParams,
+  type AnimalTrait,
+  type BreedingEntry,
+  type BreedingEntryInput,
+  type fitAnimalModel,
+} from "@rusttools/shared";
+
+/** API/storage shape, distinct from the shared inheritance model's flat traits. */
+export interface AnimalGenotypeWire {
+  traits: Partial<Pick<AnimalGenotype, AnimalTrait>>;
+  markers?: [string, string];
+}
+
+export type BreedingWireEntry = BreedingEntry & { animalGenotype?: AnimalGenotypeWire | null };
+export type BreedingWireInput = BreedingEntryInput & { animalGenotype?: AnimalGenotypeWire };
+
+export function animalGenotypeFromWire(wire: AnimalGenotypeWire | null | undefined): AnimalGenotype {
+  return {
+    dung: wire?.traits.dung ?? null,
+    yield: wire?.traits.yield ?? null,
+    fertility: wire?.traits.fertility ?? null,
+    hardiness: wire?.traits.hardiness ?? null,
+    lineage: wire?.markers ? { a: wire.markers[0], b: wire.markers[1] } : null,
+  };
+}
+
+export interface AnimalAnalysis {
+  coverage: { animals: number; withBothParents: number; birthsUsable: number };
+  model: {
+    version: string;
+    params: AnimalModelParams;
+    evidence: ReturnType<typeof fitAnimalModel>["evidence"];
+  };
+  perTrait: {
+    trait: AnimalTrait;
+    expressed: Record<AnimalGrade, number>;
+    predicted: Record<AnimalGrade, number> | null;
+    sampleSize: number;
+  }[];
+  relatedPairs: { related: number; unrelated: number; unknown: number };
+  notes: string[];
+}
 
 /** Manual availability: a flagged-out entry or a tapped-out quantity is not available. */
 export function isBreedingAvailable(entry: BreedingEntry): boolean {
