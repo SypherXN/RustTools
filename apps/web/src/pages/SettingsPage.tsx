@@ -6,7 +6,6 @@ import { RustPlusConnectionCard } from "../components/RustPlusConnectionCard";
 import { DataResetPanel } from "../components/DataResetPanel";
 import { AdminUsersPanel } from "../components/AdminUsersPanel";
 import type { NotificationSettingsResponse } from "@rusttools/shared";
-import { DEFAULT_MAP_EVENT_TYPES } from "@rusttools/shared";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { PushNotificationSetup } from "../components/PushNotificationSetup";
@@ -22,7 +21,6 @@ type SettingsTab =
   | "tc"
   | "deepsea"
   | "team-chat"
-  | "events"
   | "legacy"
   | "admin";
 
@@ -33,7 +31,6 @@ const SETTINGS_TABS: Array<{ id: SettingsTab; label: string; adminOnly?: boolean
   { id: "tc", label: "TC Decay" },
   { id: "deepsea", label: "Deep Sea" },
   { id: "team-chat", label: "Team Chat" },
-  { id: "events", label: "Event Timers" },
   { id: "legacy", label: "Legacy Automations" },
   { id: "admin", label: "Admin", adminOnly: true },
 ];
@@ -87,16 +84,12 @@ export function SettingsPage() {
     tcDecay?: Partial<NotificationSettingsResponse["settings"]["tcDecay"]>;
     teamChatBot?: Partial<NotificationSettingsResponse["settings"]["teamChatBot"]>;
     teamActivity?: Partial<NotificationSettingsResponse["settings"]["teamActivity"]>;
-    eventTimers?: Partial<NotificationSettingsResponse["settings"]["eventTimers"]>;
     legacyAutomations?: Partial<NotificationSettingsResponse["settings"]["legacyAutomations"]> & {
       nightLights?: Partial<
         NotificationSettingsResponse["settings"]["legacyAutomations"]["nightLights"]
       >;
       teamOfflineSam?: Partial<
         NotificationSettingsResponse["settings"]["legacyAutomations"]["teamOfflineSam"]
-      >;
-      mapEvents?: Partial<
-        NotificationSettingsResponse["settings"]["legacyAutomations"]["mapEvents"]
       >;
     };
   }) => {
@@ -182,7 +175,7 @@ export function SettingsPage() {
   };
 
   const updateLegacyAutomations = (
-    section: "nightLights" | "teamOfflineSam" | "mapEvents",
+    section: "nightLights" | "teamOfflineSam",
     patch: Record<string, unknown>,
   ) => {
     if (!notifications) return;
@@ -257,22 +250,6 @@ export function SettingsPage() {
     };
     setNotifications(next);
     void saveNotifications({ teamActivity: { [key]: value } });
-  };
-
-  const updateEventTimers = (
-    key: keyof NotificationSettingsResponse["settings"]["eventTimers"],
-    value: number | number[],
-  ) => {
-    if (!notifications) return;
-    const next = {
-      ...notifications,
-      settings: {
-        ...notifications.settings,
-        eventTimers: { ...notifications.settings.eventTimers, [key]: value },
-      },
-    };
-    setNotifications(next);
-    void saveNotifications({ eventTimers: { [key]: value } });
   };
 
   const linkMaster = async () => {
@@ -922,126 +899,12 @@ export function SettingsPage() {
       </section>
       )}
 
-      {tab === "events" && (
-      <section className="card">
-        <h2>Event Timers</h2>
-        <p className="muted">
-          Adjust countdowns for cargo egress, oil rig locked crate unlock, satellite crash crate cool, and team
-          chat reminders before unlock.
-        </p>
-        {notifications && (
-          <div className="form-stack">
-            <label>
-              Cargo egress (seconds)
-              <input
-                type="number"
-                min={60}
-                max={7200}
-                step={60}
-                value={notifications.settings.eventTimers.cargoEgressSeconds}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) =>
-                  updateEventTimers(
-                    "cargoEgressSeconds",
-                    Math.max(60, Number(e.target.value) || 2700),
-                  )
-                }
-              />
-            </label>
-            <label>
-              Oil crate unlock (seconds)
-              <input
-                type="number"
-                min={60}
-                max={3600}
-                step={60}
-                value={notifications.settings.eventTimers.oilCrateUnlockSeconds}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) =>
-                  updateEventTimers(
-                    "oilCrateUnlockSeconds",
-                    Math.max(60, Number(e.target.value) || 900),
-                  )
-                }
-              />
-            </label>
-            <label>
-              Oil rig proximity (world units)
-              <input
-                type="number"
-                min={50}
-                max={1000}
-                step={10}
-                value={notifications.settings.eventTimers.oilRigProximityUnits}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) =>
-                  updateEventTimers(
-                    "oilRigProximityUnits",
-                    Math.max(50, Number(e.target.value) || 250),
-                  )
-                }
-              />
-            </label>
-            <label>
-              Oil unlock reminders (minutes, comma-separated)
-              <input
-                type="text"
-                value={notifications.settings.eventTimers.oilCrateReminderMinutes.join(", ")}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) => {
-                  const values = e.target.value
-                    .split(",")
-                    .map((part) => Number(part.trim()))
-                    .filter((n) => Number.isFinite(n) && n > 0);
-                  updateEventTimers("oilCrateReminderMinutes", values.length ? values : [10, 5, 1]);
-                }}
-              />
-            </label>
-            <label>
-              Satellite crate cool (seconds)
-              <input
-                type="number"
-                min={60}
-                max={1800}
-                step={30}
-                value={notifications.settings.eventTimers.satelliteCrateCoolSeconds ?? 300}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) =>
-                  updateEventTimers(
-                    "satelliteCrateCoolSeconds",
-                    Math.max(60, Number(e.target.value) || 300),
-                  )
-                }
-              />
-            </label>
-            <label>
-              Satellite cooldown (seconds)
-              <input
-                type="number"
-                min={300}
-                max={7200}
-                step={60}
-                value={notifications.settings.eventTimers.satelliteCooldownSeconds ?? 2100}
-                disabled={notificationsSaving || !canAdmin}
-                onChange={(e) =>
-                  updateEventTimers(
-                    "satelliteCooldownSeconds",
-                    Math.max(300, Number(e.target.value) || 2100),
-                  )
-                }
-              />
-            </label>
-          </div>
-        )}
-      </section>
-      )}
-
       {tab === "legacy" && (
       <section className="card">
         <h2>Legacy Automations</h2>
         <p className="muted">
-          Night lights, team-offline SAM, and map event announcements. Env vars seed defaults for new
-          servers; changes here are stored per active server.
+          Night lights and team-offline SAM. Env vars seed defaults for new servers; changes here are
+          stored per active server.
         </p>
         {notifications && (
           <div className="form-stack">
@@ -1102,77 +965,6 @@ export function SettingsPage() {
                   }}
                 />
               </label>
-            </div>
-
-            <div className="form-subsection">
-              <h3>Map event alerts</h3>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={notifications.settings.legacyAutomations.mapEvents.teamChat}
-                  disabled={notificationsSaving || !canAdmin}
-                  onChange={(e) =>
-                    updateLegacyAutomations("mapEvents", { teamChat: e.target.checked })
-                  }
-                />
-                <span>Announce in team chat</span>
-              </label>
-              <label>
-                Discord
-                <select
-                  value={
-                    notifications.settings.legacyAutomations.mapEvents.discord === null
-                      ? "inherit"
-                      : notifications.settings.legacyAutomations.mapEvents.discord
-                        ? "on"
-                        : "off"
-                  }
-                  disabled={notificationsSaving || !canAdmin}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    updateLegacyAutomations("mapEvents", {
-                      discord: v === "inherit" ? null : v === "on",
-                    });
-                  }}
-                >
-                  <option value="inherit">Same as team chat</option>
-                  <option value="on">Always on</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-              <label>
-                Message prefix
-                <input
-                  type="text"
-                  value={notifications.settings.legacyAutomations.mapEvents.prefix}
-                  disabled={notificationsSaving || !canAdmin}
-                  onChange={(e) => updateLegacyAutomations("mapEvents", { prefix: e.target.value })}
-                />
-              </label>
-              <fieldset>
-                <legend>Event types</legend>
-                <div className="checkbox-grid">
-                  {DEFAULT_MAP_EVENT_TYPES.map((type) => (
-                    <label key={type} className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={notifications.settings.legacyAutomations.mapEvents.types.includes(
-                          type,
-                        )}
-                        disabled={notificationsSaving || !canAdmin}
-                        onChange={(e) => {
-                          const current = notifications.settings.legacyAutomations.mapEvents.types;
-                          const types = e.target.checked
-                            ? [...current, type]
-                            : current.filter((t) => t !== type);
-                          updateLegacyAutomations("mapEvents", { types });
-                        }}
-                      />
-                      <span>{type}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
             </div>
           </div>
         )}

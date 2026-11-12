@@ -15,7 +15,6 @@ const BOOT_LINES: Array<{ text: string; className?: string; delay: number }> = [
 
 const TRIVIA = [
   "Smart alarms can ping Discord, team chat, web push, and SMS escalation.",
-  "Use !events in team chat for a live world event summary.",
   "Automations support schedule windows — perfect for night lights.",
   "Map pins support screenshots and notes for your team.",
   "Pair devices in-game with the wire tool after linking Rust+.",

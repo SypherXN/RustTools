@@ -7,26 +7,14 @@ import type {
   MapDrawingStroke,
   MapOverlaysResponse,
   MapPin,
-  VendingSearchResult,
-  WorldEventsStatus,
 } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS, formatProximityRadiusMeters, proximityRadiusPatch, resolveAutomationBaseCoords, resolveProximityRadiusMeters } from "@rusttools/shared";
 import { DEFAULT_PROCGEN_LAYERS, type MapProcgenLayers, type ProcgenMapStatus, type ProcgenPath, type ProcgenPrefabPoint } from "@rusttools/shared";
 import { MapAutomationBaseOverlay } from "../components/MapAutomationBaseOverlay";
 import { MapGridOverlay } from "../components/MapGridOverlay";
 import { MapDetailPanel, type MapSelection } from "../components/MapDetailPanel";
-import type {
-  MapEventTypeKey,
-  MapLayers,
-  MapMarkerPoint,
-  MapMonument,
-  MapTeamMember,
-} from "../components/MapOverlay";
-import {
-  classifyMapEventMarker,
-  DEFAULT_EVENT_TYPE_LAYERS,
-  MapOverlay,
-} from "../components/MapOverlay";
+import type { MapLayers, MapMonument, MapTeamMember } from "../components/MapOverlay";
+import { MapOverlay } from "../components/MapOverlay";
 import { MapLayersPanel } from "../components/MapLayersPanel";
 import { MapViewport, type MapFocusTarget } from "../components/MapViewport";
 import { MapDrawingLayer, type MapAnnotateTool } from "../components/MapDrawingLayer";
@@ -34,55 +22,26 @@ import { MapProcgenOverlays } from "../components/MapProcgenOverlays";
 import { MapPathsOverlay } from "../components/MapPathsOverlay";
 import { MapPrefabOverlay } from "../components/MapPrefabOverlay";
 import { Map3DView } from "../components/Map3DView";
-import { VendingTradeRow } from "../components/VendingTradeRow";
-import type { MapTrackableEvent } from "../components/MapEventDock";
-import { useWebSocket, useWebSocketConnected } from "../hooks/WebSocketProvider";
+import { useWebSocket } from "../hooks/WebSocketProvider";
 import { useCan } from "../hooks/usePermissions";
 import { useActiveServer } from "../hooks/useActiveServer";
 import { apiFetch } from "../lib/api";
 import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
-import { demoMapMarkers, demoMapSize, demoMonuments, demoTeam, demoMapTransform, isDemoMode } from "../lib/demo";
+import { demoMapSize, demoMonuments, demoTeam, demoMapTransform, isDemoMode } from "../lib/demo";
 
 interface MapData {
   map: { width?: number; height?: number; imageBase64: string | null };
   transform: MapCoordinateTransform;
   team: MapTeamMember[];
   monuments: MapMonument[];
-  markers: MapMarkerPoint[];
-}
-
-function resolveVendingMarker(
-  markers: MapMarkerPoint[],
-  result: VendingSearchResult,
-): MapMarkerPoint | undefined {
-  if (result.markerId) {
-    const byId = markers.find((m) => m.id === result.markerId);
-    if (byId) return byId;
-  }
-  return markers.find(
-    (m) =>
-      m.type === 3 &&
-      Math.abs(m.x - result.x) < 1 &&
-      Math.abs(m.y - result.y) < 1 &&
-      (!result.name || m.name === result.name),
-  );
-}
-
-function vendingResultKey(result: VendingSearchResult, index: number): string {
-  return result.markerId
-    ? `${result.markerId}-${result.item}`
-    : `${result.x}-${result.y}-${result.item}-${index}`;
 }
 
 const DEFAULT_LAYERS: MapLayers = {
   team: true,
-  vending: true,
   monuments: true,
-  events: true,
   grid: true,
   base: true,
-  eventTypes: { ...DEFAULT_EVENT_TYPE_LAYERS },
 };
 
 const MAP_DATA_PATH = "/servers/active/map?includeImage=1";
@@ -97,7 +56,6 @@ export function MapPage() {
   const [mapImage, setMapImage] = useState<MapData["map"] | null>(null);
   const [team, setTeam] = useState<MapTeamMember[]>([]);
   const [monuments, setMonuments] = useState<MapMonument[]>([]);
-  const [markers, setMarkers] = useState<MapMarkerPoint[]>([]);
   const [transform, setTransform] = useState<MapCoordinateTransform | null>(
     isDemoMode() ? demoMapTransform : null,
   );
@@ -110,19 +68,10 @@ export function MapPage() {
   const [showTeamOverlays, setShowTeamOverlays] = useState(true);
   const [annotateMode, setAnnotateMode] = useState(false);
   const [annotateTool, setAnnotateTool] = useState<MapAnnotateTool>("pen");
-  const [vendingQ, setVendingQ] = useState("");
-  const [vendingCurrency, setVendingCurrency] = useState("");
-  const [vendingMinPrice, setVendingMinPrice] = useState("");
-  const [vendingMaxPrice, setVendingMaxPrice] = useState("");
-  const [vendingMinMargin, setVendingMinMargin] = useState("");
-  const [vendingSort, setVendingSort] = useState<"" | "price" | "margin">("");
-  const [vending, setVending] = useState<VendingSearchResult[]>([]);
   const [selection, setSelection] = useState<MapSelection | null>(null);
   const [focusTarget, setFocusTarget] = useState<MapFocusTarget | null>(null);
-  const [activeVendingKey, setActiveVendingKey] = useState<string | null>(null);
   const mapLayoutRef = useRef<HTMLDivElement>(null);
   const lastMemberFocusRef = useRef<string | null>(null);
-  const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
   const [drawings, setDrawings] = useState<MapDrawingStroke[]>([]);
   const [pins, setPins] = useState<MapPin[]>([]);
   const [pendingPin, setPendingPin] = useState<{ x: number; y: number } | null>(null);
@@ -130,7 +79,6 @@ export function MapPage() {
   const [drawColor, setDrawColor] = useState<string>(MAP_DRAWING_COLORS[0].value);
   const [pendingDrawingColor, setPendingDrawingColor] = useState<string>(MAP_DRAWING_COLORS[0].value);
   const [followSteamId, setFollowSteamId] = useState<string | null>(null);
-  const [trackEventId, setTrackEventId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -209,19 +157,12 @@ export function MapPage() {
   const refreshLive = useCallback(async () => {
     if (isDemoMode()) {
       setTeam(demoTeam);
-      setMarkers(demoMapMarkers);
       setDataFetchedAt(Date.now());
       return;
     }
 
-    const live = await apiFetch<{
-      team: MapTeamMember[];
-      markers: MapMarkerPoint[];
-      worldEvents: WorldEventsStatus | null;
-    }>("/servers/active/map/live");
-    setTeam(live.team);
-    setMarkers(live.markers);
-    setWorldEvents(live.worldEvents);
+    const live = await apiFetch<{ team: { members: MapTeamMember[] } }>("/servers/active/team");
+    setTeam(live.team.members);
     setDataFetchedAt(Date.now());
   }, []);
 
@@ -230,7 +171,6 @@ export function MapPage() {
     if (!base64) return null;
     return `data:image/jpeg;base64,${base64}`;
   }, [mapImage?.imageBase64]);
-  const wsConnected = useWebSocketConnected();
 
   useEffect(() => {
     type MapPayload = Omit<MapData, "map"> & {
@@ -246,7 +186,6 @@ export function MapPage() {
       setTransform(data.transform);
       setTeam(data.team);
       setMonuments(data.monuments);
-      setMarkers(data.markers);
       setDrawings(overlays.drawings);
       setPins(overlays.pins);
       setDataFetchedAt(fetchedAt);
@@ -270,7 +209,6 @@ export function MapPage() {
     setSelection(null);
     setFocusTarget(null);
     setFollowSteamId(null);
-    setTrackEventId(null);
     setRefreshing(true);
 
     Promise.all([
@@ -312,21 +250,6 @@ export function MapPage() {
       .catch(() => setProcgenPrefabs([]));
   }, [procgenReady, epoch]);
 
-  useEffect(() => {
-    if (loading) return;
-    // Teammate positions and map event markers (cargo, heli, crates, vending…)
-    // are NOT pushed over the WebSocket, so poll live map data on a short
-    // interval even while the socket is connected. When the socket is down we
-    // back off to a slower cadence as a fallback.
-    const intervalMs = wsConnected ? 12_000 : 30_000;
-    const interval = setInterval(() => {
-      void refreshLive().catch(() => {
-        // Keep showing the last good map if a live refresh fails.
-      });
-    }, intervalMs);
-    return () => clearInterval(interval);
-  }, [loading, refreshLive, wsConnected]);
-
   useWebSocket((event, payload) => {
     if (event === "teamChanged") {
       const p = payload as { team?: { members?: MapTeamMember[] } } | null;
@@ -334,81 +257,15 @@ export function MapPage() {
         setTeam(p.team.members);
         setDataFetchedAt(Date.now());
       }
-      return;
-    }
-    if (event === "worldEventsChanged") {
-      setWorldEvents(payload as WorldEventsStatus);
-      setDataFetchedAt(Date.now());
     }
   });
 
-  const searchVending = async () => {
-    const params = new URLSearchParams();
-    if (vendingQ.trim()) params.set("q", vendingQ.trim());
-    if (vendingCurrency.trim()) params.set("currency", vendingCurrency.trim());
-    if (vendingMinPrice.trim()) params.set("minPrice", vendingMinPrice.trim());
-    if (vendingMaxPrice.trim()) params.set("maxPrice", vendingMaxPrice.trim());
-    if (vendingMinMargin.trim()) params.set("minProfitMargin", vendingMinMargin.trim());
-    if (vendingSort) params.set("sort", vendingSort);
-
-    if (
-      !vendingQ.trim() &&
-      !vendingCurrency.trim() &&
-      !vendingMinPrice.trim() &&
-      !vendingMaxPrice.trim() &&
-      !vendingMinMargin.trim()
-    ) {
-      return;
-    }
-
-    const res = await apiFetch<{ results: VendingSearchResult[] }>(
-      `/vending/search?${params.toString()}`,
-    );
-    setVending(res.results);
-    setActiveVendingKey(null);
-    setLayers((prev) => ({ ...prev, vending: true }));
-  };
-
-  const focusVendingResult = (result: VendingSearchResult, index: number) => {
-    const markersOnMap = markers.length > 0 ? markers : isDemoMode() ? demoMapMarkers : [];
-    const marker = resolveVendingMarker(markersOnMap, result);
-    if (!marker) return;
-
-    const key = vendingResultKey(result, index);
-    setActiveVendingKey(key);
-    setLayers((prev) => ({ ...prev, vending: true }));
-    setSelection({ kind: "vending", markerId: marker.id });
-    setFocusTarget({ worldX: marker.x, worldY: marker.y, nonce: Date.now() });
-    mapLayoutRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  };
-
-  const toggleLayer = (key: keyof Omit<MapLayers, "eventTypes">) => {
+  const toggleLayer = (key: keyof MapLayers) => {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const toggleProcgenLayer = (key: keyof MapProcgenLayers) => {
     setProcgenLayers((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const toggleEventType = (key: MapEventTypeKey) => {
-    setLayers((prev) => ({
-      ...prev,
-      events: true,
-      eventTypes: { ...prev.eventTypes, [key]: !prev.eventTypes[key] },
-    }));
-  };
-
-  const toggleAllEventTypes = (enabled: boolean) => {
-    setLayers((prev) => ({
-      ...prev,
-      eventTypes: (Object.keys(prev.eventTypes) as MapEventTypeKey[]).reduce(
-        (acc, k) => {
-          acc[k] = enabled;
-          return acc;
-        },
-        {} as typeof prev.eventTypes,
-      ),
-    }));
   };
 
   const deleteDrawing = async (id: string) => {
@@ -529,36 +386,7 @@ export function MapPage() {
   const mapH = mapImage?.height ?? demoMapSize.height;
   const teamOnMap = team.length > 0 ? team : isDemoMode() ? demoTeam : [];
   const monumentList = monuments.length > 0 ? monuments : isDemoMode() ? demoMonuments : [];
-  const markerList = markers.length > 0 ? markers : isDemoMode() ? demoMapMarkers : [];
   const showDemoMap = isDemoMode() && mapImage && !mapImage.imageBase64;
-  const vendingHighlights = vending.map((v) => ({ x: v.x, y: v.y }));
-  const eventTrails = worldEvents
-    ? {
-        cargo: worldEvents.cargo.trail,
-        heli: worldEvents.heli.trail,
-      }
-    : undefined;
-
-  const eventCount = markerList.filter((m) => [2, 4, 5, 6, 7, 8].includes(m.type)).length;
-  const eventTypeCounts = useMemo(() => {
-    const counts: Record<MapEventTypeKey, number> = {
-      cargo: 0,
-      heli: 0,
-      chinook: 0,
-      vendor: 0,
-      bradley: 0,
-      convoy: 0,
-      satellite: 0,
-      crate: 0,
-      other: 0,
-    };
-    for (const m of markerList) {
-      if (![2, 4, 5, 6, 7, 8].includes(m.type)) continue;
-      counts[classifyMapEventMarker(m)]++;
-    }
-    return counts;
-  }, [markerList]);
-  const vendingCount = markerList.filter((m) => m.type === 3).length;
   const onlineCount = teamOnMap.filter((m) => m.isOnline).length;
 
   const mapTransform = transform ?? demoMapTransform;
@@ -636,34 +464,11 @@ export function MapPage() {
     : undefined;
 
   const trackTarget = useMemo(() => {
-    if (trackEventId && worldEvents) {
-      const snaps: Record<string, { x: number | null; y: number | null } | undefined> = {
-        cargo: worldEvents.cargo,
-        heli: worldEvents.heli,
-        chinook: worldEvents.chinook,
-        vendor: worldEvents.vendor,
-        bradley: worldEvents.bradley,
-        convoy: worldEvents.convoy,
-        satellite: worldEvents.satellite,
-      };
-      const snap = snaps[trackEventId];
-      if (snap?.x != null && snap?.y != null) {
-        return { worldX: snap.x, worldY: snap.y };
-      }
-    }
     if (followMember?.x != null && followMember?.y != null) {
       return { worldX: followMember.x, worldY: followMember.y };
     }
     return null;
-  }, [trackEventId, worldEvents, followMember]);
-
-  const handleTrackEvent = (ev: MapTrackableEvent) => {
-    if (ev.x == null || ev.y == null) return;
-    setTrackEventId(ev.id);
-    setFollowSteamId(null);
-    setFocusTarget({ worldX: ev.x, worldY: ev.y, nonce: Date.now() });
-    mapLayoutRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  };
+  }, [followMember]);
 
   useEffect(() => {
     if (!memberParam) {
@@ -696,27 +501,19 @@ export function MapPage() {
           procgenReady={procgenReady}
           onlineCount={onlineCount}
           teamOnMapCount={teamOnMap.length}
-          vendingCount={vendingCount}
           monumentCount={monumentList.length}
-          eventCount={eventCount}
-          eventTypeCounts={eventTypeCounts}
           showTeamOverlays={showTeamOverlays}
           drawings={drawings}
           pins={pins}
           canSwitch={canSwitch}
           onToggleLayer={toggleLayer}
           onToggleProcgenLayer={toggleProcgenLayer}
-          onToggleEventType={toggleEventType}
-          onToggleAllEventTypes={toggleAllEventTypes}
           onShowTeamOverlaysChange={setShowTeamOverlays}
           onRefresh={() => void refreshLive()}
           onDeletePin={deletePin}
           onDeleteDrawing={deleteDrawing}
           onSelectPin={(pinId) => setSelection({ kind: "pin", pinId })}
           onSelectDrawing={(drawingId) => setSelection({ kind: "drawing", drawingId })}
-          worldEvents={worldEvents}
-          trackingId={trackEventId}
-          onTrackEvent={handleTrackEvent}
           resolvedAutomationBase={resolvedAutomationBase}
           onFocusAutomationBase={() => {
             if (!resolvedAutomationBase) return;
@@ -740,7 +537,6 @@ export function MapPage() {
               mapImageSrc={mapImageSrc}
               transform={mapTransform}
               team={teamOnMap}
-              markers={markerList}
               monuments={monumentList}
               layers={layers}
               drawings={drawings}
@@ -749,14 +545,12 @@ export function MapPage() {
               procgenLayers={procgenLayers}
               procgenPaths={procgenPaths}
               procgenPrefabs={procgenPrefabs}
-              eventTrails={eventTrails}
               automationBase={resolvedAutomationBase}
               selection={selection}
               focusTarget={focusTarget}
               trackTarget={trackTarget}
               onUserPan={() => {
                 setFollowSteamId(null);
-                setTrackEventId(null);
               }}
               onSelect={setSelection}
             />
@@ -778,7 +572,6 @@ export function MapPage() {
             }
             onUserPan={() => {
               setFollowSteamId(null);
-              setTrackEventId(null);
             }}
           >
             <MapProcgenOverlays
@@ -819,11 +612,8 @@ export function MapPage() {
               height={mapH}
               transform={mapTransform}
               team={teamOnMap}
-              markers={markerList}
               monuments={monumentList}
               layers={layers}
-              highlighted={vendingHighlights}
-              eventTrails={eventTrails}
               selection={selection}
               onSelect={setSelection}
             />
@@ -866,7 +656,6 @@ export function MapPage() {
         </div>
         <MapDetailPanel
           selection={selection}
-          markers={markerList}
           monuments={monumentList}
           team={teamOnMap}
           pins={pins}
@@ -890,7 +679,6 @@ export function MapPage() {
           onSelect={setSelection}
           onFollowTeam={(steamId) => {
             setFollowSteamId(steamId);
-            setTrackEventId(null);
             setSelection({ kind: "team", steamId });
           }}
           followingSteamId={followSteamId}
@@ -930,7 +718,7 @@ export function MapPage() {
     <div>
       <header className="page-header">
         <h1>Map</h1>
-        <p>Live team positions, vending machines, monuments, and world events.</p>
+        <p>Live team positions, monuments, and team annotations.</p>
         <div className="map-view-mode-toggle">
           <button
             type="button"
@@ -969,110 +757,6 @@ export function MapPage() {
       )}
 
       {mapContent}
-
-      <section className="card" style={{ marginBottom: "1rem" }}>
-        <h2>Vending Search</h2>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Filter by item or shop name, currency, price per item, and deals below median price.
-        </p>
-        <div className="search-row vending-search-row">
-          <input
-            type="text"
-            value={vendingQ}
-            onChange={(e) => setVendingQ(e.target.value)}
-            placeholder="Item or shop name..."
-            onKeyDown={(e) => e.key === "Enter" && void searchVending()}
-          />
-          <button type="button" onClick={() => void searchVending()}>
-            Search
-          </button>
-        </div>
-        <div className="vending-filters">
-          <label>
-            Currency
-            <input
-              type="text"
-              value={vendingCurrency}
-              onChange={(e) => setVendingCurrency(e.target.value)}
-              placeholder="e.g. scrap, sulfur"
-              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
-            />
-          </label>
-          <label>
-            Min price
-            <input
-              type="number"
-              min={0}
-              value={vendingMinPrice}
-              onChange={(e) => setVendingMinPrice(e.target.value)}
-              placeholder="0"
-              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
-            />
-          </label>
-          <label>
-            Max price
-            <input
-              type="number"
-              min={0}
-              value={vendingMaxPrice}
-              onChange={(e) => setVendingMaxPrice(e.target.value)}
-              placeholder="Any"
-              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
-            />
-          </label>
-          <label>
-            Min deal %
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={vendingMinMargin}
-              onChange={(e) => setVendingMinMargin(e.target.value)}
-              placeholder="Below median"
-              title="Minimum percent below median price for this item"
-              onKeyDown={(e) => e.key === "Enter" && void searchVending()}
-            />
-          </label>
-          <label>
-            Sort
-            <select
-              value={vendingSort}
-              onChange={(e) => setVendingSort(e.target.value as "" | "price" | "margin")}
-            >
-              <option value="">Default</option>
-              <option value="price">Price (low → high)</option>
-              <option value="margin">Best deal first</option>
-            </select>
-          </label>
-        </div>
-        {vending.length > 0 && (
-          <ul className="vending-list">
-            {vending.slice(0, 20).map((v, i) => {
-              const key = vendingResultKey(v, i);
-              return (
-                <li key={key}>
-                  <button
-                    type="button"
-                    className={`vending-list-item${activeVendingKey === key ? " active" : ""}`}
-                    onClick={() => focusVendingResult(v, i)}
-                  >
-                    <div className="vending-list-item-header">
-                      <strong>{v.name}</strong>
-                      <span className="muted">
-                        @ {Math.round(v.x)}, {Math.round(v.y)}
-                      </span>
-                    </div>
-                    <VendingTradeRow order={v} className="vending-list-trade" />
-                    {v.profitMarginPercent != null && v.profitMarginPercent > 0 && (
-                      <span className="vending-list-deal">{v.profitMarginPercent}% below median</span>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
     </div>
   );
 }

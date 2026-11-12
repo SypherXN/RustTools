@@ -116,7 +116,6 @@ export async function updateActiveNotificationSettings(
     tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
     teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
     teamActivity?: Partial<ServerNotificationSettings["teamActivity"]>;
-    eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
     automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
     legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
   },

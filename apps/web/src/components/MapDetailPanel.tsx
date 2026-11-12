@@ -1,28 +1,16 @@
 import { useState, type ReactNode } from "react";
 import { formatMonumentRecyclers, formatProximityRadiusMeters, formatWorldCoords, formatRustGameDataLabel, getCctvForMonument, getMonumentInfo, CCTV_STREAMING_DISCLAIMER } from "@rusttools/shared";
-import { VendingTradeRow } from "./VendingTradeRow";
 import type { MapDrawingPoint, MapDrawingStroke, MapPin, MapOverlaysResponse } from "@rusttools/shared";
 import { MAP_DRAWING_COLORS } from "@rusttools/shared";
 import { apiFetch, apiUpload } from "../lib/api";
 import { useAuthenticatedImageSrc } from "../hooks/useAuthenticatedImageSrc";
 import type { MapSelection } from "../lib/map-clusters";
-import type { MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
+import type { MapMonument, MapTeamMember } from "./MapOverlay";
 
 export type { MapSelection } from "../lib/map-clusters";
 
-export interface SellOrderListing {
-  itemName: string;
-  itemShortname: string;
-  quantity: number;
-  costItemName: string;
-  costItemShortname: string;
-  costQuantity: number;
-}
-
-
 interface MapDetailPanelProps {
   selection: MapSelection | null;
-  markers: MapMarkerPoint[];
   monuments: MapMonument[];
   team: MapTeamMember[];
   pins: MapPin[];
@@ -56,35 +44,6 @@ interface MapDetailPanelProps {
 
 function formatCoords(x: number, y: number, worldSize: number): string {
   return formatWorldCoords(x, y, worldSize);
-}
-
-function VendingDetails({
-  marker,
-  worldSize,
-}: {
-  marker: MapMarkerPoint;
-  worldSize: number;
-}) {
-  const orders = marker.sellOrders ?? [];
-  return (
-    <>
-      <p className="map-detail-meta">
-        {formatCoords(marker.x, marker.y, worldSize)}
-        {marker.outOfStock ? " · Out of stock" : ""}
-      </p>
-      {orders.length === 0 ? (
-        <p className="muted">No listings available.</p>
-      ) : (
-        <ul className="map-detail-trades">
-          {orders.map((order, i) => (
-            <li key={`${order.itemShortname}-${order.costItemShortname}-${i}`}>
-              <VendingTradeRow order={order} />
-            </li>
-          ))}
-        </ul>
-      )}
-    </>
-  );
 }
 
 function MonumentDetails({
@@ -152,26 +111,6 @@ function MonumentDetails({
         Game data: {formatRustGameDataLabel()}. Reference info — reset times and radiation vary by server and
         updates.
       </p>
-    </>
-  );
-}
-
-function EventDetails({
-  marker,
-  worldSize,
-}: {
-  marker: MapMarkerPoint;
-  worldSize: number;
-}) {
-  return (
-    <>
-      <p className="map-detail-category">{marker.label}</p>
-      <p className="map-detail-meta">{formatCoords(marker.x, marker.y, worldSize)}</p>
-      {marker.radius != null && marker.radius > 0 && (
-        <p>Radius: {Math.round(marker.radius)}m</p>
-      )}
-      {marker.rotation != null && <p>Heading: {Math.round(marker.rotation)}°</p>}
-      <p className="muted">Live world event — position updates on refresh.</p>
     </>
   );
 }
@@ -590,7 +529,6 @@ function ClusterDetails({
 
 export function MapDetailPanel({
   selection,
-  markers,
   monuments,
   team,
   pins,
@@ -626,7 +564,7 @@ export function MapDetailPanel({
       <aside className="map-detail-panel map-detail-panel-empty">
         <h2>Details</h2>
         <p className="muted">
-          Click a vending machine, monument, event, teammate, or team pin on the map. Use{" "}
+          Click a monument, teammate, pin, or drawing on the map. Use{" "}
           <strong>Annotate</strong> to draw or place pins — name and color them in this panel.
           {canSetServerBase && (
             <>
@@ -643,29 +581,13 @@ export function MapDetailPanel({
   let title = "Details";
   let body: ReactNode = null;
 
-  if (selection.kind === "vending") {
-    const marker = markers.find((m) => m.id === selection.markerId);
-    if (!marker) {
-      body = <p className="muted">Vending machine no longer on map.</p>;
-    } else {
-      title = marker.name;
-      body = <VendingDetails marker={marker} worldSize={worldSize} />;
-    }
-  } else if (selection.kind === "monument") {
+  if (selection.kind === "monument") {
     const monument = monuments.find((m) => m.token === selection.token);
     if (!monument) {
       body = <p className="muted">Monument not found.</p>;
     } else {
       title = monument.name;
       body = <MonumentDetails monument={monument} worldSize={worldSize} />;
-    }
-  } else if (selection.kind === "event") {
-    const marker = markers.find((m) => m.id === selection.markerId);
-    if (!marker) {
-      body = <p className="muted">Event no longer on map.</p>;
-    } else {
-      title = marker.name.trim() || marker.label;
-      body = <EventDetails marker={marker} worldSize={worldSize} />;
     }
   } else if (selection.kind === "team") {
     const member = team.find((m) => m.steamId === selection.steamId);

@@ -6,7 +6,6 @@ const CACHEABLE_PATHS: Record<string, number> = {
   "/servers/active/team/connections": 60_000,
   "/servers/active/time": 30_000,
   "/servers/active/deepsea": 30_000,
-  "/servers/active/world-events": 30_000,
   "/devices": 10_000,
   "/devices/switch-states": 8_000,
   "/switch-groups": 10_000,
@@ -14,13 +13,11 @@ const CACHEABLE_PATHS: Record<string, number> = {
   "/board/global": 30_000,
   "/servers/active/board": 30_000,
   "/servers/active/map/overlays": 60_000,
-  "/servers/active/map/live": 15_000,
   "/servers/active/map/procgen/status": 30_000,
 };
 
 const CACHEABLE_PREFIXES: Array<{ prefix: string; ttl: number }> = [
   { prefix: "/servers/active/map?", ttl: 120_000 },
-  { prefix: "/vending/search", ttl: 30_000 },
 ];
 
 /** Serve cached data for up to 30 minutes when the API is slow or Rust+ is down. */

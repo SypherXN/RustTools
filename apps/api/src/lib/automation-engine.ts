@@ -230,7 +230,7 @@ async function runActions(
       }
       case "send_discord": {
         if (!action.message?.trim()) break;
-        const channel = await resolveDefaultGuildChannelId(db, "events");
+        const channel = await resolveDefaultGuildChannelId(db, "default");
         if (!channel) break;
         await notifications.discord({
           channelId: channel,

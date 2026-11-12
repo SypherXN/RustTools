@@ -144,10 +144,9 @@ const STALE_READ_MAX_MS = 30 * 60 * 1000;
 /** Avoid hammering Rust+ when the UI and background jobs request the same data. */
 const READ_CACHE_TTL_MS = {
   serverInfo: 60_000,
-  // Keep team positions and map event markers fresh enough to feel "live" on
+  // Keep team positions fresh enough to feel "live" on
   // the map while still de-duplicating bursts of concurrent requests.
   teamInfo: 10_000,
-  mapMarkers: 15_000,
   map: 300_000,
   time: 30_000,
   teamChat: 30_000,
@@ -173,7 +172,6 @@ type RustPlusMessage = {
     teamInfo?: unknown;
     time?: unknown;
     map?: unknown;
-    mapMarkers?: unknown;
     entityInfo?: unknown;
   };
 };
@@ -296,7 +294,6 @@ export class RustPlusManager {
   private fcmListening = false;
   private fcmNotificationHandler: ((notification: ParsedFcmNotification) => void) | null = null;
   private activeServerId: string | null = null;
-  private lastMapMarkers: unknown = null;
   private readCache = new Map<ReadCacheKey, { at: number; value: unknown }>();
   private readInflight = new Map<ReadCacheKey, Promise<unknown>>();
   private entityInfoCache = new Map<number, { at: number; value: unknown }>();
@@ -346,10 +343,6 @@ export class RustPlusManager {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
     }
-  }
-
-  getLastMapMarkers(): unknown {
-    return this.lastMapMarkers;
   }
 
   getCachedServerInfo(): unknown | null {
@@ -448,18 +441,6 @@ export class RustPlusManager {
     return promise;
   }
 
-  private emitMapMarkersEvent(markers: unknown): void {
-    if (!this.activeServerId) return;
-    // Defer so concurrent getMap/getServerInfo from the same HTTP handler populate cache first.
-    queueMicrotask(() => {
-      this.eventBus.emit({
-        type: "mapMarkers",
-        serverId: this.activeServerId!,
-        markers,
-      });
-    });
-  }
-
   async connectServer(credentials: ServerCredentials): Promise<void> {
     // Validate before tearing down an existing connection; relay auth failures
     // must never fall back to ip:port or leave a retry loop behind.
@@ -491,7 +472,6 @@ export class RustPlusManager {
       this.readInflight.clear();
       this.entityInfoCache.clear();
       this.clearRustQueue();
-      this.lastMapMarkers = null;
       this.eventBus.emit({
         type: "connectionLost",
         serverId: credentials.id,
@@ -935,49 +915,6 @@ export class RustPlusManager {
     );
   }
 
-  private markerShapeLogs = 0;
-
-  /** Temporary diagnostic: logs marker counts by type (no coordinates/ids), first few polls only. */
-  private logMarkerShapeOnce(markers: unknown): void {
-    if (this.markerShapeLogs >= 5) return;
-    this.markerShapeLogs++;
-    const list = (markers as { markers?: Array<{ type?: number }> } | null | undefined)?.markers;
-    const counts: Record<string, number> = {};
-    for (const m of Array.isArray(list) ? list : []) {
-      const k = String(m?.type);
-      counts[k] = (counts[k] ?? 0) + 1;
-    }
-    console.log(
-      "[RustPlus] markers shape:",
-      JSON.stringify({
-        kind: markers === null ? "null" : typeof markers,
-        keys: markers && typeof markers === "object" ? Object.keys(markers as object) : [],
-        isArray: Array.isArray(list),
-        total: Array.isArray(list) ? list.length : null,
-        byType: counts,
-      }),
-    );
-  }
-
-  async getMapMarkers(): Promise<unknown> {
-    const markers = await this.cachedReadWithStale("mapMarkers", async () => {
-      const conn = this.getActiveConnection();
-      return this.enqueueRustRequest(() =>
-        withRustRetry("getMapMarkers", () =>
-          withRustTimeout(
-            "getMapMarkers",
-            (cb) => conn.client.getMapMarkers(cb),
-            (m) => m.response?.mapMarkers,
-          ),
-        ),
-      );
-    });
-    this.logMarkerShapeOnce(markers);
-    this.lastMapMarkers = markers;
-    this.emitMapMarkersEvent(markers);
-    return markers;
-  }
-
   async sendTeamMessage(message: string): Promise<void> {
     await this.enqueueRustRequest(() => {
       const conn = this.getActiveConnection();
@@ -1099,21 +1036,6 @@ export class RustPlusManager {
     this.fcmListener?.stop();
     this.fcmListener = null;
     this.fcmListening = false;
-  }
-
-  startMapMarkerPolling(intervalMs = 60_000): void {
-    this.jobScheduler.register({
-      id: "map-markers",
-      intervalMs,
-      run: async () => {
-        if (!this.activeServerId) return;
-        try {
-          await this.getMapMarkers();
-        } catch (err) {
-          console.error("[RustPlus] Map marker poll failed:", err);
-        }
-      },
-    });
   }
 
   private activeCamera: {

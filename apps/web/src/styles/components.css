@@ -1201,24 +1201,9 @@ legend {
 }
 
 /* ── Map panels ── */
-.map-event-dock.card,
 .map-detail-panel {
   border-color: var(--border-strong);
   box-shadow: inset 0 1px 0 rgba(255, 107, 26, 0.06);
-}
-
-.map-event-dock-list li {
-  background: rgba(0, 0, 0, 0.25);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.map-event-dock-list li:hover {
-  border-color: var(--border-strong);
-}
-
-.map-event-dock-list li.active {
-  border-color: var(--accent);
-  box-shadow: var(--accent-glow);
 }
 
 .map-drawing-toolbar,

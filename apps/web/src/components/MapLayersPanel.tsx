@@ -1,20 +1,7 @@
-import type { MapDrawingStroke, MapPin, ResolvedAutomationBase, WorldEventsStatus } from "@rusttools/shared";
+import type { MapDrawingStroke, MapPin, ResolvedAutomationBase } from "@rusttools/shared";
 import { formatProximityRadiusMeters } from "@rusttools/shared";
-import type { MapEventTypeKey, MapLayers } from "./MapOverlay";
+import type { MapLayers } from "./MapOverlay";
 import type { MapProcgenLayers } from "@rusttools/shared";
-import { buildTrackableEvents, isTrackableLayerKey, type TrackableEvent } from "./MapEventDock";
-
-const EVENT_TYPE_LABELS: Record<MapEventTypeKey, string> = {
-  cargo: "Cargo ship",
-  heli: "Patrol heli",
-  chinook: "Chinook",
-  vendor: "Traveling vendor",
-  bradley: "Bradley",
-  convoy: "Convoy",
-  satellite: "Satellite crash",
-  crate: "Crates",
-  other: "Other events",
-};
 
 interface MapLayersPanelProps {
   layers: MapLayers;
@@ -22,27 +9,19 @@ interface MapLayersPanelProps {
   procgenReady: boolean;
   onlineCount: number;
   teamOnMapCount: number;
-  vendingCount: number;
   monumentCount: number;
-  eventCount: number;
-  eventTypeCounts: Record<MapEventTypeKey, number>;
   showTeamOverlays: boolean;
   drawings: MapDrawingStroke[];
   pins: MapPin[];
   canSwitch: boolean;
-  onToggleLayer: (key: keyof Omit<MapLayers, "eventTypes">) => void;
+  onToggleLayer: (key: keyof MapLayers) => void;
   onToggleProcgenLayer: (key: keyof MapProcgenLayers) => void;
-  onToggleEventType: (key: MapEventTypeKey) => void;
-  onToggleAllEventTypes: (enabled: boolean) => void;
   onShowTeamOverlaysChange: (value: boolean) => void;
   onRefresh: () => void;
   onDeletePin: (id: string) => void;
   onDeleteDrawing: (id: string) => void;
   onSelectPin: (pinId: string) => void;
   onSelectDrawing: (drawingId: string) => void;
-  worldEvents: WorldEventsStatus | null;
-  trackingId: string | null;
-  onTrackEvent: (event: TrackableEvent) => void;
   resolvedAutomationBase?: ResolvedAutomationBase | null;
   onFocusAutomationBase?: () => void;
   canEditAutomationBase?: boolean;
@@ -73,42 +52,25 @@ export function MapLayersPanel({
   procgenReady,
   onlineCount,
   teamOnMapCount,
-  vendingCount,
   monumentCount,
-  eventCount,
-  eventTypeCounts,
   showTeamOverlays,
   drawings,
   pins,
   canSwitch,
   onToggleLayer,
   onToggleProcgenLayer,
-  onToggleEventType,
-  onToggleAllEventTypes,
   onShowTeamOverlaysChange,
   onRefresh,
   onDeletePin,
   onDeleteDrawing,
   onSelectPin,
   onSelectDrawing,
-  worldEvents,
-  trackingId,
-  onTrackEvent,
   resolvedAutomationBase,
   onFocusAutomationBase,
   canEditAutomationBase,
   automationBaseRadiusMeters = 150,
   onAutomationBaseRadiusChange,
 }: MapLayersPanelProps) {
-  const allEventTypesOn = (Object.keys(layers.eventTypes) as MapEventTypeKey[]).every(
-    (key) => layers.eventTypes[key],
-  );
-  const someEventTypesOn = (Object.keys(layers.eventTypes) as MapEventTypeKey[]).some(
-    (key) => layers.eventTypes[key],
-  );
-  const trackableEvents = worldEvents ? buildTrackableEvents(worldEvents) : [];
-  const trackableByKey = new Map(trackableEvents.map((ev) => [ev.id as MapEventTypeKey, ev]));
-
   return (
     <aside className="map-layers-panel card">
       <h2>Layers</h2>
@@ -122,70 +84,10 @@ export function MapLayersPanel({
             label={`Team (${onlineCount} online / ${teamOnMapCount})`}
           />
           <LayerCheckbox
-            checked={layers.vending}
-            onChange={() => onToggleLayer("vending")}
-            label={`Vending (${vendingCount})`}
-          />
-          <LayerCheckbox
             checked={layers.monuments}
             onChange={() => onToggleLayer("monuments")}
             label={`Monuments (${monumentCount})`}
           />
-        </div>
-      </details>
-
-      <details className="map-layer-group">
-        <summary>
-          <label className="map-layer-summary-row" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="checkbox"
-              checked={layers.events}
-              ref={(el) => {
-                if (el) el.indeterminate = layers.events && !allEventTypesOn && someEventTypesOn;
-              }}
-              onChange={() => {
-                if (layers.events && allEventTypesOn) {
-                  onToggleLayer("events");
-                } else if (!layers.events) {
-                  onToggleLayer("events");
-                  onToggleAllEventTypes(true);
-                } else {
-                  onToggleAllEventTypes(true);
-                }
-              }}
-            />
-            <span>Events ({eventCount})</span>
-          </label>
-        </summary>
-        <div className="map-layer-group-body map-layer-group-nested">
-          {(Object.keys(EVENT_TYPE_LABELS) as MapEventTypeKey[]).map((key) => {
-            const trackable = isTrackableLayerKey(key) ? trackableByKey.get(key) : undefined;
-            return (
-              <div
-                key={key}
-                className={`map-layer-event-row${trackingId === key ? " tracking" : ""}`}
-              >
-                <LayerCheckbox
-                  checked={layers.events && layers.eventTypes[key]}
-                  onChange={() => onToggleEventType(key)}
-                  label={`${EVENT_TYPE_LABELS[key]} (${eventTypeCounts[key]})`}
-                />
-                {trackable && (
-                  <div className="map-layer-event-track">
-                    <span className="muted map-layer-event-status">{trackable.detail}</span>
-                    <button
-                      type="button"
-                      className={`btn-secondary map-layer-track-btn${trackingId === key ? " active" : ""}`}
-                      disabled={trackable.x == null || trackable.y == null}
-                      onClick={() => onTrackEvent(trackable)}
-                    >
-                      {trackingId === key ? "Tracking" : "Track"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </div>
       </details>
 
@@ -355,10 +257,7 @@ export function MapLayersPanel({
       <ul className="map-legend">
         <li><span className="legend-swatch team-online" /> Team (online)</li>
         <li><span className="legend-swatch team-offline" /> Team (offline)</li>
-        <li><span className="legend-swatch vending" /> Vending (in stock)</li>
-        <li><span className="legend-swatch vending-out" /> Vending (empty)</li>
         <li><span className="legend-swatch monument" /> Monument</li>
-        <li><span className="legend-swatch events" /> Events</li>
         <li><span className="legend-swatch grid" /> Grid (150m cells)</li>
         <li><span className="legend-swatch automation-base" /> Server base zone</li>
         <li><span className="legend-swatch monument" style={{ background: "#eab308" }} /> Team pin</li>

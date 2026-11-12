@@ -1,13 +1,10 @@
-import type { MapLayers, MapMarkerPoint, MapMonument, MapTeamMember } from "../components/MapOverlay";
-import { isMapEventMarkerVisible } from "../components/MapOverlay";
+import type { MapLayers, MapMonument, MapTeamMember } from "../components/MapOverlay";
 
-/** World-unit radius for treating markers as stacked (e.g. Outpost vending row). */
+/** World-unit radius for treating markers as stacked. */
 export const MAP_CLUSTER_TOLERANCE = 18;
 
 export type MarkerSelection =
-  | { kind: "vending"; markerId: string }
   | { kind: "monument"; token: string }
-  | { kind: "event"; markerId: string }
   | { kind: "team"; steamId: string };
 
 export interface ClusterEntry {
@@ -27,7 +24,6 @@ export type MapSelection =
 
 export interface MapClusterContext {
   team: MapTeamMember[];
-  markers: MapMarkerPoint[];
   monuments: MapMonument[];
   layers: MapLayers;
 }
@@ -51,29 +47,6 @@ function collectClickable(ctx: MapClusterContext): ClusterEntry[] {
     }
   }
 
-  if (ctx.layers.events) {
-    for (const m of ctx.markers) {
-      if (!isMapEventMarkerVisible(m, ctx.layers)) continue;
-      const label = m.name.trim() && m.name !== m.label ? m.name : m.label;
-      items.push({
-        selection: { kind: "event", markerId: m.id },
-        label,
-        typeLabel: m.label,
-      });
-    }
-  }
-
-  if (ctx.layers.vending) {
-    for (const m of ctx.markers) {
-      if (m.type !== 3) continue;
-      items.push({
-        selection: { kind: "vending", markerId: m.id },
-        label: m.name,
-        typeLabel: "Vending",
-      });
-    }
-  }
-
   if (ctx.layers.team) {
     for (const m of ctx.team) {
       if (m.locationKnown === false || m.x == null || m.y == null) continue;
@@ -93,11 +66,6 @@ function coordsForEntry(entry: ClusterEntry, ctx: MapClusterContext): { x: numbe
   switch (selection.kind) {
     case "monument": {
       const m = ctx.monuments.find((mon) => mon.token === selection.token);
-      return m ? { x: m.x, y: m.y } : null;
-    }
-    case "vending":
-    case "event": {
-      const m = ctx.markers.find((marker) => marker.id === selection.markerId);
       return m ? { x: m.x, y: m.y } : null;
     }
     case "team": {

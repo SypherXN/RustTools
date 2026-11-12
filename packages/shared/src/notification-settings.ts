@@ -59,7 +59,6 @@ export const DEFAULT_AUTOMATION_BASE_SETTINGS: AutomationBaseSettings = {
 };
 
 export type { TeamChatBotSettings } from "./team-chat-control.js";
-export type { EventTimerSettings } from "./world-events.js";
 import type { LegacyAutomationSettings } from "./legacy-automations.js";
 import {
   DEFAULT_LEGACY_AUTOMATION_SETTINGS,
@@ -68,8 +67,6 @@ import {
 import { normalizeDiscordRoleIds } from "./discord-ping.js";
 import type { TeamChatBotSettings } from "./team-chat-control.js";
 import { DEFAULT_TEAM_CHAT_BOT_SETTINGS } from "./team-chat-control.js";
-import type { EventTimerSettings } from "./world-events.js";
-import { DEFAULT_EVENT_TIMER_SETTINGS } from "./world-events.js";
 
 export interface TeamActivitySettings {
   /** Max deaths kept in DB log and in-memory live tracker per server within a wipe. */
@@ -89,7 +86,6 @@ export interface ServerNotificationSettings {
   tcDecay: TcDecayNotificationSettings;
   teamChatBot: TeamChatBotSettings;
   teamActivity: TeamActivitySettings;
-  eventTimers: EventTimerSettings;
   automationBase: AutomationBaseSettings;
   legacyAutomations: LegacyAutomationSettings;
 }
@@ -138,7 +134,6 @@ export const DEFAULT_SERVER_NOTIFICATION_SETTINGS: ServerNotificationSettings = 
   tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
   teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
   teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
-  eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
   automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
   legacyAutomations: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS },
 };
@@ -151,12 +146,10 @@ export function mergeNotificationSettings(
     tcDecay?: Partial<TcDecayNotificationSettings>;
     teamChatBot?: Partial<TeamChatBotSettings>;
     teamActivity?: Partial<TeamActivitySettings>;
-    eventTimers?: Partial<EventTimerSettings>;
     automationBase?: Partial<AutomationBaseSettings>;
     legacyAutomations?: Partial<LegacyAutomationSettings> & {
       nightLights?: Partial<LegacyAutomationSettings["nightLights"]>;
       teamOfflineSam?: Partial<LegacyAutomationSettings["teamOfflineSam"]>;
-      mapEvents?: Partial<LegacyAutomationSettings["mapEvents"]>;
     };
   },
 ): ServerNotificationSettings {
@@ -192,10 +185,6 @@ export function mergeNotificationSettings(
       ...current.teamActivity,
       ...patch.teamActivity,
     },
-    eventTimers: {
-      ...current.eventTimers,
-      ...patch.eventTimers,
-    },
     automationBase: {
       ...current.automationBase,
       ...patch.automationBase,
@@ -208,10 +197,6 @@ export function mergeNotificationSettings(
       teamOfflineSam: {
         ...current.legacyAutomations.teamOfflineSam,
         ...legacyPatch?.teamOfflineSam,
-      },
-      mapEvents: {
-        ...current.legacyAutomations.mapEvents,
-        ...legacyPatch?.mapEvents,
       },
     },
   };
@@ -227,12 +212,10 @@ export function parseServerNotificationSettings(
       tcDecay: { ...DEFAULT_TC_DECAY_SETTINGS },
       teamChatBot: { ...DEFAULT_TEAM_CHAT_BOT_SETTINGS },
       teamActivity: { ...DEFAULT_TEAM_ACTIVITY_SETTINGS },
-      eventTimers: { ...DEFAULT_EVENT_TIMER_SETTINGS },
       automationBase: { ...DEFAULT_AUTOMATION_BASE_SETTINGS },
       legacyAutomations: {
         nightLights: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.nightLights },
         teamOfflineSam: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.teamOfflineSam },
-        mapEvents: { ...DEFAULT_LEGACY_AUTOMATION_SETTINGS.mapEvents },
       },
     };
   }
@@ -244,7 +227,6 @@ export function parseServerNotificationSettings(
       tcDecay: parsed.tcDecay,
       teamChatBot: parsed.teamChatBot,
       teamActivity: parsed.teamActivity,
-      eventTimers: parsed.eventTimers,
       automationBase: parsed.automationBase,
       legacyAutomations: parsed.legacyAutomations,
     });

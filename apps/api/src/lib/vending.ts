@@ -1,32 +1,9 @@
 import {
   calculateRecycle,
   extractContainerItems,
-  searchVendingListings,
-  type VendingSearchFilters,
-  type VendingSearchSort,
+  parseSwitchEntityValue,
 } from "@rusttools/shared";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
-import { parseSwitchEntityValue } from "@rusttools/shared";
-
-export {
-  parseSellOrders,
-  parseVendingMarkers,
-  searchVendingListings,
-  type SellOrderListing,
-  type VendingListing,
-  type VendingSearchFilters,
-  type VendingSearchResult,
-  type VendingSearchSort,
-} from "@rusttools/shared";
-
-export function searchVending(
-  markers: unknown,
-  query: string | undefined,
-  filters: VendingSearchFilters = {},
-  sort?: VendingSearchSort,
-) {
-  return searchVendingListings(markers, query, filters, sort);
-}
 
 export async function getSwitchState(
   rustPlus: RustPlusManager,

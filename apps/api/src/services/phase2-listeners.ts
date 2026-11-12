@@ -3,7 +3,7 @@ import type { Database } from "@rusttools/db";
 import { rustEntities } from "@rusttools/db";
 import type { RustPlusManager, NotificationService, DiscordNotification } from "@rusttools/rustplus-client";
 import { parseStorageEntityInfo } from "@rusttools/shared";
-import { getWorldSize, parseTeamRoster, getActiveServer, resolveWorldSize } from "../lib/rust-data.js";
+import { parseTeamRoster, getActiveServer, resolveWorldSize } from "../lib/rust-data.js";
 import { processTeamRosterWithSettings, enrichTeamApiResponse } from "../lib/team-tracker.js";
 import { canPromoteViaRustPlus, getActiveServerRow } from "../lib/promote-leader.js";
 import { handleTeamRosterEvents } from "../lib/team-event-store.js";
@@ -16,18 +16,6 @@ import {
   stripDuplicatedMessageFromName,
 } from "@rusttools/shared";
 import {
-  configuredWorldEventEntities,
-  eventDiscordEnabled,
-  eventTeamChatEnabled,
-  worldEventAnnouncementEnabled,
-} from "../lib/map-events.js";
-import { mapEventAlertsEnabled } from "@rusttools/shared";
-import {
-  formatAnnouncementsForChat,
-  worldEventTracker,
-} from "../lib/world-event-tracker.js";
-import { parseMonuments } from "../lib/map-markers.js";
-import {
   getServerNotificationSettings,
   resolveDiscordAlarmChannelId,
 } from "../lib/server-notification-settings.js";
@@ -37,7 +25,6 @@ import {
   formatDeepSeaDiscordDescription,
   formatDeepSeaTeamChatMessage,
   formatSmartAlarmTeamChatMessage,
-  formatWorldEventAnnouncement,
   buildDiscordPingContent,
   resolveDiscordPingOptions,
 } from "@rusttools/shared";
@@ -272,21 +259,17 @@ export function startPhase2Listeners(
     }
   });
 
-  rustPlus.eventBus.on("mapMarkers", (event) => {
-    void (async () => {
+  rustPlus.jobScheduler.register({
+    id: "deep-sea-monitor",
+    intervalMs: 90_000,
+    run: async () => {
       try {
         const activeServer = await getActiveServer(db);
         if (!activeServer) return;
 
-        const cachedInfo = rustPlus.getCachedServerInfo();
-        const cachedMap = rustPlus.getCachedMap();
-        const info = cachedInfo ?? (await rustPlus.getServerInfo());
-        const map = cachedMap ?? (await rustPlus.getMap());
-        const worldSize = getWorldSize(info) || 4000;
+        const map = await rustPlus.getMap();
         const { status, transition } = deepSeaTracker.process(activeServer.id, {
-          markersRaw: event.markers,
           monuments: monumentsFromMap(map),
-          mapSize: worldSize,
         });
 
         notifications.webSocket({ event: "deepSeaChanged", payload: status });
@@ -321,69 +304,10 @@ export function startPhase2Listeners(
             });
           }
         }
-
-        const notificationSettings = await getServerNotificationSettings(db, activeServer.id);
-        const { status: worldEvents, announcements } = await worldEventTracker.process(
-          db,
-          activeServer.id,
-          {
-            markersRaw: event.markers,
-            monuments: parseMonuments(map).map((monument) => ({
-              token: monument.token,
-              x: monument.x,
-              y: monument.y,
-            })),
-            worldSize,
-            timers: notificationSettings.eventTimers,
-          },
-        );
-
-        notifications.webSocket({ event: "worldEventsChanged", payload: worldEvents });
-
-        const mapEventSettings = notificationSettings.legacyAutomations.mapEvents;
-        if (mapEventAlertsEnabled(mapEventSettings)) {
-          const enabledEntities = configuredWorldEventEntities(mapEventSettings);
-          const discordChannel = await resolveDefaultGuildChannelId(db, "events");
-          const sendDiscord = eventDiscordEnabled(mapEventSettings) && Boolean(discordChannel);
-          const sendTeamChat = eventTeamChatEnabled(mapEventSettings);
-          const filtered = announcements.filter((item) =>
-            worldEventAnnouncementEnabled(item, enabledEntities),
-          );
-          const chatMessages = formatAnnouncementsForChat(
-            filtered,
-            worldSize,
-            mapEventSettings.prefix,
-          );
-
-          for (const announcement of filtered) {
-            if (sendDiscord) {
-              void notifications.discord({
-                channelId: discordChannel,
-                embed: {
-                  title: "World event",
-                  description: formatWorldEventAnnouncement(
-                    announcement,
-                    worldSize,
-                    mapEventSettings.prefix,
-                  ),
-                  color: announcement.kind === "heli_down" ? 0xe85d2a : 0x3dd68c,
-                },
-              });
-            }
-          }
-
-          if (sendTeamChat) {
-            for (const message of chatMessages) {
-              void sendTeamChatIfUnmuted(db, rustPlus, activeServer.id, message).catch((err) => {
-                console.error("[WorldEvents] Failed to send team chat:", err);
-              });
-            }
-          }
-        }
       } catch (err) {
-        console.error("[MapEvents] Failed to process map markers:", err);
+        console.error("[DeepSea] Failed to process monuments:", err);
       }
-    })();
+    },
   });
 
   rustPlus.eventBus.on("teamChat", async (event) => {
@@ -479,8 +403,6 @@ const lastAllOfflineByServer = new Map<string, boolean>();
       notifications.webSocket({ event: "teamChanged", payload: null });
     }
   });
-
-  rustPlus.startMapMarkerPolling(90_000);
 
   rustPlus.jobScheduler.register({
     id: "night-lights",

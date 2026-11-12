@@ -1,14 +1,10 @@
 import type {
   DeepSeaStatus,
-  EventChatCommand,
   RosterChatCommand,
   TcUpkeepReportEntry,
-  WorldEventsStatus,
 } from "@rusttools/shared";
 import {
-  formatCountdown,
   formatDeepSeaDiscordDescription,
-  formatDurationSince,
   formatWebHelpCategories,
   sortTeamRoster,
   stripRustMarkup,
@@ -40,86 +36,6 @@ function upkeepColor(level: TcUpkeepReportEntry["level"]): number {
     default:
       return EMBED_COLORS.success;
   }
-}
-
-function formatEventField(
-  label: string,
-  entity: {
-    active: boolean;
-    grid: string | null;
-    sinceSec: number | null;
-    egressInSec?: number | null;
-  },
-  nowSec: number,
-  extra?: string,
-): { name: string; value: string; inline: boolean } {
-  if (entity.active && entity.grid) {
-    const since = formatDurationSince(entity.sinceSec, nowSec);
-    let value = `**${entity.grid}** · since ${since}`;
-    if (entity.egressInSec != null && entity.egressInSec > 0) {
-      const egress = formatCountdown(entity.egressInSec);
-      if (egress) value += `\nEgress in ${egress}`;
-    }
-    if (extra) value += `\n${extra}`;
-    return { name: `${label} ● active`, value, inline: true };
-  }
-  if (entity.sinceSec != null) {
-    return {
-      name: label,
-      value: `Offline · last ${formatDurationSince(entity.sinceSec, nowSec)}`,
-      inline: true,
-    };
-  }
-  return { name: label, value: "Not on map", inline: true };
-}
-
-function formatSatelliteField(
-  status: WorldEventsStatus,
-  nowSec: number,
-): { name: string; value: string; inline: boolean } {
-  const crash = status.satellite;
-  if (crash.active && crash.grid) {
-    const since = formatDurationSince(crash.sinceSec, nowSec);
-    let value = `**${crash.grid}** · since ${since}`;
-    if (crash.phase === "inbound") value += "\nInbound";
-    if (crash.phase === "cooling" && crash.lootableLabel) {
-      value += `\nCrate lootable in ${crash.lootableLabel}`;
-    }
-    if (crash.phase === "lootable") value += "\nCrate lootable";
-    return { name: "Satellite crash ● active", value, inline: true };
-  }
-  if (crash.phase === "cooldown" && crash.cooldownLabel) {
-    return { name: "Satellite crash", value: `Cooldown ${crash.cooldownLabel}`, inline: true };
-  }
-  if (crash.sinceSec != null) {
-    return {
-      name: "Satellite crash",
-      value: `Offline · last ${formatDurationSince(crash.sinceSec, nowSec)}`,
-      inline: true,
-    };
-  }
-  return { name: "Satellite crash", value: "Not on map", inline: true };
-}
-
-function formatOilField(
-  kind: "large" | "small",
-  status: WorldEventsStatus,
-  nowSec: number,
-): { name: string; value: string; inline: boolean } {
-  const rig = status.oilRigs[kind];
-  const label = kind === "large" ? "Large Oil" : "Small Oil";
-  if (rig.triggered && rig.crateUnlockInSec != null && rig.crateUnlockInSec > 0) {
-    const unlock = rig.crateUnlockLabel ?? formatCountdown(rig.crateUnlockInSec);
-    return { name: `${label} ● triggered`, value: `Crate unlocks in **${unlock}**`, inline: true };
-  }
-  if (rig.lastTriggeredAt != null) {
-    return {
-      name: label,
-      value: `Idle · last ${formatDurationSince(rig.lastTriggeredAt, nowSec)}`,
-      inline: true,
-    };
-  }
-  return { name: label, value: "Idle · not triggered this wipe", inline: true };
 }
 
 export function buildNoticeEmbed(
@@ -221,102 +137,6 @@ export function buildRosterEmbed(
     description: lines.join("\n"),
     color: EMBED_COLORS.primary,
     footer: { text: `${members.length} teammate${members.length === 1 ? "" : "s"}` },
-  };
-}
-
-export function buildEventEmbed(
-  command: EventChatCommand,
-  status: WorldEventsStatus,
-  nowSec = Math.floor(Date.now() / 1000),
-): DiscordEmbedPayload {
-  if (command === "events") {
-    return buildEventsSummaryEmbed(status, nowSec);
-  }
-
-  if (command === "large" || command === "small") {
-    const field = formatOilField(command, status, nowSec);
-    const label = command === "large" ? "Large Oil Rig" : "Small Oil Rig";
-    return {
-      title: label,
-      color: field.name.includes("●") ? EMBED_COLORS.active : EMBED_COLORS.muted,
-      fields: [field],
-      footer: { text: "RustTools" },
-    };
-  }
-
-  if (command === "satellite") {
-    const field = formatSatelliteField(status, nowSec);
-    return {
-      title: "Satellite crash",
-      color: field.name.includes("●") ? EMBED_COLORS.active : EMBED_COLORS.muted,
-      fields: [field],
-      footer: { text: "RustTools" },
-    };
-  }
-
-  const titles = {
-    cargo: "Cargo Ship",
-    heli: "Patrol Helicopter",
-    chinook: "Chinook",
-    vendor: "Traveling Vendor",
-    bradley: "Bradley APC",
-    convoy: "Convoy",
-  } as const;
-
-  const heliExtra =
-    command === "heli" && status.stats.heliLastDownAt != null && !status.heli.active
-      ? `Last down ${formatDurationSince(status.stats.heliLastDownAt, nowSec)}`
-      : undefined;
-
-  const entities = {
-    cargo: status.cargo,
-    heli: status.heli,
-    chinook: status.chinook,
-    vendor: status.vendor,
-    bradley: status.bradley,
-    convoy: status.convoy,
-  } as const;
-
-  const title = titles[command];
-  const entity = entities[command];
-  const field = formatEventField(title, entity, nowSec, heliExtra);
-
-  return {
-    title,
-    color: field.name.includes("●") ? EMBED_COLORS.active : EMBED_COLORS.muted,
-    fields: [field],
-    footer: { text: "RustTools" },
-  };
-}
-
-export function buildEventsSummaryEmbed(
-  status: WorldEventsStatus,
-  nowSec = Math.floor(Date.now() / 1000),
-): DiscordEmbedPayload {
-  const heliExtra =
-    status.stats.heliLastDownAt != null && !status.heli.active
-      ? `Last down ${formatDurationSince(status.stats.heliLastDownAt, nowSec)}`
-      : undefined;
-
-  const fields = [
-    formatEventField("Cargo", status.cargo, nowSec),
-    formatEventField("Patrol Heli", status.heli, nowSec, heliExtra),
-    formatEventField("Chinook", status.chinook, nowSec),
-    formatEventField("Vendor", status.vendor, nowSec),
-    formatEventField("Bradley", status.bradley, nowSec),
-    formatEventField("Convoy", status.convoy, nowSec),
-    formatSatelliteField(status, nowSec),
-    formatOilField("small", status, nowSec),
-    formatOilField("large", status, nowSec),
-  ];
-
-  const activeCount = fields.filter((f) => f.name.includes("●")).length;
-
-  return {
-    title: "World events",
-    color: activeCount > 0 ? EMBED_COLORS.primary : EMBED_COLORS.muted,
-    fields,
-    footer: { text: `${activeCount} active · RustTools` },
   };
 }
 

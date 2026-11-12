@@ -12,7 +12,6 @@ import { clearMapAnnotationsForServer } from "./map-annotations.js";
 import { clearPairedDevicesForServer } from "./entity-lifecycle.js";
 import { getActiveServerId } from "./rust-data.js";
 import { deleteRustServer } from "./rust-server-lifecycle.js";
-import { resetWorldEventState } from "./server-wipe-cleanup.js";
 import { clearAutomationBaseMapPin } from "./notification-settings-scrub.js";
 import { clearTeamEventLogsForServer } from "./team-event-store.js";
 import { clearTeamTrackerState } from "./team-tracker.js";
@@ -31,11 +30,6 @@ export async function executeDataReset(
       await clearTeamEventLogsForServer(db, serverId);
       clearTeamTrackerState(serverId);
       return { scope, detail: "Cleared team death and connection logs" };
-    }
-    case "world_event_state": {
-      if (!serverId) return { scope, detail: "No active server — nothing to clear" };
-      await resetWorldEventState(db, serverId);
-      return { scope, detail: "Reset world event tracker state" };
     }
     case "map_overlays": {
       if (!serverId) return { scope, detail: "No active server — nothing to clear" };

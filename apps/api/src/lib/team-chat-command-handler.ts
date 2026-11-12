@@ -3,9 +3,7 @@ import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   formatDeepSeaTeamChatMessage,
   formatRosterCommandResponse,
-  formatEventChatCommandResponse,
   formatUpkeepDetailReport,
-  parseEventTeamChatCommand,
   formatTeamChatHelpReplies,
   parseDeepSeaTeamChatCommand,
   parseHelpTeamChatCommand,
@@ -35,11 +33,9 @@ import {
 import { hasSteamAdminCapability, steamIdForDiscordUser } from "./steam-admin.js";
 import { processTeamRosterWithSettings } from "./team-tracker.js";
 import { fetchTcUpkeepReportEntries } from "./tc-upkeep-report.js";
-import { fetchWorldEventsStatus } from "./world-events-status.js";
 import { executeSwitchChatCommand } from "./switch-command-handler.js";
 import {
   buildDeepSeaEmbed,
-  buildEventEmbed,
   buildHelpTeamChatEmbed,
   buildNoticeEmbed,
   buildRosterEmbed,
@@ -226,16 +222,6 @@ export async function executeTeamChatCommand(
     const entries = await fetchTcUpkeepReportEntries(db, rustPlus, ctx.serverId);
     const replies = formatUpkeepDetailReport(entries);
     return forDiscord(ctx, { replies }, [buildUpkeepEmbed(entries)]);
-  }
-
-  const eventCommand = parseEventTeamChatCommand(message);
-  if (eventCommand) {
-    const status = await fetchWorldEventsStatus(db, rustPlus, ctx.serverId);
-    const response = formatEventChatCommandResponse(eventCommand, status);
-    if (eventCommand === "events") {
-      return forDiscord(ctx, { replies: response.split("\n") }, [buildEventEmbed(eventCommand, status)]);
-    }
-    return forDiscord(ctx, { reply: response }, [buildEventEmbed(eventCommand, status)]);
   }
 
   const rosterCommand = parseRosterTeamChatCommand(message);

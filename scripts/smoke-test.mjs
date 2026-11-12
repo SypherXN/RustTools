@@ -13,7 +13,6 @@ import Database from "better-sqlite3";
 import {
   buildMapTransform,
   worldToMapPixel,
-  parseEventTeamChatCommand,
   parseLeaderTeamChatCommand,
   canBecomeTeamLeader,
   isDataResetScope,
@@ -172,8 +171,6 @@ const transform = buildMapTransform(
 const pixel = worldToMapPixel(2000, 2000, transform);
 assert("buildMapTransform + worldToMapPixel", pixel.x > 0 && pixel.y > 0);
 
-assert('parseEventTeamChatCommand "!cargo"', parseEventTeamChatCommand("!cargo") === "cargo");
-assert('parseEventTeamChatCommand "!heli"', parseEventTeamChatCommand("!heli") === "heli");
 assert("isDataResetScope valid", isDataResetScope("team_events"));
 assert("isDataResetScope invalid", !isDataResetScope("nope"));
 
@@ -452,17 +449,11 @@ if (!sessionCookie) {
   const deepSea = await fetchJson(`${API}/servers/active/deepsea`, {}, cookieJar);
   assert("GET /servers/active/deepsea", deepSea.status === 200);
 
-  const worldEvents = await fetchJson(`${API}/servers/active/world-events`, {}, cookieJar);
-  assert("GET /servers/active/world-events", worldEvents.status === 200);
-
   const devices = await fetchJson(`${API}/devices`, {}, cookieJar);
   assert("GET /devices", devices.status === 200);
 
   const storage = await fetchJson(`${API}/storage`, {}, cookieJar);
   assert("GET /storage", storage.status === 200);
-
-  const mapLive = await fetchJson(`${API}/servers/active/map/live`, {}, cookieJar);
-  assert("GET /servers/active/map/live", mapLive.status === 200);
 
   const procgen = await fetchJson(`${API}/servers/active/map/procgen/status`, {}, cookieJar);
   assert("GET /servers/active/map/procgen/status", procgen.status === 200);

@@ -13,8 +13,7 @@ import type {
 import { gridCellCount, gridColumnLabel, MAP_GRID_CELL_SIZE, mapCoordinateScale } from "@rusttools/shared";
 import { fetchAuthenticatedBlob } from "../lib/authenticated-media";
 import { apiFetch } from "../lib/api";
-import type { MapLayers, MapMarkerPoint, MapMonument, MapTeamMember } from "./MapOverlay";
-import { isMapEventMarkerVisible } from "./MapOverlay";
+import type { MapLayers, MapMonument, MapTeamMember } from "./MapOverlay";
 import type { MapFocusTarget, MapTrackTarget } from "./MapViewport";
 import type { MapClusterContext, MapSelection, MarkerSelection } from "../lib/map-clusters";
 import { resolveMapSelection } from "../lib/map-clusters";
@@ -59,7 +58,6 @@ function pickSelectionFromHits(
 }
 
 interface MapSelectionLookup {
-  markers: MapMarkerPoint[];
   monuments: MapMonument[];
   team: MapTeamMember[];
   pins: MapPin[];
@@ -73,11 +71,6 @@ function worldCoordsForSelection(
   switch (selection.kind) {
     case "cluster":
       return { worldX: selection.x, worldY: selection.y };
-    case "vending":
-    case "event": {
-      const marker = lookup.markers.find((m) => m.id === selection.markerId);
-      return marker ? { worldX: marker.x, worldY: marker.y } : null;
-    }
     case "monument": {
       const monument = lookup.monuments.find((m) => m.token === selection.token);
       return monument ? { worldX: monument.x, worldY: monument.y } : null;
@@ -175,7 +168,6 @@ interface Map3DViewProps {
   mapImageSrc: string | null;
   transform: MapCoordinateTransform;
   team: MapTeamMember[];
-  markers: MapMarkerPoint[];
   monuments: MapMonument[];
   layers: MapLayers;
   drawings: MapDrawingStroke[];
@@ -184,10 +176,6 @@ interface Map3DViewProps {
   procgenLayers: MapProcgenLayers;
   procgenPaths: ProcgenPath[];
   procgenPrefabs: ProcgenPrefabPoint[];
-  eventTrails?: {
-    cargo: Array<{ x: number; y: number }>;
-    heli: Array<{ x: number; y: number }>;
-  };
   automationBase?: ResolvedAutomationBase | null;
   selection?: MapSelection | null;
   focusTarget?: MapFocusTarget | null;
@@ -390,7 +378,6 @@ function addMapMarkers3D(
   parent: THREE.Object3D,
   terrain: ProcgenHeightData,
   team: MapTeamMember[],
-  markers: MapMarkerPoint[],
   monuments: MapMonument[],
   layers: MapLayers,
 ): SelectableObject[] {
@@ -432,22 +419,6 @@ function addMapMarkers3D(
         member.isOnline ? "#22c55e" : "#94a3b8",
         { kind: "team", steamId: member.steamId },
         125,
-      );
-    }
-  }
-  for (const marker of markers) {
-    if (marker.type === 3) {
-      if (layers.vending) {
-        add(marker.x, marker.y, marker.name || "Vending", "#38bdf8", { kind: "vending", markerId: marker.id }, 100);
-      }
-    } else if (isMapEventMarkerVisible(marker, layers)) {
-      add(
-        marker.x,
-        marker.y,
-        marker.name || marker.label || "Event",
-        "#fb7185",
-        { kind: "event", markerId: marker.id },
-        120,
       );
     }
   }
@@ -624,30 +595,6 @@ function addAutomationBase3D(
   return objects;
 }
 
-function addEventTrails3D(
-  parent: THREE.Object3D,
-  terrain: ProcgenHeightData,
-  eventTrails: Map3DViewProps["eventTrails"],
-  layers: MapLayers,
-): Array<THREE.Line> {
-  if (!eventTrails || !layers.events) return [];
-  const lines: Array<THREE.Line> = [];
-  const addTrail = (points2d: Array<{ x: number; y: number }>, color: number) => {
-    if (points2d.length < 2) return;
-    const points = points2d.map((p) => worldPoint3D(terrain, p.x, p.y, 12));
-    const line = new THREE.Line(
-      new THREE.BufferGeometry().setFromPoints(points),
-      new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, depthTest: false }),
-    );
-    line.renderOrder = 38;
-    parent.add(line);
-    lines.push(line);
-  };
-  if (layers.eventTypes.cargo) addTrail(eventTrails.cargo, 0x38bdf8);
-  if (layers.eventTypes.heli) addTrail(eventTrails.heli, 0xfb7185);
-  return lines;
-}
-
 async function loadAuthenticatedTexture(
   path: string,
   onLoaded: (texture: THREE.Texture) => void,
@@ -801,7 +748,6 @@ export function Map3DView({
   mapImageSrc,
   transform,
   team,
-  markers,
   monuments,
   layers,
   drawings,
@@ -810,7 +756,6 @@ export function Map3DView({
   procgenLayers,
   procgenPaths,
   procgenPrefabs,
-  eventTrails,
   automationBase = null,
   selection = null,
   focusTarget = null,
@@ -830,13 +775,12 @@ export function Map3DView({
   const trackTargetRef = useRef(trackTarget);
   trackTargetRef.current = trackTarget;
   const selectionLookupRef = useRef<MapSelectionLookup>({
-    markers: [],
     monuments: [],
     team: [],
     pins: [],
     drawings: [],
   });
-  selectionLookupRef.current = { markers, monuments, team, pins, drawings };
+  selectionLookupRef.current = { monuments, team, pins, drawings };
   const lastFocusKeyRef = useRef("");
   const [sceneReady, setSceneReady] = useState(0);
   const runtimeRef = useRef<Map3DRuntime | null>(null);
@@ -1005,7 +949,7 @@ export function Map3DView({
     runtimeRef.current = {
       dynamicGroup,
       selectableObjects: [],
-      clusterCtx: { team: [], markers: [], monuments: [], layers },
+      clusterCtx: { team: [], monuments: [], layers },
       requestRender,
     };
 
@@ -1216,14 +1160,12 @@ export function Map3DView({
     }
     addProcgenPaths3D(runtime.dynamicGroup, heightData, procgenPaths, procgenLayers.paths);
     addProcgenPrefabs3D(runtime.dynamicGroup, heightData, procgenPrefabs, procgenLayers);
-    addEventTrails3D(runtime.dynamicGroup, heightData, eventTrails, layers);
     const drawingObjects = addDrawings3D(runtime.dynamicGroup, heightData, drawings, showTeamOverlays);
     const pinObjects = addPins3D(runtime.dynamicGroup, heightData, pins, showTeamOverlays);
     const markerObjects = addMapMarkers3D(
       runtime.dynamicGroup,
       heightData,
       team,
-      markers,
       monuments,
       layers,
     );
@@ -1231,7 +1173,6 @@ export function Map3DView({
     runtime.selectableObjects = [...markerObjects, ...drawingObjects, ...pinObjects];
     runtime.clusterCtx = {
       team: team.filter((m) => m.locationKnown !== false && m.x != null && m.y != null),
-      markers,
       monuments,
       layers,
     };
@@ -1239,7 +1180,6 @@ export function Map3DView({
   }, [
     heightData,
     team,
-    markers,
     monuments,
     layers,
     automationBase,
@@ -1251,7 +1191,6 @@ export function Map3DView({
     procgenLayers.icebergs,
     procgenPaths,
     procgenPrefabs,
-    eventTrails,
   ]);
 
   if (loadError) {

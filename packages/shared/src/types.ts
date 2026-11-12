@@ -94,7 +94,6 @@ export type RustPlusEvent =
   | { type: "teamChanged"; serverId: string; teamInfo: unknown }
   | { type: "serverPaired"; serverId: string; name: string }
   | { type: "entityPaired"; serverId: string; entityId: number; entityType: EntityType; name: string }
-  | { type: "mapMarkers"; serverId: string; markers: unknown }
   | { type: "fcmAlarm"; title?: string; message?: string; body: Record<string, unknown> }
   | {
       type: "cameraFrame";

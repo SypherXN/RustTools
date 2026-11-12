@@ -1,27 +1,8 @@
 import type { MapCoordinateTransform } from "@rusttools/shared";
-import {
-  isBradleyMarker,
-  isConvoyMarker,
-  isSatelliteCrashMarker,
-  isTravelingVendorMarker,
-  MAP_MARKER_TYPE,
-  worldLengthToMapPixels,
-  worldToMapPixel,
-} from "@rusttools/shared";
+import { worldToMapPixel } from "@rusttools/shared";
 import { useMemo } from "react";
 import type { MapClusterContext, MapSelection, MarkerSelection } from "../lib/map-clusters";
 import { countClusterAt, resolveMapSelection } from "../lib/map-clusters";
-
-export interface SellOrderListing {
-  item: string;
-  itemName: string;
-  itemShortname: string;
-  quantity: number;
-  costItem: string;
-  costItemName: string;
-  costItemShortname: string;
-  costQuantity: number;
-}
 
 export interface MapTeamMember {
   name: string;
@@ -34,20 +15,6 @@ export interface MapTeamMember {
   heading?: number | null;
 }
 
-export interface MapMarkerPoint {
-  id: string;
-  type: number;
-  label: string;
-  name: string;
-  x: number;
-  y: number;
-  rotation?: number;
-  radius?: number;
-  outOfStock?: boolean;
-  sellOrderCount?: number;
-  sellOrders?: SellOrderListing[];
-}
-
 export interface MapMonument {
   token: string;
   name: string;
@@ -55,73 +22,12 @@ export interface MapMonument {
   y: number;
 }
 
-export type MapEventTypeKey =
-  | "cargo"
-  | "heli"
-  | "chinook"
-  | "vendor"
-  | "bradley"
-  | "convoy"
-  | "satellite"
-  | "crate"
-  | "other";
-
-export interface MapEventTypeLayers {
-  cargo: boolean;
-  heli: boolean;
-  chinook: boolean;
-  vendor: boolean;
-  bradley: boolean;
-  convoy: boolean;
-  satellite: boolean;
-  crate: boolean;
-  other: boolean;
-}
-
 export interface MapLayers {
   team: boolean;
-  vending: boolean;
   monuments: boolean;
-  events: boolean;
   grid: boolean;
   /** Server automation base zone (proximity rules). */
   base: boolean;
-  eventTypes: MapEventTypeLayers;
-}
-
-export const DEFAULT_EVENT_TYPE_LAYERS: MapEventTypeLayers = {
-  cargo: true,
-  heli: true,
-  chinook: true,
-  vendor: true,
-  bradley: true,
-  convoy: true,
-  satellite: true,
-  crate: true,
-  other: true,
-};
-
-const EVENT_TYPES = new Set([2, 4, 5, 6, 7, 8]);
-
-export function classifyMapEventMarker(marker: MapMarkerPoint): MapEventTypeKey {
-  if (marker.type === MAP_MARKER_TYPE.CARGO) return "cargo";
-  if (marker.type === MAP_MARKER_TYPE.HELI) return "heli";
-  if (marker.type === MAP_MARKER_TYPE.CH47) return "chinook";
-  if (isTravelingVendorMarker(marker)) return "vendor";
-  if (isBradleyMarker(marker)) return "bradley";
-  if (isConvoyMarker(marker)) return "convoy";
-  if (isSatelliteCrashMarker(marker)) return "satellite";
-  if (marker.type === MAP_MARKER_TYPE.CRATE) return "crate";
-  return "other";
-}
-
-export function isMapEventMarkerVisible(marker: MapMarkerPoint, layers: MapLayers): boolean {
-  if (!layers.events || !EVENT_TYPES.has(marker.type)) return false;
-  return layers.eventTypes[classifyMapEventMarker(marker)];
-}
-
-function pointKey(x: number, y: number): string {
-  return `${Math.round(x)}:${Math.round(y)}`;
 }
 
 function truncateLabel(name: string, max = 18): string {
@@ -142,9 +48,6 @@ function selectionId(selection: MarkerSelection): string {
       return selection.token;
     case "team":
       return selection.steamId;
-    case "vending":
-    case "event":
-      return selection.markerId;
   }
 }
 
@@ -217,27 +120,10 @@ interface MapOverlayProps {
   height: number;
   transform: MapCoordinateTransform;
   team: MapTeamMember[];
-  markers: MapMarkerPoint[];
   monuments: MapMonument[];
   layers: MapLayers;
-  highlighted?: Array<{ x: number; y: number }>;
-  eventTrails?: {
-    cargo: Array<{ x: number; y: number }>;
-    heli: Array<{ x: number; y: number }>;
-  };
   selection?: MapSelection | null;
   onSelect?: (selection: MapSelection) => void;
-}
-
-function renderTrail(
-  points: Array<{ x: number; y: number }>,
-  transform: MapCoordinateTransform,
-  className: string,
-) {
-  if (points.length < 2) return null;
-  const pixelPoints = points.map((point) => toPixel(point.x, point.y, transform));
-  const d = pixelPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  return <path d={d} className={className} fill="none" pointerEvents="none" />;
 }
 
 export function MapOverlay({
@@ -245,25 +131,18 @@ export function MapOverlay({
   height,
   transform,
   team,
-  markers,
   monuments,
   layers,
-  highlighted = [],
-  eventTrails,
   selection = null,
   onSelect,
 }: MapOverlayProps) {
-  const highlightSet = new Set(highlighted.map((p) => pointKey(p.x, p.y)));
-
   const teamOnMap = team.filter(
     (m) => m.locationKnown !== false && m.x != null && m.y != null,
   );
-  const vendingMarkers = markers.filter((m) => m.type === 3);
-  const eventMarkers = markers.filter((m) => isMapEventMarkerVisible(m, layers));
 
   const clusterCtx = useMemo<MapClusterContext>(
-    () => ({ team: teamOnMap, markers, monuments, layers }),
-    [teamOnMap, markers, monuments, layers],
+    () => ({ team: teamOnMap, monuments, layers }),
+    [teamOnMap, monuments, layers],
   );
 
   const pick = (worldX: number, worldY: number, single: MarkerSelection) => {
@@ -278,13 +157,6 @@ export function MapOverlay({
       height={height}
       preserveAspectRatio="none"
     >
-      {layers.events && layers.eventTypes.cargo && eventTrails?.cargo?.length
-        ? renderTrail(eventTrails.cargo, transform, "map-event-trail map-event-trail-cargo")
-        : null}
-      {layers.events && layers.eventTypes.heli && eventTrails?.heli?.length
-        ? renderTrail(eventTrails.heli, transform, "map-event-trail map-event-trail-heli")
-        : null}
-
       {layers.monuments &&
         monuments.map((m) => {
           const { x, y } = toPixel(m.x, m.y, transform);
@@ -302,65 +174,6 @@ export function MapOverlay({
                   y={y}
                   r={18}
                   onSelect={() => pick(m.x, m.y, { kind: "monument", token: m.token })}
-                />
-              )}
-              <ClusterBadge x={x} y={y} count={stackCount} />
-              <MapLabel x={x} y={y + 22} text={m.name} />
-            </g>
-          );
-        })}
-
-      {eventMarkers.map((m) => {
-          const { x, y } = toPixel(m.x, m.y, transform);
-          const className = `map-marker map-marker-event map-marker-type-${m.type}${isSelected(selection, "event", m.id) ? " selected" : ""}${onSelect ? " interactive" : ""}`;
-          const radiusPx =
-            m.type === 7 && m.radius
-              ? worldLengthToMapPixels(m.radius, transform)
-              : undefined;
-          const displayName = m.name.trim() && m.name !== m.label ? m.name : m.label;
-          const stackCount = countClusterAt(m.x, m.y, clusterCtx);
-          return (
-            <g key={m.id} className={className}>
-              {radiusPx ? (
-                <circle cx={x} cy={y} r={radiusPx} className="map-marker-radius" pointerEvents="none" />
-              ) : (
-                <rect x={x - 7} y={y - 7} width={14} height={14} rx={2} pointerEvents="none" />
-              )}
-              {onSelect && (
-                <HitArea
-                  x={x}
-                  y={y}
-                  r={radiusPx ? radiusPx + 8 : 18}
-                  onSelect={() => pick(m.x, m.y, { kind: "event", markerId: m.id })}
-                />
-              )}
-              <ClusterBadge x={x} y={y} count={stackCount} />
-              <MapLabel x={x} y={y + 22} text={displayName} />
-            </g>
-          );
-        })}
-
-      {layers.vending &&
-        vendingMarkers.map((m) => {
-          const { x, y } = toPixel(m.x, m.y, transform);
-          const highlightedMarker = highlightSet.has(pointKey(m.x, m.y));
-          const selected = isSelected(selection, "vending", m.id);
-          const stackCount = countClusterAt(m.x, m.y, clusterCtx);
-          return (
-            <g
-              key={m.id}
-              className={`map-marker map-marker-vending${highlightedMarker ? " highlighted" : ""}${selected ? " selected" : ""}${m.outOfStock ? " out-of-stock" : ""}${onSelect ? " interactive" : ""}`}
-            >
-              {highlightedMarker && (
-                <circle cx={x} cy={y} r={16} className="map-marker-highlight-ring" pointerEvents="none" />
-              )}
-              <rect x={x - 8} y={y - 8} width={16} height={16} rx={3} pointerEvents="none" />
-              {onSelect && (
-                <HitArea
-                  x={x}
-                  y={y}
-                  r={18}
-                  onSelect={() => pick(m.x, m.y, { kind: "vending", markerId: m.id })}
                 />
               )}
               <ClusterBadge x={x} y={y} count={stackCount} />

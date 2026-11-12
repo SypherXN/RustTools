@@ -48,7 +48,6 @@ export const FCM_WARNING_DAYS_BEFORE = 14;
 
 export const DATA_RESET_SCOPES = [
   "team_events",
-  "world_event_state",
   "map_overlays",
   "automation_rules",
   "smart_devices",
@@ -61,7 +60,6 @@ export type DataResetScope = (typeof DATA_RESET_SCOPES)[number];
 
 export const DATA_RESET_SCOPE_LABELS: Record<DataResetScope, string> = {
   team_events: "Team death & connection logs (auto-cleared on wipe)",
-  world_event_state: "World event tracker state",
   map_overlays: "Map drawings & base pins",
   automation_rules: "Automation rules (templates kept)",
   smart_devices: "Paired smart devices, groups & library (templates kept)",

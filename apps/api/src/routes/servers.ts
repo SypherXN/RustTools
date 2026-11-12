@@ -29,7 +29,6 @@ import {
   saveAlarmSoundFile,
 } from "../lib/alarm-sound.js";
 import { fetchDeepSeaStatus } from "../lib/deep-sea.js";
-import { fetchWorldEventsStatus } from "../lib/world-events-status.js";
 import { deleteRustServer, ServerNotFoundError } from "../lib/rust-server-lifecycle.js";
 import { listDiscordGuildRoles } from "../lib/discord-guild.js";
 import {
@@ -304,25 +303,6 @@ export async function registerServerRoutes(
     }
   });
 
-  app.get("/servers/active/world-events", async (request, reply) => {
-    const user = await requireCapability(deps.db, request, reply, "view");
-    if (!user) return;
-
-    const activeServer = await getActiveServer(deps.db);
-    if (!activeServer) {
-      return reply.status(404).send({ error: "No active server" });
-    }
-
-    try {
-      const status = await fetchWorldEventsStatus(deps.db, deps.rustPlus, activeServer.id);
-      return { status };
-    } catch (err) {
-      return reply.status(503).send({
-        error: err instanceof Error ? err.message : "Rust+ not connected",
-      });
-    }
-  });
-
   app.get("/discord/roles", async (request, reply) => {
     const user = await requireCapability(deps.db, request, reply, "admin");
     if (!user) return;
@@ -358,7 +338,6 @@ export async function registerServerRoutes(
       tcDecay?: Partial<ServerNotificationSettings["tcDecay"]>;
       teamChatBot?: Partial<ServerNotificationSettings["teamChatBot"]>;
       teamActivity?: Partial<ServerNotificationSettings["teamActivity"]>;
-      eventTimers?: Partial<ServerNotificationSettings["eventTimers"]>;
       automationBase?: Partial<ServerNotificationSettings["automationBase"]>;
       legacyAutomations?: Partial<ServerNotificationSettings["legacyAutomations"]>;
     };

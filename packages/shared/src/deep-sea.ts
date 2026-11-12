@@ -1,26 +1,15 @@
 import { formatDurationCompact } from "./duration.js";
 
-const MARKER_TYPE_VENDING = 3;
-
 export type DeepSeaPhase = "open" | "closed" | "unknown";
-
-export interface DeepSeaDetectionInput {
-  markers: Array<{ type: number; x: number; y: number }>;
-  monuments: Array<{ token: string }>;
-  mapSize: number;
-  minOffshoreVendings?: number;
-}
 
 export interface DeepSeaDetectionResult {
   isOpen: boolean;
-  offshoreVendingCount: number;
   deepSeaMonumentCount: number;
 }
 
 export interface DeepSeaStatus {
   phase: DeepSeaPhase;
   isOpen: boolean;
-  offshoreVendingCount: number;
   deepSeaMonumentCount: number;
   openedAt: number | null;
   closedAt: number | null;
@@ -47,29 +36,13 @@ export function deepSeaCooldownSec(): number {
   return DEFAULT_DEEP_SEA_COOLDOWN_SEC;
 }
 
-export function isOffshoreWorldCoordinate(x: number, y: number, mapSize: number): boolean {
-  return x < 0 || y < 0 || x > mapSize || y > mapSize;
-}
-
 export function isDeepSeaMonumentToken(token: string): boolean {
   return /deep[_\s-]?sea/i.test(token);
 }
 
-export function detectDeepSeaOpen(input: DeepSeaDetectionInput): DeepSeaDetectionResult {
-  const minVendings = input.minOffshoreVendings ?? 1;
-  let offshoreVendingCount = 0;
-
-  for (const marker of input.markers) {
-    if (marker.type !== MARKER_TYPE_VENDING) continue;
-    if (isOffshoreWorldCoordinate(marker.x, marker.y, input.mapSize)) {
-      offshoreVendingCount += 1;
-    }
-  }
-
-  const deepSeaMonumentCount = input.monuments.filter((m) => isDeepSeaMonumentToken(m.token)).length;
-  const isOpen = offshoreVendingCount >= minVendings || deepSeaMonumentCount > 0;
-
-  return { isOpen, offshoreVendingCount, deepSeaMonumentCount };
+export function detectDeepSeaOpen(monuments: Array<{ token: string }>): DeepSeaDetectionResult {
+  const deepSeaMonumentCount = monuments.filter((m) => isDeepSeaMonumentToken(m.token)).length;
+  return { isOpen: deepSeaMonumentCount > 0, deepSeaMonumentCount };
 }
 
 export function formatDurationLabel(totalSeconds: number): string {
@@ -79,7 +52,6 @@ export function formatDurationLabel(totalSeconds: number): string {
 export function buildDeepSeaStatus(args: {
   phase: DeepSeaPhase;
   isOpen: boolean;
-  offshoreVendingCount: number;
   deepSeaMonumentCount: number;
   openedAt: number | null;
   closedAt: number | null;
@@ -124,7 +96,6 @@ export function buildDeepSeaStatus(args: {
   return {
     phase: args.phase,
     isOpen: args.isOpen,
-    offshoreVendingCount: args.offshoreVendingCount,
     deepSeaMonumentCount: args.deepSeaMonumentCount,
     openedAt: args.openedAt,
     closedAt: args.closedAt,
@@ -156,9 +127,6 @@ export function formatDeepSeaTeamChatMessage(
 
 export function formatDeepSeaDiscordDescription(status: DeepSeaStatus): string {
   const lines = [status.label];
-  if (status.offshoreVendingCount > 0) {
-    lines.push(`Offshore vending machines: ${status.offshoreVendingCount}`);
-  }
   if (status.deepSeaMonumentCount > 0) {
     lines.push(`Deep sea monuments: ${status.deepSeaMonumentCount}`);
   }

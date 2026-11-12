@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { DeepSeaStatus, TeamApiResponse, WorldEventsStatus } from "@rusttools/shared";
-import { formatDurationSince, formatDiscordHelpSections, formatWebHelpCategories } from "@rusttools/shared";
+import type { DeepSeaStatus, TeamApiResponse } from "@rusttools/shared";
+import { formatDiscordHelpSections, formatWebHelpCategories } from "@rusttools/shared";
 import { apiFetch } from "../lib/api";
 import { peekApiCache } from "../lib/api-cache";
 import { LastUpdatedLine } from "../components/LastUpdatedLine";
@@ -27,7 +27,6 @@ export function DashboardPage() {
   const [time, setTime] = useState<{ isDay?: boolean; time?: string } | null>(null);
   const [teamCounts, setTeamCounts] = useState<{ online: number; total: number } | null>(null);
   const [deepSea, setDeepSea] = useState<DeepSeaStatus | null>(null);
-  const [worldEvents, setWorldEvents] = useState<WorldEventsStatus | null>(null);
   const [dataFetchedAt, setDataFetchedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -36,7 +35,6 @@ export function DashboardPage() {
     const cachedTeam = peekApiCache<TeamApiResponse>("/servers/active/team");
     const cachedTime = peekApiCache<{ time: { isDay?: boolean; time?: string } }>("/servers/active/time");
     const cachedDeepSea = peekApiCache<{ status: DeepSeaStatus }>("/servers/active/deepsea");
-    const cachedEvents = peekApiCache<{ status: WorldEventsStatus }>("/servers/active/world-events");
 
     if (cachedInfo) setServer(cachedInfo.value);
     if (cachedTeam) {
@@ -48,21 +46,19 @@ export function DashboardPage() {
     }
     if (cachedTime) setTime(cachedTime.value.time);
     if (cachedDeepSea) setDeepSea(cachedDeepSea.value.status);
-    if (cachedEvents) setWorldEvents(cachedEvents.value.status);
 
     const stamps = [
       cachedInfo?.fetchedAt,
       cachedTeam?.fetchedAt,
       cachedTime?.fetchedAt,
       cachedDeepSea?.fetchedAt,
-      cachedEvents?.fetchedAt,
     ].filter((v): v is number => v != null);
     if (stamps.length > 0) {
       setDataFetchedAt(Math.min(...stamps));
     }
 
     setRefreshing(true);
-    let pending = 5;
+    let pending = 4;
     const done = () => {
       pending -= 1;
       if (pending <= 0) setRefreshing(false);
@@ -108,20 +104,10 @@ export function DashboardPage() {
         if (!cachedDeepSea) setDeepSea(null);
       })
       .finally(done);
-    apiFetch<{ status: WorldEventsStatus }>("/servers/active/world-events")
-      .then((d) => {
-        setWorldEvents(d.status);
-        setDataFetchedAt(Date.now());
-      })
-      .catch(() => {
-        if (!cachedEvents) setWorldEvents(null);
-      })
-      .finally(done);
   }, [epoch]);
 
   useWebSocket((event, payload) => {
     if (event === "deepSeaChanged") setDeepSea(payload as DeepSeaStatus);
-    if (event === "worldEventsChanged") setWorldEvents(payload as WorldEventsStatus);
     if (event === "teamChanged") {
       const p = payload as TeamApiResponse | null;
       if (p?.team?.members) {
@@ -132,8 +118,6 @@ export function DashboardPage() {
       }
     }
   });
-
-  const nowSec = Math.floor(Date.now() / 1000);
 
   const info = server?.info;
 
@@ -257,93 +241,9 @@ export function DashboardPage() {
                 <dt>Timer</dt>
                 <dd>{deepSea.label}</dd>
               </div>
-              {deepSea.offshoreVendingCount > 0 && (
-                <div>
-                  <dt>Offshore shops</dt>
-                  <dd>{deepSea.offshoreVendingCount}</dd>
-                </div>
-              )}
             </dl>
           ) : (
             <p className="muted">Deep Sea status unavailable — connect Rust+ to track open/close timers.</p>
-          )}
-        </section>
-
-        <section className="card">
-          <h2>World Events</h2>
-          {worldEvents ? (
-            <dl className="stat-list">
-              <div>
-                <dt>Cargo</dt>
-                <dd>
-                  {worldEvents.cargo.active
-                    ? `Active @ ${worldEvents.cargo.grid ?? "?"}`
-                    : `Off map (last ${formatDurationSince(worldEvents.cargo.sinceSec, nowSec)})`}
-                </dd>
-              </div>
-              <div>
-                <dt>Patrol Heli</dt>
-                <dd>
-                  {worldEvents.heli.active
-                    ? `Active @ ${worldEvents.heli.grid ?? "?"}`
-                    : worldEvents.stats.heliLastDownAt
-                      ? `Down ${formatDurationSince(worldEvents.stats.heliLastDownAt, nowSec)}`
-                      : `Off map (last ${formatDurationSince(worldEvents.heli.sinceSec, nowSec)})`}
-                </dd>
-              </div>
-              <div>
-                <dt>Chinook</dt>
-                <dd>
-                  {worldEvents.chinook.active
-                    ? `Active @ ${worldEvents.chinook.grid ?? "?"}`
-                    : `Off map (last ${formatDurationSince(worldEvents.chinook.sinceSec, nowSec)})`}
-                </dd>
-              </div>
-              <div>
-                <dt>Traveling Vendor</dt>
-                <dd>
-                  {worldEvents.vendor.active
-                    ? `Active @ ${worldEvents.vendor.grid ?? "?"}`
-                    : `Off map (last ${formatDurationSince(worldEvents.vendor.sinceSec, nowSec)})`}
-                </dd>
-              </div>
-              <div>
-                <dt>Satellite crash</dt>
-                <dd>
-                  {worldEvents.satellite.active
-                    ? worldEvents.satellite.phase === "cooling" && worldEvents.satellite.lootableLabel
-                      ? `Crate too hot @ ${worldEvents.satellite.grid ?? "?"} · ${worldEvents.satellite.lootableLabel}`
-                      : worldEvents.satellite.phase === "inbound"
-                        ? `Inbound @ ${worldEvents.satellite.grid ?? "?"}`
-                        : `Lootable @ ${worldEvents.satellite.grid ?? "?"}`
-                    : worldEvents.satellite.phase === "cooldown" && worldEvents.satellite.cooldownLabel
-                      ? `Cooldown ${worldEvents.satellite.cooldownLabel}`
-                      : `Off map (last ${formatDurationSince(worldEvents.satellite.sinceSec, nowSec)})`}
-                </dd>
-              </div>
-              <div>
-                <dt>Small Oil Rig</dt>
-                <dd>
-                  {worldEvents.oilRigs.small.triggered
-                    ? `Crate unlocks in ${worldEvents.oilRigs.small.crateUnlockLabel ?? "?"}`
-                    : worldEvents.oilRigs.small.lastTriggeredAt
-                      ? `Idle (last ${formatDurationSince(worldEvents.oilRigs.small.lastTriggeredAt, nowSec)})`
-                      : "Idle"}
-                </dd>
-              </div>
-              <div>
-                <dt>Large Oil Rig</dt>
-                <dd>
-                  {worldEvents.oilRigs.large.triggered
-                    ? `Crate unlocks in ${worldEvents.oilRigs.large.crateUnlockLabel ?? "?"}`
-                    : worldEvents.oilRigs.large.lastTriggeredAt
-                      ? `Idle (last ${formatDurationSince(worldEvents.oilRigs.large.lastTriggeredAt, nowSec)})`
-                      : "Idle"}
-                </dd>
-              </div>
-            </dl>
-          ) : (
-            <p className="muted">World event stats unavailable — connect Rust+ and enable map polling.</p>
           )}
         </section>
       </div>

@@ -15,7 +15,6 @@ import {
   FULL_USER_PERMISSIONS,
   parseStorageEntityInfo,
   resolveStorageMonitorIcon,
-  searchVendingListings,
   STORAGE_CONTAINER_ICON_CATALOG,
 } from "@rusttools/shared";
 
@@ -84,7 +83,6 @@ let demoNotificationSettings: NotificationSettingsResponse = {
 const demoDeepSeaStatus = {
   phase: "closed" as const,
   isOpen: false,
-  offshoreVendingCount: 0,
   deepSeaMonumentCount: 0,
   openedAt: null,
   closedAt: Math.floor(Date.now() / 1000) - 3600,
@@ -92,117 +90,6 @@ const demoDeepSeaStatus = {
   secondsRemaining: 3600,
   label: "Closed — opens in ~1h 0m",
   source: "estimated" as const,
-};
-
-const demoWorldEventsStatus = {
-  updatedAt: Math.floor(Date.now() / 1000),
-  cargo: {
-    active: true,
-    x: 1200,
-    y: 900,
-    grid: "H12",
-    sinceSec: Math.floor(Date.now() / 1000) - 600,
-    egressInSec: 2100,
-    trail: [
-      { x: 1100, y: 850, t: Math.floor(Date.now() / 1000) - 300 },
-      { x: 1150, y: 875, t: Math.floor(Date.now() / 1000) - 150 },
-      { x: 1200, y: 900, t: Math.floor(Date.now() / 1000) },
-    ],
-  },
-  heli: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: Math.floor(Date.now() / 1000) - 3600,
-    egressInSec: null,
-    trail: [],
-  },
-  chinook: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: Math.floor(Date.now() / 1000) - 7200,
-    egressInSec: null,
-    trail: [],
-  },
-  vendor: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: null,
-    egressInSec: null,
-    trail: [],
-  },
-  bradley: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: Math.floor(Date.now() / 1000) - 5400,
-    egressInSec: null,
-    trail: [],
-  },
-  convoy: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: null,
-    egressInSec: null,
-    trail: [],
-  },
-  satellite: {
-    active: false,
-    x: null,
-    y: null,
-    grid: null,
-    sinceSec: null,
-    phase: "idle" as const,
-    lootableInSec: null,
-    lootableLabel: null,
-    cooldownInSec: null,
-    cooldownLabel: null,
-  },
-  oilRigs: {
-    small: {
-      triggered: false,
-      triggeredAt: null,
-      crateUnlockAt: null,
-      crateUnlockInSec: null,
-      crateUnlockLabel: null,
-      lastTriggeredAt: null,
-    },
-    large: {
-      triggered: true,
-      triggeredAt: Math.floor(Date.now() / 1000) - 300,
-      crateUnlockAt: Math.floor(Date.now() / 1000) + 600,
-      crateUnlockInSec: 600,
-      crateUnlockLabel: "10m",
-      lastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
-    },
-  },
-  stats: {
-    cargoLastSpawnAt: Math.floor(Date.now() / 1000) - 600,
-    cargoLastDespawnAt: null,
-    heliLastSpawnAt: Math.floor(Date.now() / 1000) - 7200,
-    heliLastDespawnAt: Math.floor(Date.now() / 1000) - 3600,
-    heliLastDownAt: Math.floor(Date.now() / 1000) - 3600,
-    chinookLastSpawnAt: Math.floor(Date.now() / 1000) - 7200,
-    chinookLastDespawnAt: Math.floor(Date.now() / 1000) - 7000,
-    vendorLastSpawnAt: null,
-    vendorLastDespawnAt: null,
-    bradleyLastSpawnAt: Math.floor(Date.now() / 1000) - 5400,
-    bradleyLastDespawnAt: Math.floor(Date.now() / 1000) - 5000,
-    convoyLastSpawnAt: null,
-    convoyLastDespawnAt: null,
-    satelliteLastSpawnAt: null,
-    satelliteLastDespawnAt: null,
-    oilSmallLastTriggeredAt: null,
-    oilLargeLastTriggeredAt: Math.floor(Date.now() / 1000) - 300,
-  },
 };
 
 export const demoDevices = [
@@ -635,77 +522,6 @@ export const demoMonuments = [
   { token: "apartment_complex_display_name", name: "Apartment Complex", x: 900, y: 1100 },
 ];
 
-export const demoMapMarkers = [
-  {
-    id: "vending-1",
-    type: 3,
-    label: "Vending",
-    name: "Outpost Shop",
-    x: 500,
-    y: 800,
-    sellOrderCount: 2,
-    sellOrders: [
-      {
-        item: "-932201673",
-        itemName: "Scrap",
-        itemShortname: "scrap",
-        quantity: 100,
-        costItem: "69511070",
-        costItemName: "Metal Fragments",
-        costItemShortname: "metal.fragments",
-        costQuantity: 500,
-      },
-      {
-        item: "1568388703",
-        itemName: "Wood",
-        itemShortname: "wood",
-        quantity: 1000,
-        costItem: "-932201673",
-        costItemName: "Scrap",
-        costItemShortname: "scrap",
-        costQuantity: 20,
-      },
-    ],
-  },
-  {
-    id: "vending-2",
-    type: 3,
-    label: "Vending",
-    name: "Bandit Camp",
-    x: 1400,
-    y: 1100,
-    sellOrderCount: 1,
-    sellOrders: [
-      {
-        item: "1545779598",
-        itemName: "Assault Rifle",
-        itemShortname: "rifle.ak",
-        quantity: 1,
-        costItem: "-932201673",
-        costItemName: "Scrap",
-        costItemShortname: "scrap",
-        costQuantity: 500,
-      },
-    ],
-  },
-  {
-    id: "cargo-1",
-    type: 5,
-    label: "Cargo Ship",
-    name: "Cargo Ship",
-    x: 900,
-    y: 400,
-  },
-  {
-    id: "heli-1",
-    type: 8,
-    label: "Patrol Heli",
-    name: "Patrol Helicopter",
-    x: 1700,
-    y: 1300,
-  },
-];
-
 export const demoStorageContents = {
   capacity: 24,
   hasProtection: true,
@@ -1004,10 +820,6 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     return { status: demoDeepSeaStatus } as T;
   }
 
-  if (path === "/servers/active/world-events") {
-    return { status: demoWorldEventsStatus } as T;
-  }
-
   if (path === "/servers/active/notifications/alarm-sound/status") {
     return { configured: false, originalName: null, mimeType: null, uploadedAt: null } as T;
   }
@@ -1238,14 +1050,10 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
       transform: demoMapTransform,
       team: demoTeam,
       monuments: demoMonuments,
-      markers: demoMapMarkers,
     } as T;
   }
   if (path === "/servers/active/map/image") {
     return { map: { width: demoMapSize.width, height: demoMapSize.height, imageBase64: null } } as T;
-  }
-  if (path === "/servers/active/map/live") {
-    return { team: demoTeam, markers: demoMapMarkers, worldEvents: demoWorldEventsStatus } as T;
   }
   if (path === "/servers/active/map/overlays") {
     return { drawings: [], pins: [] } as T;
@@ -1270,41 +1078,7 @@ export function demoHandleApi<T>(path: string, init?: RequestInit): T | Promise<
     throw new Error("Procgen map features require a .map upload (disabled in demo mode)");
   }
 
-  // ── Vending / chat ───────────────────────────────────────────────────
-  if (path.startsWith("/vending/search")) {
-    const params = new URLSearchParams(path.split("?")[1] ?? "");
-    const q = params.get("q") ?? undefined;
-    const filters = {
-      currency: params.get("currency") ?? undefined,
-      minPrice: params.get("minPrice") ? Number(params.get("minPrice")) : undefined,
-      maxPrice: params.get("maxPrice") ? Number(params.get("maxPrice")) : undefined,
-      minProfitMargin: params.get("minProfitMargin")
-        ? Number(params.get("minProfitMargin"))
-        : undefined,
-    };
-    const sort = params.get("sort");
-    const sortMode = sort === "price" || sort === "margin" ? sort : undefined;
-    const markerPayload = {
-      markers: demoMapMarkers.map((marker) => ({
-        id: marker.id,
-        type: marker.type,
-        name: marker.name,
-        x: marker.x,
-        y: marker.y,
-        sellOrders: marker.sellOrders?.map((order) => ({
-          itemId: Number(order.item),
-          currencyId: Number(order.costItem),
-          costPerItem: order.costQuantity,
-          amountInStock: order.quantity,
-        })),
-      })),
-    };
-    const results = searchVendingListings(markerPayload, q, filters, sortMode);
-    return {
-      results: results.length ? results : searchVendingListings(markerPayload, "scrap"),
-    } as T;
-  }
-
+  // ── Chat ─────────────────────────────────────────────────────────────
   if (path === "/servers/active/chat" && method === "POST") {
     const text = (body as { message?: string }).message?.trim();
     if (text) {

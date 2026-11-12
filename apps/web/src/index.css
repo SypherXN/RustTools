@@ -228,10 +228,6 @@
   gap: 0.15rem;
 }
 
-.map-layer-group-nested {
-  padding-left: 0.5rem;
-}
-
 .map-layer-row,
 .map-layer-summary-row {
   display: flex;
@@ -258,50 +254,6 @@
 .map-layers-refresh {
   width: 100%;
   margin: 0.5rem 0 0.75rem;
-}
-
-.map-layer-event-row {
-  display: grid;
-  gap: 0.15rem;
-  padding: 0.2rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.map-layer-event-row:last-child {
-  border-bottom: none;
-}
-
-.map-layer-event-row.tracking {
-  background: rgba(232, 93, 42, 0.08);
-  border-radius: var(--radius-sm, 6px);
-  padding: 0.25rem 0.35rem;
-  margin: 0 -0.35rem;
-}
-
-.map-layer-event-track {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-  padding-left: 1.5rem;
-  margin-bottom: 0.15rem;
-}
-
-.map-layer-event-status {
-  font-size: 0.75rem;
-  line-height: 1.3;
-  min-width: 0;
-}
-
-.map-layer-track-btn {
-  flex-shrink: 0;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.72rem;
-}
-
-.map-layer-track-btn.active {
-  border-color: var(--accent);
-  color: var(--accent-bright);
 }
 
 .map-layers-hint {
@@ -437,84 +389,9 @@
   font-weight: 500;
 }
 
-.map-detail-notes,
-.map-detail-trades {
+.map-detail-notes {
   margin: 0;
   padding-left: 1.1rem;
-}
-
-.map-detail-trades {
-  list-style: none;
-  padding: 0;
-  display: grid;
-  gap: 0.5rem;
-}
-
-.map-detail-trades li {
-  padding: 0;
-  border: none;
-  background: transparent;
-}
-
-.map-vending-trade {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 0.35rem;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 8px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-}
-
-.map-vending-trade-side {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.map-vending-trade-side-cost {
-  justify-content: flex-end;
-  text-align: right;
-}
-
-.map-vending-trade-side-cost .map-vending-trade-meta {
-  align-items: flex-end;
-}
-
-.map-vending-trade-icon {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.map-vending-trade-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  min-width: 0;
-}
-
-.map-vending-trade-name {
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.map-vending-trade-qty {
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-
-.map-vending-trade-arrow {
-  color: var(--muted);
-  font-size: 0.9rem;
-  flex-shrink: 0;
 }
 
 .map-detail-steam {
@@ -592,7 +469,6 @@
   cursor: pointer;
 }
 
-.map-marker.selected .map-marker-highlight-ring,
 .map-marker.selected rect,
 .map-marker.selected polygon,
 .map-marker.selected .map-dot {
@@ -1001,56 +877,6 @@
   stroke-width: 1;
 }
 
-.map-marker-vending rect {
-  fill: rgba(236, 72, 153, 0.92);
-  stroke: rgba(255, 255, 255, 0.85);
-  stroke-width: 1.5;
-}
-
-.map-marker-vending.out-of-stock rect {
-  fill: rgba(107, 114, 128, 0.85);
-  stroke: rgba(200, 200, 200, 0.6);
-}
-
-.map-marker-vending.highlighted rect {
-  stroke: #fff;
-  stroke-width: 3;
-}
-
-.map-event-trail {
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.75;
-}
-
-.map-event-trail-cargo {
-  stroke: #4fc3f7;
-}
-
-.map-event-trail-heli {
-  stroke: #ef5350;
-}
-
-.map-marker-highlight-ring {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.9);
-  stroke-width: 2;
-  stroke-dasharray: 4 3;
-}
-
-.map-marker-event rect {
-  fill: rgba(234, 179, 8, 0.92);
-  stroke: rgba(255, 255, 255, 0.9);
-  stroke-width: 1;
-}
-
-.map-marker-radius {
-  fill: rgba(234, 179, 8, 0.15);
-  stroke: rgba(234, 179, 8, 0.85);
-  stroke-width: 2;
-}
-
 .map-marker-team .map-team-ring {
   fill: none;
   stroke-width: 2;
@@ -1141,21 +967,9 @@
   border-radius: 50%;
 }
 
-.legend-swatch.vending {
-  background: #ec4899;
-}
-
-.legend-swatch.vending-out {
-  background: #6b7280;
-}
-
 .legend-swatch.monument {
   background: #f97316;
   clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-}
-
-.legend-swatch.events {
-  background: #eab308;
 }
 
 .legend-swatch.grid {
@@ -1290,79 +1104,6 @@
 .map-label {
   fill: white;
   font-size: 12px;
-}
-
-.vending-list {
-  margin-top: 0.75rem;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 0.35rem;
-}
-
-.vending-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: 0.65rem;
-  margin-top: 0.75rem;
-}
-
-.vending-filters label {
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.85rem;
-  color: var(--muted, #888);
-}
-
-.vending-filters input,
-.vending-filters select {
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-}
-
-.vending-list-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  width: 100%;
-  text-align: left;
-  padding: 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-  line-height: 1.35;
-}
-
-.vending-list-item-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem 0.75rem;
-}
-
-.vending-list-trade {
-  pointer-events: none;
-}
-
-.vending-list-deal {
-  font-size: 0.8rem;
-  color: var(--accent, #e85d2a);
-  font-weight: 600;
-}
-
-.vending-list-item:hover {
-  border-color: var(--accent, #e85d2a);
-}
-
-.vending-list-item.active {
-  border-color: var(--accent, #e85d2a);
-  box-shadow: 0 0 0 1px var(--accent, #e85d2a);
-  background: color-mix(in srgb, var(--accent, #e85d2a) 8%, var(--bg));
 }
 
 .recycle-box {
@@ -2217,43 +1958,6 @@
 .map-drawing-toolbar .btn-secondary.active {
   border-color: var(--accent);
   color: var(--accent);
-}
-
-.map-event-dock {
-  margin-bottom: 1rem;
-}
-
-.map-event-dock-hint {
-  margin-top: 0;
-}
-
-.map-event-dock-list {
-  list-style: none;
-  padding: 0;
-  margin: 0.75rem 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.map-event-dock-list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.map-event-dock-list li.active {
-  border-color: var(--accent);
-}
-
-.map-event-dock-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
 }
 
 .map-3d-viewer {

@@ -5,7 +5,6 @@ import {
   type DeepSeaPhase,
   type DeepSeaStatus,
 } from "@rusttools/shared";
-import { parseMapMarkers } from "./map-markers.js";
 import { parseMonuments } from "./map-markers.js";
 
 interface ServerDeepSeaState {
@@ -39,7 +38,6 @@ export class DeepSeaTracker {
     return buildDeepSeaStatus({
       phase: state.phase,
       isOpen: detection?.isOpen ?? state.phase === "open",
-      offshoreVendingCount: detection?.offshoreVendingCount ?? 0,
       deepSeaMonumentCount: detection?.deepSeaMonumentCount ?? 0,
       openedAt: state.openedAt,
       closedAt: state.closedAt,
@@ -50,24 +48,12 @@ export class DeepSeaTracker {
   process(
     serverId: string,
     input: {
-      markersRaw: unknown;
       monuments: Array<{ token: string }>;
-      mapSize: number;
     },
     nowSec = Math.floor(Date.now() / 1000),
   ): { status: DeepSeaStatus; transition: DeepSeaTransition | null } {
     const state = this.getState(serverId);
-    const parsedMarkers = parseMapMarkers(input.markersRaw).map((marker) => ({
-      type: marker.type,
-      x: marker.x,
-      y: marker.y,
-    }));
-
-    const detection = detectDeepSeaOpen({
-      markers: parsedMarkers,
-      monuments: input.monuments,
-      mapSize: input.mapSize,
-    });
+    const detection = detectDeepSeaOpen(input.monuments);
     state.lastDetection = detection;
 
     let transition: DeepSeaTransition | null = null;

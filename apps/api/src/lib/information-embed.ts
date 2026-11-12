@@ -3,9 +3,7 @@ import type { Database } from "@rusttools/db";
 import { discordLiveEmbeds } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
-  formatCountdown,
   formatDeepSeaDiscordDescription,
-  formatDurationSince,
   parseServerMapMeta,
   worldToGridLabel,
 } from "@rusttools/shared";
@@ -19,7 +17,6 @@ import {
   parseTeamRoster,
   parseWipeCountdown,
 } from "./rust-data.js";
-import { fetchWorldEventsStatus } from "./world-events-status.js";
 
 const INFORMATION_PURPOSE = "information";
 
@@ -67,31 +64,10 @@ async function storeEmbed(
     });
 }
 
-function formatEventLine(
-  label: string,
-  active: boolean,
-  grid: string | null,
-  sinceSec: number | null,
-  nowSec: number,
-  extra?: string,
-): string {
-  if (active && grid) {
-    const since = formatDurationSince(sinceSec, nowSec);
-    let line = `**${label}** — ${grid} (since ${since})`;
-    if (extra) line += ` · ${extra}`;
-    return line;
-  }
-  if (sinceSec != null) {
-    return `**${label}** — offline (last ${formatDurationSince(sinceSec, nowSec)})`;
-  }
-  return `**${label}** — not on map`;
-}
-
 export async function buildInformationEmbed(
   db: Database,
   rustPlus: RustPlusManager,
 ): Promise<DiscordEmbedPayload> {
-  const nowSec = Math.floor(Date.now() / 1000);
   const activeServer = await getActiveServer(db);
   const status = rustPlus.getStatus();
 
@@ -106,11 +82,10 @@ export async function buildInformationEmbed(
   }
 
   try {
-    const [info, teamRaw, timeRaw, worldEvents, deepSea] = await Promise.all([
+    const [info, teamRaw, timeRaw, deepSea] = await Promise.all([
       rustPlus.getServerInfo(),
       rustPlus.getTeamInfo(),
       rustPlus.getTime(),
-      fetchWorldEventsStatus(db, rustPlus, activeServer.id),
       fetchDeepSeaStatus(rustPlus, activeServer.id),
     ]);
 
@@ -141,66 +116,6 @@ export async function buildInformationEmbed(
           })
           .join("\n")
       : "_No teammates online_";
-
-    const cargoEgress =
-      worldEvents.cargo.active && worldEvents.cargo.egressInSec
-        ? formatCountdown(worldEvents.cargo.egressInSec)
-        : null;
-
-    const eventLines = [
-      formatEventLine(
-        "Cargo",
-        worldEvents.cargo.active,
-        worldEvents.cargo.grid,
-        worldEvents.cargo.sinceSec,
-        nowSec,
-        cargoEgress ? `egress in ${cargoEgress}` : undefined,
-      ),
-      formatEventLine(
-        "Patrol Heli",
-        worldEvents.heli.active,
-        worldEvents.heli.grid,
-        worldEvents.heli.sinceSec,
-        nowSec,
-      ),
-      formatEventLine(
-        "Chinook",
-        worldEvents.chinook.active,
-        worldEvents.chinook.grid,
-        worldEvents.chinook.sinceSec,
-        nowSec,
-      ),
-      formatEventLine(
-        "Vendor",
-        worldEvents.vendor.active,
-        worldEvents.vendor.grid,
-        worldEvents.vendor.sinceSec,
-        nowSec,
-      ),
-      formatEventLine(
-        "Satellite",
-        worldEvents.satellite.active,
-        worldEvents.satellite.grid,
-        worldEvents.satellite.sinceSec,
-        nowSec,
-        worldEvents.satellite.phase === "cooling" && worldEvents.satellite.lootableLabel
-          ? `crate in ${worldEvents.satellite.lootableLabel}`
-          : worldEvents.satellite.phase === "cooldown" && worldEvents.satellite.cooldownLabel
-            ? `cooldown ${worldEvents.satellite.cooldownLabel}`
-            : undefined,
-      ),
-    ].join("\n");
-
-    const oilSmall = worldEvents.oilRigs.small;
-    const oilLarge = worldEvents.oilRigs.large;
-    const oilLines = [
-      oilSmall.triggered && oilSmall.crateUnlockInSec
-        ? `**Small Oil** — crate in ${oilSmall.crateUnlockLabel ?? formatCountdown(oilSmall.crateUnlockInSec)}`
-        : `**Small Oil** — idle`,
-      oilLarge.triggered && oilLarge.crateUnlockInSec
-        ? `**Large Oil** — crate in ${oilLarge.crateUnlockLabel ?? formatCountdown(oilLarge.crateUnlockInSec)}`
-        : `**Large Oil** — idle`,
-    ].join("\n");
 
     return {
       title: infoData.name ?? "Rust Server",
@@ -238,11 +153,6 @@ export async function buildInformationEmbed(
         {
           name: `Team (${online.length}/${team.members.length} online)`,
           value: teamLines.slice(0, 1024),
-          inline: false,
-        },
-        {
-          name: "World Events",
-          value: `${eventLines}\n${oilLines}`.slice(0, 1024),
           inline: false,
         },
         {

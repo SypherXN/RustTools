@@ -1,4 +1,4 @@
-// quick test all three map endpoint calls
+// quick test map and team endpoint calls
 import { config } from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -53,7 +53,6 @@ await new Promise((resolve, reject) => {
 const t0 = Date.now();
 await rpc("getMap", (cb) => client.getMap(cb));
 await rpc("getTeamInfo", (cb) => client.getTeamInfo(cb));
-await rpc("getMapMarkers", (cb) => client.getMapMarkers(cb));
 console.log(`all done in ${Date.now() - t0}ms`);
 
 client.disconnect();
