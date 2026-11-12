@@ -935,6 +935,30 @@ export class RustPlusManager {
     );
   }
 
+  private markerShapeLogs = 0;
+
+  /** Temporary diagnostic: logs marker counts by type (no coordinates/ids), first few polls only. */
+  private logMarkerShapeOnce(markers: unknown): void {
+    if (this.markerShapeLogs >= 5) return;
+    this.markerShapeLogs++;
+    const list = (markers as { markers?: Array<{ type?: number }> } | null | undefined)?.markers;
+    const counts: Record<string, number> = {};
+    for (const m of Array.isArray(list) ? list : []) {
+      const k = String(m?.type);
+      counts[k] = (counts[k] ?? 0) + 1;
+    }
+    console.log(
+      "[RustPlus] markers shape:",
+      JSON.stringify({
+        kind: markers === null ? "null" : typeof markers,
+        keys: markers && typeof markers === "object" ? Object.keys(markers as object) : [],
+        isArray: Array.isArray(list),
+        total: Array.isArray(list) ? list.length : null,
+        byType: counts,
+      }),
+    );
+  }
+
   async getMapMarkers(): Promise<unknown> {
     const markers = await this.cachedReadWithStale("mapMarkers", async () => {
       const conn = this.getActiveConnection();
@@ -948,6 +972,7 @@ export class RustPlusManager {
         ),
       );
     });
+    this.logMarkerShapeOnce(markers);
     this.lastMapMarkers = markers;
     this.emitMapMarkersEvent(markers);
     return markers;
