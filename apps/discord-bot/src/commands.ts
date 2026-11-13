@@ -35,6 +35,9 @@ export const commands = [
     .setName("status")
     .setDescription("Check RustTools API and Rust+ connection status"),
   new SlashCommandBuilder()
+    .setName("pop")
+    .setDescription("Show server population"),
+  new SlashCommandBuilder()
     .setName("devices")
     .setDescription("List paired switches, alarms, and monitors with live switch ON/OFF"),
   new SlashCommandBuilder()

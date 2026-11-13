@@ -476,6 +476,12 @@ async function main() {
         case "status":
           await handleStatus(interaction);
           break;
+        case "pop": {
+          await interaction.deferReply();
+          const data = await internalFetch<{ pop: string }>("/internal/pop", interaction.user.id);
+          await replyEmbed(interaction, { title: "Pop", description: data.pop, color: 0x5865f2 });
+          break;
+        }
         case "devices":
           await handleDevices(interaction);
           break;
@@ -550,7 +556,9 @@ async function main() {
         err instanceof ApiError && err.status === 403
           ? permissionDeniedEmbed(message)
           : errorEmbed(message);
-      if (interaction.replied || interaction.deferred) {
+      if (interaction.commandName === "pop" && interaction.deferred && !interaction.replied) {
+        await interaction.editReply({ embeds: [toApiEmbed(embed)] });
+      } else if (interaction.replied || interaction.deferred) {
         await interaction.followUp({ embeds: [toApiEmbed(embed)], ephemeral: true });
       } else {
         await interaction.reply({ embeds: [toApiEmbed(embed)], ephemeral: true });

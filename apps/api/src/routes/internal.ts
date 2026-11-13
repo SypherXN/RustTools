@@ -31,7 +31,7 @@ import {
 import { getSwitchState } from "../lib/vending.js";
 import { executeTeamChatCommand } from "../lib/team-chat-command-handler.js";
 import { sendAndPublishTeamChat } from "../lib/team-chat-outbound.js";
-import { isDiscordChannelPurpose } from "@rusttools/shared";
+import { formatServerPop, isDiscordChannelPurpose } from "@rusttools/shared";
 import {
   clearInformationEmbedBinding,
   ensureInformationEmbed,
@@ -103,6 +103,11 @@ export async function registerInternalRoutes(
 
     const time = await deps.rustPlus.getTime();
     return { time };
+  });
+
+  app.get("/internal/pop", async (request, reply) => {
+    if (!(await requireInternalBotAccess(deps.db, request, reply, "view"))) return;
+    return { pop: formatServerPop(await deps.rustPlus.getServerInfo()) };
   });
 
   app.get("/internal/deepsea", async (request, reply) => {

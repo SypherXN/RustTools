@@ -36,6 +36,12 @@ export function parseServerMapMeta(info: unknown): ParsedServerMapMeta {
   };
 }
 
+export function formatServerPop(info: unknown): string {
+  const data = (info ?? {}) as { players?: number; maxPlayers?: number; queuedPlayers?: number };
+  const queue = data.queuedPlayers != null ? ` · Queue: ${data.queuedPlayers}` : "";
+  return `RustTools: Pop: ${data.players ?? "?"}/${data.maxPlayers ?? "?"}${queue}`;
+}
+
 /** F1 console connect string: `client.connect ip:port password` */
 export function buildConnectString(input: ServerConnectInput): string {
   const { ip, port, password } = input;

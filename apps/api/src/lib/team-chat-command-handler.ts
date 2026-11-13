@@ -2,6 +2,7 @@ import type { Database } from "@rusttools/db";
 import type { RustPlusManager } from "@rusttools/rustplus-client";
 import {
   formatDeepSeaTeamChatMessage,
+  formatServerPop,
   formatRosterCommandResponse,
   formatUpkeepDetailReport,
   formatTeamChatHelpReplies,
@@ -13,6 +14,9 @@ import {
   parseSendTeamChatCommand,
   parseUnmuteTeamChatCommand,
   parseUpkeepDetailTeamChatCommand,
+  parseServerMapMeta,
+  teamMemberStatus,
+  worldToGridLabel,
 } from "@rusttools/shared";
 import { configuredGuildId } from "./discord-channels.js";
 import { hasDiscordCapability } from "./discord-permissions.js";
@@ -20,7 +24,7 @@ import { isDiscordBlacklisted } from "./discord-blacklist.js";
 import { fetchDeepSeaStatus } from "./deep-sea.js";
 import { sendDiscordDirectMessage } from "./discord-dm.js";
 import { findDiscordUserIdForSendTarget } from "./discord-send-target.js";
-import { getWorldSize, parseTeamRoster } from "./rust-data.js";
+import { getWorldSize, parseInGameTime, parseTeamRoster } from "./rust-data.js";
 import {
   getActiveServerRow,
   promoteTeamLeader,
@@ -186,6 +190,59 @@ export async function executeTeamChatCommand(
       return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { kind: "warning" })]);
     }
     return null;
+  }
+
+  const infoCommand = message.toLowerCase().split(/\s+/)[0];
+  if (infoCommand === "!status") {
+    const status = rustPlus.getStatus();
+    const reply = `RustTools: Rust+ ${status.connected ? "connected" : "disconnected"} · FCM ${status.fcmListening ? "listening" : "not listening"}.`;
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Status" })]);
+  }
+  if (infoCommand === "!pop" || infoCommand === "!map") {
+    const info = await rustPlus.getServerInfo();
+    const map = infoCommand === "!map" ? parseServerMapMeta(info) : null;
+    const details = map && [
+      map.mapName,
+      map.seed != null ? `Seed: ${map.seed}` : null,
+      map.mapSize != null ? `Size: ${map.mapSize}m` : null,
+    ].filter(Boolean).join(" · ");
+    const reply = map ? `RustTools: Map: ${details || "unavailable"}` : formatServerPop(info);
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: map ? "Map" : "Pop" })]);
+  }
+  if (infoCommand === "!time") {
+    const time = parseInGameTime(await rustPlus.getTime());
+    const phase = time.isDay == null ? "" : time.isDay ? " (day)" : " (night)";
+    const reply = `RustTools: Time: ${time.time ? time.time + phase : "unavailable"}`;
+    return forDiscord(ctx, { reply }, [buildNoticeEmbed(reply, { title: "Time" })]);
+  }
+  if (infoCommand === "!team") {
+    const [team, info] = await Promise.all([rustPlus.getTeamInfo(), rustPlus.getServerInfo()]);
+    const worldSize = getWorldSize(info);
+    const parsed = parseTeamRoster(team, worldSize);
+    const { team: tracked } = await processTeamRosterWithSettings(db, ctx.serverId, parsed, worldSize);
+    const members = tracked.members.map((member) => {
+      const grid = member.locationKnown && member.x != null && member.y != null && worldSize
+        ? worldToGridLabel(member.x, member.y, worldSize) : null;
+      return `${member.name} (${teamMemberStatus(member)}${grid ? ` @ ${grid}` : ""})`;
+    });
+    const reply = `RustTools: Team: ${members.join(", ") || "No teammates."}`;
+    const replies: string[] = [];
+    let remaining = reply;
+    while (remaining.length > 120) {
+      let end = remaining.lastIndexOf(", ", 118);
+      if (end <= 0) {
+        end = 120;
+        if (/[\uD800-\uDBFF]/.test(remaining[end - 1]!)) end--;
+      } else {
+        end += 2;
+      }
+      replies.push(remaining.slice(0, end));
+      remaining = remaining.slice(end);
+    }
+    if (remaining) replies.push(remaining);
+    return forDiscord(ctx, replies.length === 1 ? { reply } : { replies }, [
+      buildNoticeEmbed(reply, { title: "Team" }),
+    ]);
   }
 
   const send = parseSendTeamChatCommand(message);

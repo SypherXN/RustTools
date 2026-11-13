@@ -8,11 +8,11 @@ export function formatWebHelpCategories(): WebHelpCategory[] {
   return [
     {
       name: "Team",
-      commands: ["!online", "!offline", "!afk", "!alive", "!leader"],
+      commands: ["!team", "!online", "!offline", "!afk", "!alive", "!leader"],
     },
     {
       name: "World & TC",
-      commands: ["!deepsea", "!ds", "!upkeepdetail"],
+      commands: ["!status", "!pop", "!time", "!map", "!deepsea", "!ds", "!upkeepdetail"],
     },
     {
       name: "Switches",
@@ -48,8 +48,8 @@ export function formatTeamChatHelpReplies(fromDiscord = false): string[] {
   return [
     [
       "RustTools help (1/3)",
-      "Team: !online !offline !afk !alive !leader",
-      "World: !deepsea !ds · TC: !upkeepdetail",
+      "Team: !team !online !offline !afk !alive !leader",
+      "World: !pop !time !map !status !deepsea !ds · TC: !upkeepdetail",
     ].join(" · "),
     [
       "RustTools help (2/3)",
@@ -76,6 +76,7 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       name: "Server & devices",
       value: [
         "`/status` — Rust+ connection",
+        "`/pop` — server population",
         "`/devices` — paired devices",
         "`/switch` — set on, off, toggle, or status by name/ID",
         "`/alias` — switch chat alias (`action:status` for ON/OFF)",
@@ -88,6 +89,7 @@ export function formatDiscordHelpSections(): DiscordHelpSection[] {
       name: "Team & world",
       value: [
         "`/online` `/offline` `/afk` `/alive` — roster filters",
+        "`/team` — team roster",
         "`/leader` — promote yourself to team leader (must be online and alive)",
         "`/time` — in-game time",
         "`/deepsea` — Deep Sea status",

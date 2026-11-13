@@ -46,6 +46,7 @@ export function isTeamChatBotCommand(message: string): boolean {
     parseUnmuteTeamChatCommand(text) ||
     parseHelpTeamChatCommand(text) ||
     parseSendTeamChatCommand(text) !== null ||
+    /^!(pop|status|time|map|team)\b/i.test(text) ||
     /^!deepsea\b/i.test(text) ||
     /^!ds\b/i.test(text) ||
     /^!leader\b/i.test(text) ||
